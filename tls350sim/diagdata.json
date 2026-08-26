@@ -1,0 +1,1693 @@
+[
+ {
+  "function": "SYSTEM DIAGNOSTIC",
+  "requires": null,
+  "screens": [
+   {
+    "l1": "SOFTWARE REVISION LEVEL",
+    "l2": "VERSION XXX.XX",
+    "depth": 0,
+    "live": "version"
+   },
+   {
+    "l1": "SOFTWARE # XXXXXX-XXX-X",
+    "l2": "CREATED - YY.MM.DD.HH.MM",
+    "depth": 0,
+    "live": "software"
+   },
+   {
+    "l1": "SOFTWARE MODULE:",
+    "l2": "S-MODULE: XXXXXX-XXX-X",
+    "depth": 0,
+    "live": "smodule"
+   },
+   {
+    "l1": "SYSTEM CONFIGURATION",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "SLOT",
+    "l2": "POR= XXXXXX C= XXXXXX",
+    "depth": 1,
+    "expand": "slots"
+   },
+   {
+    "l1": "COMM BOARD RE-INITIALIZE",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "COMM X (BOARD TYPE)",
+    "l2": "REINIT COMM BD: NO",
+    "depth": 1,
+    "live": "comm_board",
+    "act": "reinit_comm"
+   },
+   {
+    "l1": "SYSTEM SELF TEST",
+    "l2": "ROM=PASS RAM=PASS",
+    "depth": 0
+   },
+   {
+    "l1": "PC DIAGNOSTIC DATA",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "PC SWARE# XXXXXX-XXX-X",
+    "l2": "CREATED - YY.MM.DD.HH.MM",
+    "depth": 1,
+    "live": "pc_software"
+   },
+   {
+    "l1": "PC ROM CHECKSUM=PASSED",
+    "l2": "PC RESET COUNTS = X",
+    "depth": 1,
+    "live": "pc_resets"
+   },
+   {
+    "l1": "PC ROM ERRORS = X",
+    "l2": "MC CKSUM ERRS = X",
+    "depth": 1,
+    "live": "pc_errors"
+   },
+   {
+    "l1": "MC -->PC COMMS = XXXXX",
+    "l2": "MC <--PC COMMS = XXXXX",
+    "depth": 1,
+    "live": "mc_comms"
+   },
+   {
+    "l1": "DIM DIAGNOSTIC DATA",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "M1: SWARE#XXXXXX-XXX-X",
+    "l2": "CREATED - YY-MM-DD-HH-MM",
+    "depth": 1,
+    "live": "dim_software"
+   },
+   {
+    "l1": "M1: DIM ROM CKSUM = PASS",
+    "l2": "DIM COMM ERRORS = X",
+    "depth": 1,
+    "live": "dim_errors"
+   },
+   {
+    "l1": "WPLLD DIAGNOSTIC DATA",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "WPLLD DIAGNOSTIC DATA",
+    "l2": "#: XXXXXX-XXX-X",
+    "depth": 1,
+    "live": "wplld_software"
+   },
+   {
+    "l1": "WPLLD DIAGNOSTIC DATA",
+    "l2": "XX.XX.XX.XX.XX",
+    "depth": 1,
+    "live": "wplld_created"
+   },
+   {
+    "l1": "WPLLD DIAGNOSTIC DATA",
+    "l2": "PC COMM ERRORS = X",
+    "depth": 1,
+    "live": "wplld_errors"
+   }
+  ]
+ },
+ {
+  "function": "SERVICE REPORT",
+  "requires": "mt",
+  "screens": [
+   {
+    "l1": "SERVICE CODE LIST",
+    "l2": "PRESS <PRINT>",
+    "depth": 0
+   },
+   {
+    "l1": "ENTER SERVICE ID",
+    "l2": "ID:",
+    "depth": 0
+   },
+   {
+    "l1": "ENTER SERVICE ID LABEL",
+    "l2": "LBL:",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "MAINT HARDWARE KEY BLOCK",
+  "requires": "mt",
+  "screens": [
+   {
+    "l1": "SELECT KEY TO BLOCK",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "J SMYTHE A12345",
+    "l2": "BLOCK: NO",
+    "depth": 0
+   },
+   {
+    "l1": "ENTER ID TO BLOCK",
+    "l2": "",
+    "depth": 1
+   },
+   {
+    "l1": "BLOCK: XXXXXX",
+    "l2": "ARE YOU SURE?: NO",
+    "depth": 1,
+    "live": "mt_block",
+    "act": "mt_block"
+   },
+   {
+    "l1": "BLOCK: A54321",
+    "l2": "ARE YOU SURE?: NO",
+    "depth": 0,
+    "act": "mt_block"
+   },
+   {
+    "l1": "ARE YOU SURE?: YES",
+    "l2": "",
+    "depth": 1
+   },
+   {
+    "l1": "J CLARKE",
+    "l2": "BLOCK: NO",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "SERVICE NOTICE SESSION",
+  "requires": null,
+  "screens": [
+   {
+    "l1": "SERVICE NOTICE SESSION",
+    "l2": "DISABLED",
+    "depth": 0
+   },
+   {
+    "l1": "SERVICE NOTICE SESSION",
+    "l2": "DURATION : 2",
+    "depth": 0
+   },
+   {
+    "l1": "SERVICE NOTICE SESSION",
+    "l2": "ENABLED",
+    "depth": 0
+   }
+  ],
+  "when": {
+   "code": "S56600",
+   "is": [
+    "1"
+   ]
+  }
+ },
+ {
+  "function": "IN-TANK DIAGNOSTIC",
+  "requires": "probe",
+  "screens": [
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "SERIAL NUMBER XXXXXX",
+    "depth": 0,
+    "live": "probe_serial"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "ID CHAN = 0xC000",
+    "depth": 0,
+    "live": "probe_idchan"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "LENGTH: XXX.XX",
+    "depth": 0,
+    "live": "probe_length"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "NUM SAMPLES: XX",
+    "depth": 0,
+    "live": "probe_samples"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "OPTIONS: NONE",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C00 XXX.X C-01 XXX.X",
+    "depth": 0,
+    "live": "probe_c00"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C02 XXX.X C-03 XXX.X",
+    "depth": 0,
+    "live": "probe_c02"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C04 XXX.X C-05 XXX.X",
+    "depth": 0,
+    "live": "probe_c04"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C06 XXX.X C-07 XXX.X",
+    "depth": 0,
+    "live": "probe_c06"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C08 XXX.X C-09 XXX.X",
+    "depth": 0,
+    "live": "probe_c08"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C10 XXX.X C-11 XXX.X",
+    "depth": 0,
+    "live": "probe_c10"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C12 XXX.X C-13 XXX.X",
+    "depth": 0,
+    "live": "probe_c12"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C14 XXX.X C-15 XXX.X",
+    "depth": 0,
+    "live": "probe_c14"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C16 XXX.X C-17 XXX.X",
+    "depth": 0,
+    "live": "probe_c16"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "C18 XXX.X",
+    "depth": 0,
+    "live": "probe_c18"
+   },
+   {
+    "l1": "T 1: PROBE TYPE",
+    "l2": "GRADIENT = XXX.XXX",
+    "depth": 0,
+    "live": "probe_gradient"
+   },
+   {
+    "l1": "T 1: ORIG REF DISTANCE",
+    "l2": "MM/DD/YY",
+    "depth": 0,
+    "live": "probe_ref_orig"
+   },
+   {
+    "l1": "T 1: CURR REF DISTANCE",
+    "l2": "MM/DD/YY",
+    "depth": 0,
+    "live": "probe_ref_curr"
+   }
+  ]
+ },
+ {
+  "function": "FUEL MANAGEMENT DIAG",
+  "screens": [
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-SUN: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_SUN"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-SUN: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_SUN"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-SUN: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_SUN"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-MON: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_MON"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-MON: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_MON"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-MON: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_MON"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-TUE: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_TUE"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-TUE: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_TUE"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-TUE: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_TUE"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-WED: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_WED"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-WED: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_WED"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-WED: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_WED"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-THU: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_THU"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-THU: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_THU"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-THU: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_THU"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-FRI: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_FRI"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-FRI: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_FRI"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-FRI: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_FRI"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "AVG SALES-SAT: XXXX GALS",
+    "depth": 0,
+    "live": "fm_avg_SAT"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "LAST SALES-SAT: XXXX GALS",
+    "depth": 0,
+    "live": "fm_last_SAT"
+   },
+   {
+    "l1": "(PRODUCT LABEL)",
+    "l2": "PRED SALES-SAT: XXXX GALS",
+    "depth": 0,
+    "live": "fm_pred_SAT"
+   }
+  ],
+  "when": {
+   "software": "fuelman"
+  }
+ },
+ {
+  "function": "IN-TANK LEAK DIAGNOSTIC",
+  "requires": "probe",
+  "screens": [
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "SERIAL NUMBER XXXXXX",
+    "depth": 0,
+    "live": "probe_serial"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "ID CHAN = 0xC000",
+    "depth": 0,
+    "live": "probe_idchan"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "LENGTH: XXX.XX",
+    "depth": 0,
+    "live": "probe_length"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "NUM SAMPLES: XX",
+    "depth": 0,
+    "live": "probe_samples"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "OPTIONS: NONE",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "C00 XXX.X C01 XXX.X",
+    "depth": 0,
+    "live": "probe_c00"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "C18 XXX.X",
+    "depth": 0,
+    "live": "probe_c18"
+   },
+   {
+    "l1": "T 1: (PROBE TYPE)",
+    "l2": "GRADIENT = XXX.XXX",
+    "depth": 0,
+    "live": "probe_gradient"
+   }
+  ]
+ },
+ {
+  "function": "IN-TANK LEAK RESULT",
+  "requires": "probe",
+  "screens": [
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "PRINT 0.20 LEAK REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "PRINT 0.10 LEAK REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "MMM DD,YYYY HH:MM:SS xM",
+    "depth": 0,
+    "live": "tank_leak_when"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "LEAK RATE = -X.XX GAL/HR",
+    "depth": 0,
+    "live": "tank_leak_rate"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "PRINT LEAK HISTORY",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "ACCUCHART DIAGNOSTICS",
+  "requires": "probe",
+  "screens": [
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU ENABLED",
+    "depth": 0,
+    "live": "accu_enabled"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU MODE CALIBRATE",
+    "depth": 0,
+    "live": "accu_mode"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU USR STATUS DISABLED",
+    "depth": 0,
+    "live": "accu_status"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU UPDATE COUNT X",
+    "depth": 0,
+    "live": "accu_updates"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU DURATION         X.XX",
+    "depth": 0,
+    "live": "accu_duration"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU DIAMETER XXX.XX",
+    "depth": 0,
+    "live": "accu_diameter"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU LENGTH        XXX.XX",
+    "depth": 0,
+    "live": "accu_length"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU PB OFFSET X.XX",
+    "depth": 0,
+    "live": "accu_offset"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU TANK TILT X.XX",
+    "depth": 0,
+    "live": "accu_tilt"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU SHAPE F X.XX",
+    "depth": 0,
+    "live": "accu_shape"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU FULL VOLUME XXXXXX",
+    "depth": 0,
+    "live": "accu_volume"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU FITNESS          X.XX",
+    "depth": 0,
+    "live": "accu_fitness"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU DATA             X.XX",
+    "depth": 0,
+    "live": "accu_data"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "ACCU WARN STATE OFF",
+    "depth": 0,
+    "live": "accu_warn"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "RESET ACCUCHART NO",
+    "depth": 0,
+    "act": "accu_reset"
+   }
+  ]
+ },
+ {
+  "function": "CSLD DIAGNOSTICS",
+  "screens": [
+   {
+    "l1": "CSLD MONTHLY REPORT",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "CSLD MONTHLY REPORT",
+    "l2": "SELECT: CURRENT MONTH",
+    "depth": 1
+   },
+   {
+    "l1": "T #: (Product Label)",
+    "l2": "CUR CSLD MONTHLY <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "CSLD MONTHLY REPORT",
+    "l2": "SELECT: PREVIOUS MONTH",
+    "depth": 1
+   },
+   {
+    "l1": "T #: (Product Label)",
+    "l2": "PRV CSLD MONTHLY <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "CSLD DIAGNOSTIC REPORT",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "MMM DD, YYYY HH:MM xM",
+    "depth": 1,
+    "live": "csld_when"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "TEST RATE: X.XX GAL/HR",
+    "depth": 1,
+    "live": "csld_rate"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "TOTAL TESTS",
+    "depth": 1,
+    "live": "csld_tests"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "TOTAL TIME: XX.X HRS",
+    "depth": 1,
+    "live": "csld_hours"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "AVE VOLUME: XXXX GALS",
+    "depth": 1,
+    "live": "csld_volume"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "POS REJECTS:",
+    "depth": 1,
+    "live": "csld_rejects"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "THRUPUT EST: X GALS",
+    "depth": 1,
+    "live": "csld_thruput"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "DISPENSE STATE: ACTIVE",
+    "depth": 1,
+    "live": "csld_dispense"
+   },
+   {
+    "l1": "T 1: (PRODUCT LABEL)",
+    "l2": "DELETE CSLD RECORDS: NO",
+    "depth": 1,
+    "act": "csld_delete"
+   }
+  ],
+  "when": {
+   "software": "csld"
+  }
+ },
+ {
+  "function": "PRESSURE LINE LEAK DIAG",
+  "requires": "plld",
+  "screens": [
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "DISPENSING DISABLED",
+    "depth": 0
+   },
+   {
+    "l1": "Q 1: XX.XXX PSI PUMP OFF",
+    "l2": "TEST COMPLETE HANDLE OFF",
+    "depth": 0,
+    "live": "line_pressure"
+   },
+   {
+    "l1": "Q 1: SNS CNTS    XXXX.X",
+    "l2": "LO XXXXX.XX HI XXXXX.XX",
+    "depth": 0,
+    "live": "line_counts"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "3.0 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "gross"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "MID DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "mid"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "0.20 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "periodic"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "0.10 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "annual"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET DIAG <PRINT>",
+    "depth": 0,
+    "diagprint": "offset"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET TEST <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "Q 1:PRESS OFFSET TST PSI",
+    "l2": "NO TEST DATA AVAILABLE",
+    "depth": 1
+   },
+   {
+    "l1": "Q 1:START P OFFSET TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "Q 1:PRESS OFFSET TEST",
+    "l2": "MEASURING",
+    "depth": 1
+   },
+   {
+    "l1": "Q 1:PRESS OFFSET TEST",
+    "l2": "DONE - OFFSET: +XX.X PSI",
+    "depth": 1,
+    "live": "line_offset"
+   },
+   {
+    "l1": "Q 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET RESET <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "PRESSURE OFFSET RESET",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 1
+   }
+  ]
+ },
+ {
+  "function": "LINE LEAK DIAG DATA",
+  "requires": "vlld",
+  "screens": [
+   {
+    "l1": "P 1: (PRODUCT LABEL)",
+    "l2": "TEST COMPLETE",
+    "depth": 0
+   },
+   {
+    "l1": "P 1: (PRODUCT LABEL)",
+    "l2": "0, 0, 0, 0, 0",
+    "depth": 0
+   },
+   {
+    "l1": "P 1: (PRODUCT LABEL)",
+    "l2": "RUN TEST: NONE",
+    "depth": 0
+   },
+   {
+    "l1": "P 1: (PRODUCT LABEL)",
+    "l2": "I0 P0 F0 S0 O0 E0 T0 D1",
+    "depth": 0
+   },
+   {
+    "l1": "P 1: (PRODUCT LABEL)",
+    "l2": "",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "WPLLD LINE LEAK DIAG",
+  "requires": "wplld",
+  "screens": [
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "DISPENSING DISABLED",
+    "depth": 0
+   },
+   {
+    "l1": "W 1: PENDING    PUMP OFF",
+    "l2": "TEST COMPLETE HANDLE OFF",
+    "depth": 0,
+    "live": "line_pressure"
+   },
+   {
+    "l1": "W 1: 3.0 GPH     (MM:SS)",
+    "l2": "P1: X.XXX  P2: X.XXX PSI",
+    "depth": 0,
+    "live": "line_leg_gross"
+   },
+   {
+    "l1": "W 1: 0.20 GPH    (MM:SS)",
+    "l2": "P1: X.XXX  P2: X.XXX PSI",
+    "depth": 0,
+    "live": "line_leg_periodic"
+   },
+   {
+    "l1": "W 1: MID TEST    (MM:SS)",
+    "l2": "P1: X.XXX  P2: X.XXX PSI",
+    "depth": 0,
+    "live": "line_leg_mid"
+   },
+   {
+    "l1": "W 1: LAST READ=X.XXX PSI",
+    "l2": "TOTAL MESSAGE: X",
+    "depth": 0,
+    "live": "line_messages"
+   },
+   {
+    "l1": "W 1: LAST READ=X.XXX PSI",
+    "l2": "CRC: X       PARITY: X",
+    "depth": 0,
+    "live": "line_crc"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "0.10 GPH          ACTIVE",
+    "depth": 0,
+    "live": "line_passive"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "0.3 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "gross"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "MID DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "mid"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "0.20 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "periodic"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "0.10 DIAG PRESS <PRINT>",
+    "depth": 0,
+    "diagprint": "annual"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET DIAG  <PRINT>",
+    "depth": 0,
+    "diagprint": "offset"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET TEST  <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "W 1:PRESS OFFSET TEST",
+    "l2": "NO TEST DATA AVAILABLE",
+    "depth": 1
+   },
+   {
+    "l1": "W 1:START P OFFSET TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "W 1:PRESSURE OFFSET TEST",
+    "l2": "MEASURING",
+    "depth": 1
+   },
+   {
+    "l1": "W 1:PRESS OFFSET TEST",
+    "l2": "DONE - OFFSET: +XX.X PSI",
+    "depth": 1,
+    "live": "line_offset"
+   },
+   {
+    "l1": "W 1: (PRODUCT LABEL)",
+    "l2": "P OFFSET RESET  <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "PRESSURE OFFSET RESET",
+    "l2": "PRESS  <STEP> TO CONTINUE",
+    "depth": 1
+   },
+   {
+    "l1": "W1: 3.0 GPH",
+    "l2": "PRESS  <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "W 1: P0  H0  S: PENDING",
+    "l2": "P1: X.XXX  P2: X.XXX PSI",
+    "depth": 1,
+    "live": "line_switches"
+   }
+  ]
+ },
+ {
+  "function": "PUMP SENSOR DIAGNOSTIC",
+  "requires": "pump",
+  "screens": [
+   {
+    "l1": "S 1: TANK # NONE",
+    "l2": "PUMP OFF",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "PUMP RELAY MONITOR DIAG",
+  "requires": "pumpmon",
+  "screens": [
+   {
+    "l1": "r 1: PUMP (OUT): OFF",
+    "l2": "Q 1: RELAY (IN): OFF",
+    "depth": 0
+   },
+   {
+    "l1": "r 1: STUCK RELAY: 999 SE",
+    "l2": "PUMP RUN TIME: HH:MM",
+    "depth": 0
+   },
+   {
+    "l1": "r 1: <PUMP MONITOR LABEL",
+    "l2": "PUMP RUN TIME: HHH:MM",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "LIQUID DIAGNOSTIC",
+  "requires": "liquid",
+  "screens": [
+   {
+    "l1": "L 1: (PRODUCT LABEL)",
+    "l2": "CNTR = X VALUE = XXXXXX",
+    "depth": 0,
+    "live": "sensor_liquid"
+   }
+  ]
+ },
+ {
+  "function": "VAPOR DIAGNOSTIC",
+  "requires": "vapor",
+  "screens": [
+   {
+    "l1": "V 1: LOCATION",
+    "l2": "1 = XXXX 2 = XXXXXX",
+    "depth": 0,
+    "live": "sensor_vapor"
+   },
+   {
+    "l1": "V 1: LOCATION",
+    "l2": "XXXX PPM",
+    "depth": 0,
+    "live": "sensor_ppm"
+   }
+  ]
+ },
+ {
+  "function": "GROUNDWATER DIAGNOSTIC",
+  "requires": "gw",
+  "screens": [
+   {
+    "l1": "G 1: LOCATION",
+    "l2": "1 = XXXX 2 = XXXXXX",
+    "depth": 0,
+    "live": "sensor_gw"
+   }
+  ]
+ },
+ {
+  "function": "2 WIRE CL DIAGNOSTIC",
+  "requires": "2wire",
+  "screens": [
+   {
+    "l1": "C 1: LOCATION",
+    "l2": "CNTR = 5 VALUE = XXXX",
+    "depth": 0,
+    "live": "sensor_2wire"
+   }
+  ]
+ },
+ {
+  "function": "3 WIRE CL DIAGNOSTIC",
+  "requires": "3wire",
+  "screens": [
+   {
+    "l1": "H 1: LOCATION",
+    "l2": "1 = XXXXX 2 = XXXXX",
+    "depth": 0,
+    "live": "sensor_3wire"
+   }
+  ]
+ },
+ {
+  "function": "GROUNDTEMP DIAGNOSTIC",
+  "requires": "vlld",
+  "screens": [
+   {
+    "l1": "g 1: LOCATION",
+    "l2": "CNTR = X VALUE = XXXX",
+    "depth": 0,
+    "live": "sensor_groundtemp"
+   }
+  ]
+ },
+ {
+  "function": "ALARM HISTORY REPORT",
+  "requires": null,
+  "screens": [
+   {
+    "l1": "SYSTEM ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "T X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "L X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "V X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "I X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "P X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "G X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "C X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "H X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "D X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "M X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "E X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "F X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "Q X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "W X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "g X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
+    "l1": "r X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "RECONCILIATION CLEAR MAP",
+  "screens": [
+   {
+    "l1": "RECONCILIATION CLEAR MAP",
+    "l2": "CLEAR TANK MAPS: NO",
+    "depth": 0
+   }
+  ],
+  "when": {
+   "software": "bir"
+  }
+ },
+ {
+  "function": "BIR DIAGNOSTICS",
+  "screens": [
+   {
+    "l1": "BIR METER MAP",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "BIR METER MAP",
+    "l2": "STATUS: COMPLETE",
+    "depth": 1
+   },
+   {
+    "l1": "METER MAP",
+    "l2": "FP: XX M: XX =T X",
+    "depth": 1,
+    "live": "meter_map"
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "METER EVENTS TABLE EMPTY",
+    "depth": 0
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "FP: XX M: XX =T X",
+    "depth": 1,
+    "live": "meter_events"
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "END EVENT: X GALS",
+    "depth": 1,
+    "live": "meter_end"
+   }
+  ],
+  "when": {
+   "software": "bir"
+  }
+ },
+ {
+  "function": "POWER DIAGNOSTIC",
+  "requires": "probe",
+  "screens": [
+   {
+    "l1": "T 1: POWER REMOVED",
+    "l2": "MMM DD, YYYY HH:MM xM",
+    "depth": 0,
+    "live": "power_removed"
+   },
+   {
+    "l1": "T 1: POWER REMOVED",
+    "l2": "VOLUME = 0 GALS",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: POWER REMOVED",
+    "l2": "WATER VOL = 0 GALS",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: POWER REMOVED",
+    "l2": "TEMP = 0.0 DEG F",
+    "depth": 0
+   },
+   {
+    "l1": "T 1: POWER RESTORED",
+    "l2": "MMM DD, YYYY HH:MM xM",
+    "depth": 0,
+    "live": "power_restored"
+   },
+   {
+    "l1": "T 1: POWER RESTORED",
+    "l2": "VOLUME = XXXXX GALS",
+    "depth": 0,
+    "live": "power_volume"
+   },
+   {
+    "l1": "T 1: POWER RESTORED",
+    "l2": "WATER VOL = X GALS",
+    "depth": 0,
+    "live": "power_water"
+   },
+   {
+    "l1": "T 1: POWER RESTORED",
+    "l2": "TEMP = XX.X DEG F",
+    "depth": 0,
+    "live": "power_temp"
+   },
+   {
+    "l1": "T 1: GROSS VOLUME CHANGE",
+    "l2": "",
+    "depth": 0
+   }
+  ]
+ },
+ {
+  "function": "COMMUNICATION DIAGNOSTIC",
+  "requires": [
+   "rs232",
+   "modem",
+   "mt",
+   "vmc"
+  ],
+  "screens": [
+   {
+    "l1": "c1: MODEM AUTO DETECTED",
+    "l2": "",
+    "depth": 0
+   },
+   {
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "MODEM: VR TLS GSM MODEM",
+    "depth": 0
+   },
+   {
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "RSSI: XX BER: XX",
+    "depth": 0,
+    "live": "comm_rssi"
+   },
+   {
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "AUTO CONFIG MODEM: NO",
+    "depth": 0
+   },
+   {
+    "l1": "AUTO CONFIG MODEM: YES",
+    "l2": "ARE YOU SURE? : YES",
+    "depth": 0
+   },
+   {
+    "l1": "WORKING",
+    "l2": "",
+    "depth": 1
+   }
+  ]
+ },
+ {
+  "function": "SMART SENSOR DIAGNOSTIC",
+  "requires": "smart",
+  "screens": [
+   {
+    "l1": "s 1: (Label)",
+    "l2": "TYPE: MAG SENSOR",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "SERIAL NUMBER: XXXXXXXX",
+    "depth": 0,
+    "live": "ss_serial"
+   },
+   {
+    "l1": "s 1: MAG SENSOR DIAGS",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "TOTAL HT      XX.X IN.",
+    "depth": 1,
+    "live": "ss_total_ht"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "FUEL HT       XX.X IN.",
+    "depth": 1,
+    "live": "ss_fuel_ht"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "WATER HT      XX.X IN.",
+    "depth": 1,
+    "live": "ss_water_ht"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "INSTALL POS   XX.X IN.",
+    "depth": 1,
+    "live": "ss_install"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "FLUID TEMP  XX.X DEG F",
+    "depth": 1,
+    "live": "ss_fluid_temp"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "BOARD TEMP  XX.X DEG F",
+    "depth": 1,
+    "live": "ss_board_temp"
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "COMM DATA PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "CONSTANTS PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "CHNNL PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "SMART SENSOR INSTALL LOG",
+    "l2": "PRESS <PRINT>",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "TYPE: VAC SENSOR",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "SERIAL NUMBER XXXXXXXXX",
+    "depth": 0,
+    "live": "ss_serial9"
+   },
+   {
+    "l1": "VAC SENSOR DIAGS",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "VAC SENSOR MANUAL TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "START MANUAL TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "SELECT VAC SENSOR",
+    "l2": "ALL VAC SENSORS",
+    "depth": 1
+   },
+   {
+    "l1": "START MANUAL TEST: ALL",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "STOP MANUAL TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "STOP MANUAL TEST: ALL",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "VAC SENSOR EVAC HOLD",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "START EVAC HOLD",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "START EVAC HOLD: ALL",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "STOP EVAC HOLD",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "STOP EVAC HOLD: ALL",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "s 1: VACUUM OK",
+    "l2": "-7.14 PSI VCV: CLOSED",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "FLUID STATUS: NORMAL",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: MM-DD-YY  HH:MM XM",
+    "l2": "LEAK RATE:",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: MM-DD-YY  HH:MM XM",
+    "l2": "NO VAC TIME:",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: MM-DD-YY  HH:MM XM",
+    "l2": "EVAC RATIO: 5.2 @ -4.1 P",
+    "depth": 0
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "COMM DATA PRESS <PRINT>",
+    "depth": 0
+   },
+   {
+    "l1": "SMART SENSOR INSTALL LOG",
+    "l2": "PRESS <PRINT>",
+    "depth": 0
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "TYPE: ATMP SENSOR",
+    "depth": 1
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "SERIAL NUMBER XXXXXXXXX",
+    "depth": 1,
+    "live": "ss_serial9"
+   },
+   {
+    "l1": "ATM P SENSOR DIAGS",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "ATM PRESSURE: XX.XXX PSI",
+    "depth": 1,
+    "live": "ss_atm"
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "COMM DATA PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "CONSTANTS PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "s 8: (ATMP Sensor Label)",
+    "l2": "CHANNELS PRESS <PRINT>",
+    "depth": 1
+   },
+   {
+    "l1": "SMART SENSOR INSTALL LOG",
+    "l2": "PRESS <PRINT>",
+    "depth": 1
+   }
+  ]
+ },
+ {
+  "function": "ISD DIAGNOSTIC",
+  "requires": "smart",
+  "when": {
+   "software": "isd"
+  },
+  "screens": [
+   {
+    "l1": "CLEAR TEST AFTER REPAIR",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "CONTAINMENT OVER PRESS",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "VAPOR LEAKAGE TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "VAPOR COLLECTION TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "SENSOR OUT TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "SETUP TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "PROCESSOR STATUS TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   },
+   {
+    "l1": "CLEAR TEST AND LOG",
+    "l2": "ARE YOU SURE?: YES",
+    "depth": 1
+   },
+   {
+    "l1": "FP: ff h:HH nnnnnnnnnnn",
+    "l2": "PRESS <ENTER>",
+    "depth": 1
+   }
+  ]
+ },
+ {
+  "function": "PMC DIAGNOSTIC",
+  "requires": "smart",
+  "when": {
+   "software": "isd"
+  },
+  "screens": [
+   {
+    "l1": "PMC VERSION: 01.00",
+    "l2": "PRESS <STEP> TO CONTINUE"
+   },
+   {
+    "l1": "VAPOR PRESSURE",
+    "l2": "INCHES H2O:      -X.XXX",
+    "depth": 0,
+    "live": "pmc_vapor"
+   },
+   {
+    "l1": "VAPOR PROCESSOR MODE",
+    "l2": "AUTOMATIC"
+   },
+   {
+    "l1": "VAPOR PROCESSOR STATE",
+    "l2": "VP STATE:  OFF",
+    "vp": "membrane"
+   },
+   {
+    "l1": "HYDROCARBON SENSOR",
+    "l2": "HC SENSOR      XX.XXX%",
+    "live": "pmc_hc",
+    "vp": "membrane"
+   },
+   {
+    "l1": "VEEDER-ROOT POLISHER",
+    "l2": "LOAD:       XX.X%",
+    "live": "pmc_load",
+    "vp": "polisher"
+   },
+   {
+    "l1": "EFFLUENT EMISSIONS",
+    "l2": "X.XX LB/KGAL",
+    "live": "pmc_effluent",
+    "vp": "polisher"
+   },
+   {
+    "l1": "VAPOR VALVE POSITION",
+    "l2": "REQUESTED: CLOSED",
+    "live": "pmc_valve_req",
+    "vp": "polisher"
+   },
+   {
+    "l1": "VAPOR VALVE POSITION",
+    "l2": "CURRENT: CLOSED",
+    "live": "pmc_valve_cur",
+    "vp": "polisher"
+   },
+   {
+    "l1": "TEMPERATURE SENSOR",
+    "l2": "XX.XX DEG F",
+    "live": "pmc_temp",
+    "vp": "polisher"
+   }
+  ]
+ },
+ {
+  "function": "ARCHIVE",
+  "requires": null,
+  "screens": [
+   {
+    "l1": "ARCHIVE",
+    "l2": "PRESS <STEP> TO CONTINUE"
+   }
+  ]
+ }
+]

@@ -1,0 +1,15 @@
+# Normalise line endings so a checkout is consistent on every machine.
+# Text is stored with LF in the repo; Windows working copies may show CRLF.
+* text=auto eol=lf
+
+# Windows-only files that Windows tools expect with CRLF.
+*.iss text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary: never touch the bytes. Line-ending conversion on these would
+# corrupt them -- the icon most of all, which is what the build embeds.
+*.png binary
+*.ico binary
+*.pdf binary
+*.vrset binary

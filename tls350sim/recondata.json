@@ -1,0 +1,475 @@
+[
+ {
+  "function": "MANUAL SHIFT CLOSE",
+  "requires": "probe",
+  "print": "reconcile",
+  "steps": [
+   {
+    "text": "SHIFT CLOSE NOW",
+    "live": null,
+    "head": "function",
+    "action": "close:shift",
+    "print_scope": "device"
+   }
+  ]
+ },
+ {
+  "function": "DISPLAY AND PRINT",
+  "requires": "probe",
+  "print": "reconcile",
+  "steps": [
+   {
+    "text": "REPORT TYPE",
+    "live": null,
+    "head": "function",
+    "sel": "report_type",
+    "choices": [
+     "SHIFT",
+     "DAILY",
+     "PERIODIC"
+    ]
+   },
+   {
+    "text": "PROD",
+    "live": null,
+    "head": "type",
+    "product": true
+   },
+   {
+    "text": "SELECT SHIFT",
+    "live": null,
+    "head": "prod",
+    "sel": "which",
+    "choices": [
+     "CURRENT",
+     "PREVIOUS"
+    ],
+    "text_by": {
+     "DAILY": "SELECT DAY",
+     "PERIODIC": "SELECT PERIOD"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "CUR SHFT OPEN",
+    "live": "recon_open_date",
+    "head": "prod",
+    "text_by": {
+     "DAILY": "DAY OPEN",
+     "PERIODIC": "CUR PERI OPEN"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "OPENING TIME",
+    "live": "recon_open_time",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING DATE",
+    "live": "recon_close_date",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING TIME",
+    "live": "recon_close_time",
+    "head": "prod"
+   },
+   {
+    "text": "OPENING VOLUME",
+    "live": "recon_opening",
+    "head": "prod"
+   },
+   {
+    "text": "DELIVERIES",
+    "live": "recon_deliveries",
+    "head": "prod"
+   },
+   {
+    "text": "METERED SALES",
+    "live": "recon_sales",
+    "head": "prod"
+   },
+   {
+    "text": "MANUAL ADJUSTMENTS",
+    "live": "recon_adjust",
+    "head": "prod"
+   },
+   {
+    "text": "CALCULATED INVNTRY",
+    "live": "recon_calculated",
+    "head": "prod"
+   },
+   {
+    "text": "GAUGED INVNTRY",
+    "live": "recon_physical",
+    "head": "prod"
+   },
+   {
+    "text": "WATER HEIGHT",
+    "live": "recon_water",
+    "head": "prod"
+   },
+   {
+    "text": "VARIANCE",
+    "live": "recon_variance",
+    "head": "prod"
+   },
+   {
+    "text": "THRESHOLD",
+    "live": "recon_threshold",
+    "head": "prod",
+    "when": {
+     "sel": "report_type",
+     "is": [
+      "PERIODIC"
+     ]
+    }
+   }
+  ]
+ },
+ {
+  "function": "DISPLAY AND PRINT DLVY",
+  "requires": "probe",
+  "print": "delivery_variance",
+  "when": {
+   "code": "S53400",
+   "not": [
+    "000"
+   ],
+   "default": "000"
+  },
+  "steps": [
+   {
+    "text": "SELECT",
+    "live": null,
+    "head": "function",
+    "sel": "variance_period",
+    "choices": [
+     "DAILY",
+     "WEEKLY",
+     "PERIODIC"
+    ]
+   },
+   {
+    "text": "PROD",
+    "live": null,
+    "head": "select",
+    "product": true
+   },
+   {
+    "text": "SELECT DAY",
+    "live": null,
+    "head": "prod",
+    "sel": "which",
+    "choices": [
+     "CURRENT",
+     "PREVIOUS"
+    ],
+    "text_by": {
+     "WEEKLY": "SELECT WEEK",
+     "PERIODIC": "SELECT PERIOD"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "DAY OPEN",
+    "live": "recon_open_date",
+    "head": "prod",
+    "text_by": {
+     "WEEKLY": "WEEK OPEN",
+     "PERIODIC": "PERIOD OPEN"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "OPENING TIME",
+    "live": "recon_open_time",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING DATE",
+    "live": "recon_close_date",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING TIME",
+    "live": "recon_close_time",
+    "head": "prod"
+   },
+   {
+    "text": "TICKET VOL",
+    "live": "recon_ticketed",
+    "head": "prod"
+   },
+   {
+    "text": "GAUGED VOL",
+    "live": "recon_deliveries",
+    "head": "prod"
+   },
+   {
+    "text": "DLVY VAR",
+    "live": "recon_delivery_var",
+    "head": "prod"
+   }
+  ]
+ },
+ {
+  "function": "BOOK VARIANCE",
+  "requires": "probe",
+  "print": "book_variance",
+  "when": {
+   "code": "S53300",
+   "not": [
+    "000"
+   ],
+   "default": "000"
+  },
+  "steps": [
+   {
+    "text": "SELECT",
+    "live": null,
+    "head": "function",
+    "sel": "variance_period",
+    "choices": [
+     "DAILY",
+     "WEEKLY",
+     "PERIODIC"
+    ]
+   },
+   {
+    "text": "PROD",
+    "live": null,
+    "head": "select",
+    "product": true
+   },
+   {
+    "text": "SELECT DAY",
+    "live": null,
+    "head": "prod",
+    "sel": "which",
+    "choices": [
+     "CURRENT",
+     "PREVIOUS"
+    ],
+    "text_by": {
+     "WEEKLY": "SELECT WEEK",
+     "PERIODIC": "SELECT PERIOD"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "DAY OPEN",
+    "live": "recon_open_date",
+    "head": "prod",
+    "text_by": {
+     "WEEKLY": "WEEK OPEN",
+     "PERIODIC": "PERIOD OPEN"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "OPENING TIME",
+    "live": "recon_open_time",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING DATE",
+    "live": "recon_close_date",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING TIME",
+    "live": "recon_close_time",
+    "head": "prod"
+   },
+   {
+    "text": "OPN GAUG VOL",
+    "live": "recon_opening",
+    "head": "prod"
+   },
+   {
+    "text": "METER SALES",
+    "live": "recon_sales",
+    "head": "prod"
+   },
+   {
+    "text": "TICKET DLVY",
+    "live": "recon_ticketed",
+    "head": "prod"
+   },
+   {
+    "text": "MANUAL ADJ",
+    "live": "recon_adjust",
+    "head": "prod"
+   },
+   {
+    "text": "BOOK INV",
+    "live": "recon_book",
+    "head": "prod"
+   },
+   {
+    "text": "GAUGED INV",
+    "live": "recon_physical",
+    "head": "prod"
+   },
+   {
+    "text": "WATER HT",
+    "live": "recon_water",
+    "head": "prod"
+   },
+   {
+    "text": "VAR",
+    "live": "recon_book_var",
+    "head": "prod"
+   }
+  ]
+ },
+ {
+  "function": "VARIANCE ANALYSIS",
+  "requires": "probe",
+  "print": "variance_analysis",
+  "when": {
+   "code": "S53200",
+   "not": [
+    "000"
+   ],
+   "default": "000"
+  },
+  "steps": [
+   {
+    "text": "SELECT",
+    "live": null,
+    "head": "function",
+    "sel": "variance_period",
+    "choices": [
+     "DAILY",
+     "WEEKLY",
+     "PERIODIC"
+    ]
+   },
+   {
+    "text": "PROD",
+    "live": null,
+    "head": "select",
+    "product": true
+   },
+   {
+    "text": "SELECT DAY",
+    "live": null,
+    "head": "prod",
+    "sel": "which",
+    "choices": [
+     "CURRENT",
+     "PREVIOUS"
+    ],
+    "text_by": {
+     "WEEKLY": "SELECT WEEK",
+     "PERIODIC": "SELECT PERIOD"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "DAY OPEN",
+    "live": "recon_open_date",
+    "head": "prod",
+    "text_by": {
+     "WEEKLY": "WEEK OPEN",
+     "PERIODIC": "PERIOD OPEN"
+    },
+    "print_scope": "device"
+   },
+   {
+    "text": "OPENING TIME",
+    "live": "recon_open_time",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING DATE",
+    "live": "recon_close_date",
+    "head": "prod"
+   },
+   {
+    "text": "CLOSING TIME",
+    "live": "recon_close_time",
+    "head": "prod"
+   },
+   {
+    "text": "BOOK VAR",
+    "live": "recon_book_var",
+    "head": "prod"
+   },
+   {
+    "text": "BOOK VAR %",
+    "live": "recon_book_pct",
+    "head": "prod"
+   },
+   {
+    "text": "DLVY VAR",
+    "live": "recon_delivery_var",
+    "head": "prod"
+   },
+   {
+    "text": "SALE VAR",
+    "live": "recon_sales_var",
+    "head": "prod"
+   },
+   {
+    "text": "TEMP VAR",
+    "live": "recon_temp_var",
+    "head": "prod"
+   },
+   {
+    "text": "WATER CHG",
+    "live": "recon_water_change",
+    "head": "prod"
+   },
+   {
+    "text": "UNEX VAR",
+    "live": "recon_unexplained",
+    "head": "prod"
+   }
+  ]
+ },
+ {
+  "function": "MANUAL ADJUSTMENTS",
+  "requires": "probe",
+  "print": "reconcile",
+  "steps": [
+   {
+    "text": "ADJUSTMENT TYPE",
+    "live": null,
+    "head": "tank",
+    "sel": "adjust_type",
+    "choices": [
+     "SHIFT",
+     "DAILY"
+    ]
+   },
+   {
+    "text": "SELECT SHIFT",
+    "live": null,
+    "head": "tank",
+    "sel": "which",
+    "choices": [
+     "CURRENT",
+     "PREVIOUS"
+    ],
+    "text_by": {
+     "DAILY": "SELECT DAY"
+    }
+   },
+   {
+    "text": "%s SHFT ADJ VOL",
+    "live": null,
+    "head": "tank",
+    "adjust": true,
+    "text_by": {
+     "DAILY": "%s ADJ VOL"
+    },
+    "print_scope": "device",
+    "adjust_prefix": true
+   }
+  ]
+ }
+]

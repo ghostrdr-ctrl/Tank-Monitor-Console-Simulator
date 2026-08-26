@@ -1,0 +1,8016 @@
+{
+ "status_categories": {
+  "00": "All Normal",
+  "01": "System",
+  "02": "Tank",
+  "03": "Liquid Sensor",
+  "04": "Vapor Sensor",
+  "05": "Input",
+  "06": "Volumetric Line Leak",
+  "07": "Groundwater Sensor",
+  "08": "Type A Sensor",
+  "12": "Type B Sensor",
+  "13": "Universal Sensor",
+  "14": "Auto-Dial Fax",
+  "18": "Mech Dispenser",
+  "19": "Elec Dispenser",
+  "20": "BIR / Product",
+  "21": "Pressure Line Leak",
+  "26": "Wireless PLLD",
+  "28": "Smart Sensor",
+  "29": "Modbus",
+  "30": "ISD Site",
+  "31": "ISD Hose",
+  "32": "ISD Vapor Flow Meter",
+  "33": "PMC",
+  "34": "Pump Relay Monitor",
+  "35": "VMCI Dispenser",
+  "36": "VMC",
+  "99": "External",
+  "37": "APM Alarm"
+ },
+ "status_types": {
+  "01": {
+   "01": "Printer out of Paper",
+   "02": "Printer Error",
+   "03": "EEPROM Config Error",
+   "04": "Battery Is Off",
+   "05": "Too Many Tanks",
+   "06": "System Security Warning",
+   "07": "ROM Revision Warning",
+   "08": "Remote Display Comm Error",
+   "09": "Autodial Failure",
+   "10": "Software Module Warning",
+   "11": "Tank Test Shutdown Warning",
+   "12": "Protective Cover Alarm",
+   "13": "BIR Shift Close Pending",
+   "14": "BIR Daily Close Pending",
+   "15": "PC Revision Warning",
+   "16": "System Self Test Error",
+   "17": "System Clock Incorrect",
+   "18": "System Device Poll Timeout",
+   "19": "Maint Tracker NVMem Removed",
+   "20": "Maint Tracker Comm Module Removed"
+  },
+  "02": {
+   "01": "Setup Data Warning",
+   "02": "Leak Alarm",
+   "03": "High Water Alarm",
+   "04": "Overfill Alarm",
+   "05": "Low Product Alarm",
+   "06": "Sudden Loss Alarm",
+   "07": "High Product Alarm",
+   "08": "Invalid Fuel Level Alarm",
+   "09": "Probe Out Alarm",
+   "10": "High Water Warning",
+   "11": "Delivery Needed",
+   "12": "Maximum Product Alarm",
+   "13": "Gross Leak Test Fail",
+   "14": "Periodic Leak Test Fail",
+   "15": "Annual Leak Test Fail",
+   "16": "Periodic Test Needed Warning",
+   "17": "Annual Test Needed Warning",
+   "18": "Periodic Test Needed Alarm",
+   "19": "Annual Test Needed Alarm",
+   "20": "Leak Test Active",
+   "21": "No CSLD Idle Time Warning",
+   "22": "Siphon Break Active",
+   "23": "CSLD Rate Increase Warning",
+   "24": "AccuChart Calibration Warning",
+   "25": "HRM Reconciliation Warning",
+   "26": "HRM Reconciliation Alarm",
+   "27": "Cold Temperature Warning",
+   "28": "Missing Delivery Ticket",
+   "29": "Tank/Line Gross Leak Alarm",
+   "30": "Delivery Density Warning"
+  },
+  "03": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "04": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "07": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "08": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "12": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "13": {
+   "02": "Setup Data Warning",
+   "03": "Fuel Alarm",
+   "04": "Sensor Out Alarm",
+   "05": "Short Alarm",
+   "06": "Water Alarm",
+   "07": "Water Out Alarm",
+   "08": "High Liquid Alarm",
+   "09": "Low Liquid Alarm",
+   "10": "Liquid Warning"
+  },
+  "05": {
+   "01": "Setup Data Warning",
+   "02": "Input Normal",
+   "03": "Input Alarm"
+  },
+  "06": {
+   "01": "Setup Data Warning",
+   "02": "Self Test Alarm",
+   "03": "Shutdown Alarm",
+   "04": "Leak Test Fail Alarm",
+   "05": "Selftest Invalid Warning",
+   "06": "Continuous Handle On Warning",
+   "07": "Gross Line Test Fail",
+   "08": "Gross Line Selftest Fail",
+   "09": "Gross Pump Test Fail",
+   "10": "Gross Pump Selftest Fail",
+   "11": "Periodic Test Needed Warning",
+   "12": "Annual Test Needed Warning",
+   "13": "Periodic Test Needed Alarm",
+   "14": "Annual Test Needed Alarm",
+   "15": "Periodic Line Test Fail",
+   "16": "Periodic Line Selftest Fail",
+   "17": "Periodic Pump Test Fail",
+   "18": "Periodic Pump Selftest Fail",
+   "19": "Annual Line Test Fail",
+   "20": "Annual Line Selftest Fail",
+   "21": "Annual Pump Test Fail",
+   "22": "Annual Pump Selftest Fail",
+   "23": "Pressure Warning",
+   "24": "Pressure Alarm",
+   "25": "Gross Test Fault",
+   "26": "Periodic Test Fault",
+   "27": "Annual Test Fault",
+   "28": "Fuel Out Alarm"
+  },
+  "14": {
+   "01": "Setup Data Warning",
+   "02": "Failed Alarm",
+   "03": "Service Report Warning",
+   "04": "Alarm Clear Warning",
+   "05": "Delivery Report Warning"
+  },
+  "20": {
+   "01": "Setup Data Warning",
+   "02": "Threshold Alarm",
+   "03": "Close Shift Warning",
+   "04": "Close Daily Warning"
+  },
+  "21": {
+   "01": "Setup Data Warning",
+   "02": "Gross Test Fail",
+   "03": "Annual Test Fail",
+   "04": "Periodic Test Needed Warning",
+   "05": "Periodic Test Needed Alarm",
+   "06": "Sensor Open Alarm",
+   "07": "High Pressure Alarm",
+   "08": "Shutdown Alarm",
+   "09": "High Pressure Warning",
+   "10": "Continuous Handle On Warning",
+   "11": "Periodic Test Fail",
+   "12": "Annual Test Needed Warning",
+   "13": "Annual Test Needed Alarm",
+   "14": "Low Pressure Alarm",
+   "15": "Sensor Short Alarm",
+   "16": "Continuous Handle On Alarm",
+   "17": "Fuel Out Alarm",
+   "18": "Line Equipment Alarm"
+  },
+  "26": {
+   "01": "Setup Data Warning",
+   "02": "Gross Test Fail",
+   "03": "Periodic Test Fail",
+   "04": "Periodic Test Needed Warning",
+   "05": "Periodic Test Needed Alarm",
+   "06": "Sensor Open Alarm",
+   "07": "Communications Alarm",
+   "08": "Shutdown Alarm",
+   "09": "Continuous Handle On Warning",
+   "10": "Annual Test Fail",
+   "11": "Annual Test Needed Warning",
+   "12": "Annual Test Needed Alarm",
+   "13": "High Pressure Warning",
+   "14": "High Pressure Alarm",
+   "15": "Sensor Short Alarm",
+   "16": "Continuous Handle On Alarm",
+   "17": "Fuel Out Alarm",
+   "18": "Line Equipment Alarm"
+  },
+  "28": {
+   "01": "Setup Data Warning",
+   "02": "Communication Alarm",
+   "03": "Fault Alarm",
+   "04": "Fuel Warning",
+   "05": "Fuel Alarm",
+   "06": "Water Warning",
+   "07": "Water Alarm",
+   "08": "High Liquid Warning",
+   "09": "High Liquid Alarm",
+   "10": "Low Liquid Warning",
+   "11": "Low Liquid Alarm",
+   "12": "Temperature Warning",
+   "13": "Relay Active",
+   "14": "Install Alarm",
+   "15": "Sensor Fault Warning",
+   "16": "Vacuum Warning",
+   "17": "No Vacuum Warning"
+  },
+  "34": {
+   "01": "Setup Data Warning",
+   "02": "Pump Relay Alarm"
+  },
+  "37": {
+   "01": "Gross Over-Pressure Test Warning",
+   "02": "APM Gross Over-Pressure Test Failure warning",
+   "03": "APM Gross Over-Pressure Test Failure alarm",
+   "04": "APM Degradation Over-Pressure Test Failure warning",
+   "05": "APM Degradation Over-Pressure Test Failure alarm",
+   "06": "APM Sensor Test Failure warning",
+   "07": "APM Sensor Test Failure alarm",
+   "08": "APM Setup Failure warning",
+   "09": "APM Sensor Out Failure warning",
+   "10": "APM Sensor Out Failure alarm"
+  },
+  "30": {
+   "01": "Stage 1 Transfer Warn",
+   "02": "ISD Gross Pressure Warn",
+   "03": "ISD Gross Pressure Fail",
+   "04": "ISD Degrd Pressure Warn",
+   "05": "ISD Degrd Pressure Fail",
+   "06": "ISD Vapor Leakage Warn",
+   "07": "ISD Vapor Leakage Fail",
+   "08": "ISD VP Pressure Warn",
+   "09": "ISD VP Pressure Fail",
+   "10": "ISD VP Status Warn",
+   "11": "ISD VP Status Fail",
+   "12": "Missing Relay Setup",
+   "13": "Missing Hose Setup",
+   "14": "Missing Tank Setup",
+   "15": "Missing Vapor Flow Mtr",
+   "16": "Missing Vapor Pres Sen",
+   "17": "Missing VP Input",
+   "18": "ISD Setup Warn",
+   "19": "ISD Setup Fail",
+   "20": "ISD Sensor Out Warn",
+   "21": "ISD Sensor Out Fail",
+   "22": "PC-ISD Offline"
+  },
+  "31": {
+   "01": "Gross Collect Warn",
+   "02": "Gross Collect Fail",
+   "03": "Degrd Collect Warn",
+   "04": "Degrd Collect Fail",
+   "05": "Flow Collect Warn",
+   "06": "Flow Collect Fail",
+   "07": "VprFlow Mtr Setup"
+  },
+  "32": {
+   "01": "Chk Vapor Flow Mtr"
+  },
+  "33": {
+   "01": "VP Run Time Fault Warn",
+   "02": "VP Emission Warn",
+   "03": "VP Emission Fail",
+   "04": "VP Over Pressure Warn",
+   "05": "VP Over Pressure Fail",
+   "06": "VP Duty Cycle Warn",
+   "07": "VP Duty Cycle Fail",
+   "08": "PMC Setup Warn"
+  },
+  "18": {
+   "02": "DIM Disabled",
+   "03": "DIM Communication Alarm"
+  },
+  "19": {
+   "02": "DIM Disabled",
+   "03": "DIM Communication Alarm",
+   "04": "BDIM Transaction Alarm"
+  }
+ },
+ "status_device_word": {
+  "02": "Tank",
+  "03": "Sensor",
+  "04": "Sensor",
+  "05": "Input",
+  "06": "Line",
+  "07": "Sensor",
+  "08": "Sensor",
+  "12": "Sensor",
+  "13": "Sensor",
+  "20": "Tank",
+  "21": "Line",
+  "26": "Line",
+  "28": "Smart Sensor",
+  "34": "Pump",
+  "36": "VMC",
+  "31": "Hose",
+  "32": "Meter",
+  "18": "MDIM",
+  "19": "EDIM"
+ },
+ "device_prefixed": [
+  1312,
+  1313,
+  1314,
+  1315,
+  1316,
+  1317,
+  1318,
+  1319,
+  1320,
+  1322,
+  1323,
+  1324,
+  1325,
+  1326,
+  1327,
+  1333,
+  1468,
+  1506,
+  1537,
+  1538,
+  1539,
+  1540,
+  1541,
+  1542,
+  1543,
+  1544,
+  1545,
+  1546,
+  1548,
+  1550,
+  1551,
+  1552,
+  1553,
+  1554,
+  1555,
+  1556,
+  1557,
+  1558,
+  1559,
+  1560,
+  1561,
+  1562,
+  1563,
+  1564,
+  1565,
+  1566,
+  1567,
+  1569,
+  1570,
+  1571,
+  1572,
+  1573,
+  1574,
+  1575,
+  1576,
+  1577,
+  1578,
+  1579,
+  1580,
+  1581,
+  1582,
+  1583,
+  1584,
+  1585,
+  1586,
+  1588,
+  1589,
+  1590,
+  1593,
+  1594,
+  1595,
+  1667,
+  1793,
+  1794,
+  1795,
+  1796,
+  1798,
+  1800,
+  1801,
+  1809,
+  1810,
+  1825,
+  1826,
+  1827,
+  1831,
+  1833,
+  1834,
+  1835,
+  1836,
+  1857,
+  1858,
+  1859,
+  1860,
+  1862,
+  1863,
+  1864,
+  1865,
+  1867,
+  1868,
+  1869,
+  1870,
+  1873,
+  1874,
+  1875,
+  1876,
+  1877,
+  1878,
+  1879,
+  1880,
+  1881,
+  1884,
+  1885,
+  1887,
+  1888,
+  1889,
+  1905,
+  1906,
+  1908,
+  1909,
+  1910,
+  1913,
+  1914,
+  1915,
+  1916,
+  1917,
+  1918,
+  1919,
+  1921,
+  1922,
+  1923,
+  1924,
+  1925,
+  1926,
+  1928,
+  1929,
+  1930,
+  1932,
+  1934,
+  1935,
+  1937,
+  1938,
+  1940,
+  1947,
+  1948,
+  1953,
+  1955,
+  1956,
+  1958,
+  1960,
+  1961,
+  1964,
+  1967,
+  1973,
+  1986,
+  1987,
+  1988,
+  1989,
+  1990,
+  1991,
+  1992,
+  1993,
+  2002,
+  2003,
+  2004,
+  2049,
+  2050,
+  2052,
+  2054,
+  2055,
+  2056,
+  2057,
+  2058,
+  2059,
+  2060,
+  2061,
+  2063,
+  2081,
+  2082,
+  2178,
+  2193,
+  2241
+ ],
+ "multi_device": [
+  1282,
+  1283,
+  1307,
+  1312,
+  1313,
+  1314,
+  1315,
+  1316,
+  1317,
+  1318,
+  1319,
+  1320,
+  1322,
+  1323,
+  1324,
+  1325,
+  1326,
+  1327,
+  1334,
+  1335,
+  1336,
+  1468,
+  1506,
+  1537,
+  1538,
+  1539,
+  1540,
+  1541,
+  1542,
+  1543,
+  1544,
+  1545,
+  1546,
+  1548,
+  1550,
+  1551,
+  1552,
+  1553,
+  1554,
+  1555,
+  1556,
+  1557,
+  1558,
+  1560,
+  1561,
+  1562,
+  1563,
+  1564,
+  1565,
+  1566,
+  1567,
+  1569,
+  1570,
+  1571,
+  1572,
+  1573,
+  1574,
+  1575,
+  1576,
+  1577,
+  1578,
+  1579,
+  1580,
+  1581,
+  1582,
+  1583,
+  1584,
+  1585,
+  1586,
+  1588,
+  1589,
+  1590,
+  1593,
+  1594,
+  1595,
+  1596,
+  1597,
+  1667,
+  1793,
+  1794,
+  1795,
+  1796,
+  1798,
+  1799,
+  1800,
+  1801,
+  1809,
+  1810,
+  1811,
+  1825,
+  1826,
+  1827,
+  1831,
+  1833,
+  1834,
+  1835,
+  1836,
+  1857,
+  1858,
+  1859,
+  1860,
+  1862,
+  1863,
+  1864,
+  1865,
+  1867,
+  1868,
+  1869,
+  1870,
+  1873,
+  1874,
+  1875,
+  1876,
+  1877,
+  1878,
+  1879,
+  1880,
+  1881,
+  1883,
+  1884,
+  1885,
+  1886,
+  1887,
+  1888,
+  1889,
+  1905,
+  1906,
+  1908,
+  1909,
+  1910,
+  1911,
+  1912,
+  1913,
+  1914,
+  1915,
+  1916,
+  1917,
+  1918,
+  1919,
+  1921,
+  1922,
+  1923,
+  1924,
+  1925,
+  1926,
+  1927,
+  1928,
+  1929,
+  1930,
+  1931,
+  1932,
+  1934,
+  1935,
+  1937,
+  1938,
+  1940,
+  1947,
+  1948,
+  1953,
+  1954,
+  1955,
+  1956,
+  1957,
+  1958,
+  1959,
+  1960,
+  1961,
+  1962,
+  1964,
+  1965,
+  1966,
+  1967,
+  1973,
+  1974,
+  1980,
+  1981,
+  1982,
+  1986,
+  1987,
+  1988,
+  1989,
+  1990,
+  1991,
+  1992,
+  1993,
+  2002,
+  2003,
+  2004,
+  2049,
+  2050,
+  2051,
+  2052,
+  2054,
+  2055,
+  2056,
+  2057,
+  2058,
+  2059,
+  2060,
+  2061,
+  2063,
+  2081,
+  2082,
+  2177,
+  2178,
+  2181,
+  2182,
+  2183,
+  2185,
+  2193,
+  2236,
+  2241,
+  2242
+ ],
+ "fields": {
+  "S50301": {
+   "label": "Header line",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S50301"
+  },
+  "S51100": {
+   "label": "BIR shift printouts",
+   "kind": "flag",
+   "code": "S51100"
+  },
+  "S51200": {
+   "label": "BIR daily printouts",
+   "kind": "flag",
+   "code": "S51200"
+  },
+  "S51C00": {
+   "label": "Ticketed delivery",
+   "kind": "flag",
+   "code": "S51C00"
+  },
+  "S50C00": {
+   "label": "Remote printer page eject",
+   "kind": "flag",
+   "code": "S50C00"
+  },
+  "S51300": {
+   "label": "Tanker load report",
+   "kind": "flag",
+   "code": "S51300"
+  },
+  "S51600": {
+   "label": "Re-direct local printout",
+   "kind": "flag",
+   "code": "S51600"
+  },
+  "S50201": {
+   "label": "Shift start time",
+   "kind": "time",
+   "code": "S50201"
+  },
+  "S60201": {
+   "label": "Tank product label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S60201"
+  },
+  "S60301": {
+   "label": "Tank product code",
+   "kind": "text",
+   "maxlen": 1,
+   "code": "S60301"
+  },
+  "S60701": {
+   "label": "Tank diameter",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000.0,
+   "code": "S60701",
+   "mask": "000.00"
+  },
+  "S60F01": {
+   "label": "Probe offset, inches",
+   "kind": "float",
+   "min": -144.0,
+   "max": 144.0,
+   "code": "S60F01",
+   "mask": "+0000.00"
+  },
+  "S60801": {
+   "label": "Tank tilt",
+   "kind": "float",
+   "min": -999.0,
+   "max": 999.0,
+   "code": "S60801",
+   "mask": "+000.00"
+  },
+  "S60C01": {
+   "label": "Stick height offset, inches",
+   "kind": "float",
+   "min": -144.0,
+   "max": 144.0,
+   "code": "S60C01",
+   "mask": "0000.00"
+  },
+  "S60901": {
+   "label": "Thermal expansion coefficient",
+   "kind": "float",
+   "min": 0.0,
+   "max": 0.0016,
+   "code": "S60901",
+   "mask": "0.00000"
+  },
+  "S61E01": {
+   "label": "Tank density",
+   "kind": "float",
+   "min": 0.0,
+   "max": 2000.0,
+   "code": "S61E01",
+   "mask": "0.0000"
+  },
+  "S62101": {
+   "label": "Low product limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62101",
+   "mask": "000000"
+  },
+  "S62201": {
+   "label": "High product limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62201",
+   "mask": "000%"
+  },
+  "S62301": {
+   "label": "Overfill limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62301",
+   "mask": "000%"
+  },
+  "S62401": {
+   "label": "High water limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 199.0,
+   "code": "S62401",
+   "mask": "0.0"
+  },
+  "S62501": {
+   "label": "Sudden loss limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62501",
+   "mask": "000000"
+  },
+  "S61001": {
+   "code": "S61001",
+   "kind": "int",
+   "min": 1,
+   "max": 99,
+   "width": 2,
+   "label": "Delivery delay, minutes",
+   "mask": "00"
+  },
+  "S62C01": {
+   "code": "S62C01",
+   "kind": "enum",
+   "label": "Periodic test type",
+   "choices": [
+    [
+     "0",
+     "STANDARD"
+    ],
+    [
+     "1",
+     "QUICK"
+    ]
+   ]
+  },
+  "S72301": {
+   "label": "Smart sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "00",
+     "UNKNOWN"
+    ],
+    [
+     "01",
+     "ROTARY AIR FLOW METER"
+    ],
+    [
+     "02",
+     "VAPOR PRESSURE SENSOR"
+    ],
+    [
+     "03",
+     "MAG SENSOR"
+    ],
+    [
+     "04",
+     "VACUUM SENSOR"
+    ],
+    [
+     "05",
+     "ATMOSPHERIC SENSOR"
+    ],
+    [
+     "08",
+     "VAPOR VALVE"
+    ]
+   ],
+   "code": "S72301"
+  },
+  "S53100": {
+   "label": "RS-232 end of message",
+   "kind": "flag",
+   "code": "S53100"
+  },
+  "S78401": {
+   "label": "PLLD shutdown rate",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "3.0 GPH"
+    ],
+    [
+     "02",
+     "0.2 GPH"
+    ],
+    [
+     "03",
+     "0.1 GPH"
+    ],
+    [
+     "04",
+     "NONE"
+    ]
+   ],
+   "code": "S78401"
+  },
+  "S78601": {
+   "label": "PLLD dispense mode",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "MANIFOLDED: ALTERNATE"
+    ],
+    [
+     "3",
+     "MANIFOLDED: SEQUENTIAL"
+    ],
+    [
+     "4",
+     "MANIFOLDED: ALL PUMPS"
+    ],
+    [
+     "5",
+     "MANIFOLDED: ALTERNATE-HT"
+    ]
+   ],
+   "code": "S78601"
+  },
+  "S7A801": {
+   "label": "WPLLD pipe type",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "2.0/3.0 IN. FIBERGLASS"
+    ],
+    [
+     "02",
+     "2.0 IN. STEEL"
+    ],
+    [
+     "03",
+     "ENVIROFLEX PP1501"
+    ],
+    [
+     "04",
+     "1.5 IN. ENVIRON GEOFLX D"
+    ],
+    [
+     "05",
+     "OMNIFLEX CP1501"
+    ],
+    [
+     "06",
+     "ENVIROFLEX PP1500"
+    ]
+   ],
+   "code": "S7A801",
+   "default": "ENVIROFLEX PP1501"
+  },
+  "S75501": {
+   "label": "VLLD pump pressure, PSI",
+   "kind": "float",
+   "min": 0.0,
+   "max": 100.0,
+   "code": "S75501"
+  },
+  "S75801": {
+   "label": "VLLD pump side test",
+   "kind": "enum",
+   "choices": [
+    [
+     "00",
+     "DISABLED"
+    ],
+    [
+     "01",
+     "ENABLED"
+    ]
+   ],
+   "code": "S75801"
+  },
+  "S75E01": {
+   "label": "VLLD fuel type",
+   "kind": "enum",
+   "choices": [
+    [
+     "00",
+     "GASOLINE"
+    ],
+    [
+     "01",
+     "DIESEL"
+    ]
+   ],
+   "code": "S75E01"
+  },
+  "S75F01": {
+   "label": "VLLD wait method",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "TEMPERATURE MEAS"
+    ],
+    [
+     "2",
+     "VOLUME CHANGE MEAS"
+    ]
+   ],
+   "code": "S75F01"
+  },
+  "S79500": {
+   "label": "Periodic reconciliation mode",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "MONTHLY"
+    ],
+    [
+     "1",
+     "ROLLING"
+    ]
+   ],
+   "code": "S79500"
+  },
+  "S79300": {
+   "label": "Automatic daily closing time",
+   "kind": "time",
+   "code": "S79300"
+  },
+  "S56000": {
+   "label": "Mass/density",
+   "kind": "flag",
+   "code": "S56000"
+  },
+  "S56400": {
+   "label": "Ullage",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "90%"
+    ],
+    [
+     "1",
+     "95%"
+    ]
+   ],
+   "code": "S56400",
+   "wire_line": "ULLAGE:"
+  },
+  "S56500": {
+   "label": "Maintenance history",
+   "kind": "flag",
+   "code": "S56500"
+  },
+  "S5BD00": {
+   "label": "Custom alarms",
+   "kind": "flag",
+   "code": "S5BD00"
+  },
+  "S52C01": {
+   "label": "Auto dial on alarms",
+   "kind": "list",
+   "code": "S52C01"
+  },
+  "S61501": {
+   "label": "BIR meter data present",
+   "kind": "flag",
+   "code": "S61501",
+   "words": [
+    "NO",
+    "YES"
+   ]
+  },
+  "S63D01": {
+   "label": "Vapor loss factor",
+   "kind": "float",
+   "code": "S63D01",
+   "mask": "0.00%"
+  },
+  "S62F01": {
+   "code": "S62F01",
+   "kind": "enum",
+   "label": "Mag probe float size",
+   "choices": [
+    [
+     "0",
+     "4.0 IN."
+    ],
+    [
+     "2",
+     "3.0 IN."
+    ],
+    [
+     "1",
+     "2.0 IN."
+    ],
+    [
+     "3",
+     "1.0 IN."
+    ],
+    [
+     "4",
+     "4.0 IN. PS",
+     "ethanol"
+    ],
+    [
+     "9",
+     "CUSTOM"
+    ]
+   ]
+  },
+  "S62701": {
+   "label": "High water warning limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 199.0,
+   "code": "S62701",
+   "mask": "00.0"
+  },
+  "S62901": {
+   "label": "Delivery required limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62901",
+   "mask": "000%"
+  },
+  "S61201": {
+   "label": "Siphon manifolded partners",
+   "kind": "list",
+   "code": "S61201",
+   "default": "00,00,00,00,00,00,00"
+  },
+  "S61D01": {
+   "label": "Line manifolded partners",
+   "kind": "list",
+   "code": "S61D01",
+   "default": "00,00,00,00,00,00,00"
+  },
+  "S63601": {
+   "label": "Periodic test minimum volume",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S63601",
+   "mask": "000%"
+  },
+  "S62A01": {
+   "label": "Annual test minimum volume",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62A01",
+   "mask": "000%"
+  },
+  "S63001": {
+   "label": "Tank leak test notify",
+   "kind": "flag",
+   "code": "S63001",
+   "words": [
+    "OFF",
+    "ON"
+   ]
+  },
+  "S63201": {
+   "label": "Tank test siphon break",
+   "kind": "flag",
+   "code": "S63201",
+   "words": [
+    "OFF",
+    "ON"
+   ]
+  },
+  "S68301": {
+   "label": "Average daily sales",
+   "kind": "float",
+   "code": "S68301"
+  },
+  "S61B01": {
+   "label": "Static gross test auto-confirm",
+   "kind": "flag",
+   "code": "S61B01"
+  },
+  "S61A01": {
+   "label": "Leak test early stop",
+   "kind": "flag",
+   "code": "S61A01"
+  },
+  "S78201": {
+   "label": "PLLD line label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S78201"
+  },
+  "S7A201": {
+   "label": "WPLLD line label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S7A201"
+  },
+  "S7A901": {
+   "label": "WPLLD pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 10000.0,
+   "code": "S7A901"
+  },
+  "S7A401": {
+   "label": "WPLLD shutdown rate",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "3.0 GPH"
+    ],
+    [
+     "02",
+     "0.2 GPH"
+    ],
+    [
+     "03",
+     "0.1 GPH"
+    ],
+    [
+     "04",
+     "NONE"
+    ]
+   ],
+   "code": "S7A401"
+  },
+  "S7A601": {
+   "label": "WPLLD dispense mode",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "MANIFOLDED: ALTERNATE"
+    ],
+    [
+     "3",
+     "MANIFOLDED: SEQUENTIAL"
+    ],
+    [
+     "4",
+     "MANIFOLDED: ALL PUMPS"
+    ]
+   ],
+   "code": "S7A601"
+  },
+  "S75201": {
+   "label": "VLLD tank number",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S75201"
+  },
+  "S75D01": {
+   "label": "VLLD dispense mode",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "MANIFOLDED: ALTERNATE"
+    ],
+    [
+     "3",
+     "MANIFOLDED: SEQUENTIAL"
+    ],
+    [
+     "4",
+     "MANIFOLDED: ALL PUMPS"
+    ]
+   ],
+   "code": "S75D01"
+  },
+  "S75701": {
+   "label": "VLLD shutdown rate",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "3.0 GPH"
+    ],
+    [
+     "02",
+     "0.2 GPH"
+    ],
+    [
+     "03",
+     "0.1 GPH"
+    ]
+   ],
+   "code": "S75701"
+  },
+  "S75A01": {
+   "label": "Line leak lockout schedule",
+   "kind": "list",
+   "code": "S75A01"
+  },
+  "S77301": {
+   "label": "Pump sensor dispense mode",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "MANIFOLDED: ALTERNATE"
+    ],
+    [
+     "3",
+     "MANIFOLDED: SEQUENTIAL"
+    ],
+    [
+     "4",
+     "MANIFOLDED: ALL PUMPS"
+    ],
+    [
+     "5",
+     "MANIFOLDED: ALTERNATE-HT"
+    ]
+   ],
+   "code": "S77301"
+  },
+  "S79401": {
+   "label": "Auto shift 1 closing time",
+   "kind": "time",
+   "code": "S79401"
+  },
+  "S70201": {
+   "label": "Liquid sensor location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S70201"
+  },
+  "S70401": {
+   "label": "Liquid sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S70401"
+  },
+  "S70701": {
+   "label": "Vapor sensor location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S70701"
+  },
+  "S70801": {
+   "label": "Vapor sensor alarm threshold",
+   "kind": "float",
+   "code": "S70801"
+  },
+  "S70901": {
+   "label": "Vapor sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S70901"
+  },
+  "S71201": {
+   "label": "Groundwater sensor location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S71201"
+  },
+  "S71301": {
+   "label": "Groundwater sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S71301"
+  },
+  "S74201": {
+   "label": "Type A sensor location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S74201"
+  },
+  "S74401": {
+   "label": "Type A sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S74401"
+  },
+  "S74701": {
+   "label": "Type B sensor location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S74701"
+  },
+  "S74901": {
+   "label": "Type B sensor category",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S74901"
+  },
+  "S51700.lang": {
+   "label": "System language",
+   "kind": "enum",
+   "part": [
+    1,
+    2
+   ],
+   "choices": [
+    [
+     "01",
+     "ENGLISH"
+    ],
+    [
+     "02",
+     "FRENCH"
+    ],
+    [
+     "03",
+     "SPANISH"
+    ],
+    [
+     "04",
+     "GERMAN"
+    ],
+    [
+     "05",
+     "PORTUGUESE"
+    ],
+    [
+     "06",
+     "POLISH"
+    ],
+    [
+     "07",
+     "SWEDISH"
+    ],
+    [
+     "08",
+     "JAPANESE"
+    ],
+    [
+     "09",
+     "FINNISH"
+    ],
+    [
+     "10",
+     "GREEK"
+    ],
+    [
+     "11",
+     "RUSSIAN"
+    ],
+    [
+     "12",
+     "TURKISH"
+    ],
+    [
+     "13",
+     "DUTCH"
+    ],
+    [
+     "14",
+     "ITALIAN"
+    ]
+   ],
+   "code": "S51700"
+  },
+  "S51700.units": {
+   "label": "System units",
+   "kind": "enum",
+   "part": [
+    0,
+    1
+   ],
+   "choices": [
+    [
+     "1",
+     "U.S."
+    ],
+    [
+     "2",
+     "METRIC"
+    ],
+    [
+     "3",
+     "IMPERIAL GALLONS"
+    ]
+   ],
+   "code": "S51700"
+  },
+  "S50F00": {
+   "label": "Date/time display format",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "MON DD YYYY HH:MM:SS xM"
+    ],
+    [
+     "02",
+     "MON DD YYYY HH:MM:SS"
+    ],
+    [
+     "03",
+     "MM-DD-YY HH:MM:SS xM"
+    ],
+    [
+     "04",
+     "MM-DD-YY HH:MM:SS"
+    ],
+    [
+     "05",
+     "DD-MM-YY HH:MM:SS"
+    ],
+    [
+     "06",
+     "YY-MM-DD HH:MM:SS"
+    ]
+   ],
+   "code": "S50F00"
+  },
+  "S50100.date": {
+   "label": "System date",
+   "kind": "date",
+   "part": [
+    0,
+    6
+   ],
+   "code": "S50100"
+  },
+  "S50100.time": {
+   "label": "Time of day",
+   "kind": "time",
+   "part": [
+    6,
+    4
+   ],
+   "code": "S50100"
+  },
+  "S51D00": {
+   "label": "Ticketed delivery temperature compensation",
+   "kind": "flag",
+   "code": "S51D00"
+  },
+  "S51E00": {
+   "label": "Ticketed delivery close day",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "MON"
+    ],
+    [
+     "2",
+     "TUE"
+    ],
+    [
+     "3",
+     "WED"
+    ],
+    [
+     "4",
+     "THU"
+    ],
+    [
+     "5",
+     "FRI"
+    ],
+    [
+     "6",
+     "SAT"
+    ],
+    [
+     "7",
+     "SUN"
+    ]
+   ],
+   "code": "S51E00"
+  },
+  "S53400.d": {
+   "label": "Daily delivery variance report",
+   "kind": "flag",
+   "part": [
+    2,
+    1
+   ],
+   "code": "S53400"
+  },
+  "S53400.w": {
+   "label": "Weekly delivery variance report",
+   "kind": "flag",
+   "part": [
+    1,
+    1
+   ],
+   "code": "S53400"
+  },
+  "S53400.p": {
+   "label": "Periodic delivery variance report",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S53400"
+  },
+  "S53300.d": {
+   "label": "Daily book variance report",
+   "kind": "flag",
+   "part": [
+    2,
+    1
+   ],
+   "code": "S53300"
+  },
+  "S53300.w": {
+   "label": "Weekly book variance report",
+   "kind": "flag",
+   "part": [
+    1,
+    1
+   ],
+   "code": "S53300"
+  },
+  "S53300.p": {
+   "label": "Periodic book variance report",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S53300"
+  },
+  "S53200.d": {
+   "label": "Daily variance analysis report",
+   "kind": "flag",
+   "part": [
+    2,
+    1
+   ],
+   "code": "S53200"
+  },
+  "S53200.w": {
+   "label": "Weekly variance analysis report",
+   "kind": "flag",
+   "part": [
+    1,
+    1
+   ],
+   "code": "S53200"
+  },
+  "S53200.p": {
+   "label": "Periodic variance analysis report",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S53200"
+  },
+  "S54600": {
+   "label": "Tank periodic test needed warning",
+   "kind": "flag",
+   "code": "S54600",
+   "wire_line": "TANK PER TEST NEEDED WRN:"
+  },
+  "S54700": {
+   "label": "Days before tank periodic test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S54700",
+   "wire_line": "TANK PER TEST NEEDED WRN:"
+  },
+  "S54800": {
+   "label": "Days before tank periodic test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S54800",
+   "wire_line": "TANK PER TEST NEEDED ALM:"
+  },
+  "S54A00": {
+   "label": "Days before tank annual test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S54A00",
+   "default": "355",
+   "wire_line": "TANK ANN TST NEEDED WRN:"
+  },
+  "S54B00": {
+   "label": "Days before tank annual test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S54B00",
+   "wire_line": "TANK ANN TEST NEEDED ALM:"
+  },
+  "S55300": {
+   "label": "Line re-enable method",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "PASS LINE TEST"
+    ],
+    [
+     "1",
+     "ACKNOWLEDGE ALARM"
+    ]
+   ],
+   "code": "S55300"
+  },
+  "S55600": {
+   "label": "Line periodic test needed warning",
+   "kind": "flag",
+   "code": "S55600",
+   "wire_line": "LINE PER TST NEEDED WRN:"
+  },
+  "S55700": {
+   "label": "Days before line periodic test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S55700",
+   "wire_line": "LINE PER TST NEEDED WRN:"
+  },
+  "S55800": {
+   "label": "Days before line periodic test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S55800",
+   "wire_line": "LINE PER TST NEEDED ALM:"
+  },
+  "S55900": {
+   "label": "Line annual test needed warning",
+   "kind": "flag",
+   "code": "S55900",
+   "wire_line": "LINE ANN TST NEEDED WRN:"
+  },
+  "S55A00": {
+   "label": "Days before line annual test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S55A00",
+   "default": "355",
+   "wire_line": "LINE ANN TST NEEDED WRN:"
+  },
+  "S55B00": {
+   "label": "Days before line annual test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S55B00",
+   "wire_line": "LINE ANN TST NEEDED ALM:"
+  },
+  "S50D00": {
+   "label": "Print temperature compensated volume",
+   "kind": "flag",
+   "code": "S50D00"
+  },
+  "S50E00": {
+   "label": "Temperature compensation value",
+   "kind": "float",
+   "min": 0.0,
+   "max": 100.0,
+   "code": "S50E00",
+   "default": "60",
+   "mask": "+000.0"
+  },
+  "S60B00": {
+   "label": "Stick height function",
+   "kind": "flag",
+   "code": "S60B00"
+  },
+  "S51400": {
+   "label": "H-protocol height/volume format",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "HEIGHT"
+    ],
+    [
+     "1",
+     "VOLUME"
+    ]
+   ],
+   "code": "S51400"
+  },
+  "S51900": {
+   "label": "Duration before precision retest, hours",
+   "kind": "int",
+   "min": 12,
+   "max": 744,
+   "width": 3,
+   "code": "S51900",
+   "default": "12",
+   "mask": "000"
+  },
+  "S55400": {
+   "label": "Periodic line leak test auto-confirm",
+   "kind": "flag",
+   "code": "S55400"
+  },
+  "S55500": {
+   "label": "Annual line leak test auto-confirm",
+   "kind": "flag",
+   "code": "S55500"
+  },
+  "S51A00": {
+   "label": "Automatic daylight saving time",
+   "kind": "flag",
+   "code": "S51A00"
+  },
+  "S51500": {
+   "label": "HRM-QPLD monthly printout",
+   "kind": "flag",
+   "code": "S51500"
+  },
+  "S50400": {
+   "label": "System RS-232 security code",
+   "kind": "text",
+   "maxlen": 6,
+   "code": "S50400",
+   "default": "000000"
+  },
+  "S56600": {
+   "label": "Service notice",
+   "kind": "flag",
+   "code": "S56600",
+   "wire_line": "SERVICE NOTICE:"
+  },
+  "S88101.baud": {
+   "label": "Baud rate",
+   "kind": "int",
+   "part": [
+    0,
+    5
+   ],
+   "min": 300,
+   "max": 38400,
+   "width": 5,
+   "code": "S88101"
+  },
+  "S88101.parity": {
+   "label": "Parity",
+   "kind": "enum",
+   "part": [
+    5,
+    1
+   ],
+   "choices": [
+    [
+     "0",
+     "NONE"
+    ],
+    [
+     "1",
+     "ODD"
+    ],
+    [
+     "2",
+     "EVEN"
+    ]
+   ],
+   "code": "S88101"
+  },
+  "S88101.stop": {
+   "label": "Stop bits",
+   "kind": "enum",
+   "part": [
+    6,
+    1
+   ],
+   "choices": [
+    [
+     "1",
+     "1 STOP"
+    ],
+    [
+     "2",
+     "2 STOP"
+    ]
+   ],
+   "code": "S88101"
+  },
+  "S88101.data": {
+   "label": "Data length",
+   "kind": "enum",
+   "part": [
+    7,
+    1
+   ],
+   "choices": [
+    [
+     "7",
+     "7 DATA"
+    ],
+    [
+     "8",
+     "8 DATA"
+    ]
+   ],
+   "code": "S88101"
+  },
+  "S53601": {
+   "label": "RS-232 security code for this port",
+   "kind": "text",
+   "part": [
+    1,
+    6
+   ],
+   "maxlen": 6,
+   "blank": "1",
+   "code": "S53601",
+   "default": "DISABLED"
+  },
+  "S52201": {
+   "label": "Receiver location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S52201"
+  },
+  "S52301": {
+   "label": "Receiver telephone number",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S52301"
+  },
+  "S60101": {
+   "code": "S60101",
+   "kind": "slots",
+   "slots": 4,
+   "label": "Tank Config Module 1"
+  },
+  "S60401": {
+   "code": "S60401",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "Tank full volume, gallons",
+   "mask": "000000"
+  },
+  "S63901.shape": {
+   "label": "AccuChart end shape",
+   "kind": "enum",
+   "part": [
+    0,
+    1
+   ],
+   "choices": [
+    [
+     "0",
+     "NONE"
+    ],
+    [
+     "1",
+     "FLAT"
+    ],
+    [
+     "2",
+     "HEMISPHERIC"
+    ],
+    [
+     "3",
+     "OTHER"
+    ]
+   ],
+   "code": "S63901"
+  },
+  "S63901.factor": {
+   "label": "AccuChart end shape factor",
+   "kind": "float",
+   "part": [
+    1,
+    8
+   ],
+   "min": 0.0,
+   "max": 1.0,
+   "code": "S63901",
+   "mask": "0.0"
+  },
+  "S61601": {
+   "label": "AccuChart update scheduling",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "IMMEDIATE"
+    ],
+    [
+     "2",
+     "PERIODIC"
+    ],
+    [
+     "3",
+     "COMPLETE"
+    ],
+    [
+     "4",
+     "NEVER"
+    ]
+   ],
+   "code": "S61601"
+  },
+  "S60E01.watermin": {
+   "label": "Minimum water threshold, inches",
+   "kind": "float",
+   "part": [
+    24,
+    8
+   ],
+   "min": 0.0,
+   "max": 1.0,
+   "code": "S60E01",
+   "mask": "0.000"
+  },
+  "S62801": {
+   "label": "Maximum or label volume",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62801",
+   "mask": "000000"
+  },
+  "S62601": {
+   "label": "Leak alarm limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S62601",
+   "mask": "00"
+  },
+  "S62D01.annual": {
+   "label": "Annual test fail alarm",
+   "kind": "flag",
+   "part": [
+    2,
+    1
+   ],
+   "code": "S62D01"
+  },
+  "S62D01.periodic": {
+   "label": "Periodic test fail alarm",
+   "kind": "flag",
+   "part": [
+    1,
+    1
+   ],
+   "code": "S62D01"
+  },
+  "S62D01.gross": {
+   "label": "Gross test fail alarm",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S62D01"
+  },
+  "S63101.annual": {
+   "label": "Annual leak test averaging",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S63101",
+   "words": [
+    "OFF",
+    "ON"
+   ]
+  },
+  "S63101.periodic": {
+   "label": "Periodic leak test averaging",
+   "kind": "flag",
+   "part": [
+    1,
+    1
+   ],
+   "code": "S63101",
+   "words": [
+    "OFF",
+    "ON"
+   ]
+  },
+  "S63A01": {
+   "label": "Low level pump threshold, percent",
+   "kind": "float",
+   "min": 0.0,
+   "max": 50.0,
+   "code": "S63A01",
+   "mask": "00.00"
+  },
+  "S68100": {
+   "label": "Delivery needed warning, days",
+   "kind": "float",
+   "min": 0.0,
+   "max": 99.99,
+   "code": "S68100",
+   "mask": "00.0"
+  },
+  "S68200": {
+   "label": "Automatic report print time",
+   "kind": "time",
+   "code": "S68200"
+  },
+  "S61101.method": {
+   "label": "Leak test method",
+   "kind": "enum",
+   "part": [
+    3,
+    1
+   ],
+   "choices": [
+    [
+     "1",
+     "ON DATE"
+    ],
+    [
+     "2",
+     "ANNUALLY"
+    ],
+    [
+     "3",
+     "MONTHLY"
+    ],
+    [
+     "4",
+     "WEEKLY"
+    ],
+    [
+     "5",
+     "DAILY"
+    ],
+    [
+     "6",
+     "AUTOMATIC"
+    ],
+    [
+     "7",
+     "CSLD",
+     "csld"
+    ]
+   ],
+   "code": "S61101"
+  },
+  "S61101.start": {
+   "label": "Leak test start time",
+   "kind": "time",
+   "part_when": {
+    "at": [
+     3,
+     1
+    ],
+    "map": {
+     "1": [
+      10,
+      4
+     ],
+     "2": [
+      8,
+      4
+     ],
+     "3": [
+      6,
+      4
+     ],
+     "4": [
+      5,
+      4
+     ],
+     "5": [
+      4,
+      4
+     ]
+    },
+    "default": "1"
+   },
+   "code": "S61101"
+  },
+  "S61101.rate": {
+   "label": "Leak test rate",
+   "kind": "enum",
+   "part": [
+    2,
+    1
+   ],
+   "choices": [
+    [
+     "0",
+     "0.20 GAL/HR"
+    ],
+    [
+     "1",
+     "0.10 GAL/HR"
+    ]
+   ],
+   "code": "S61101"
+  },
+  "S61101.duration": {
+   "label": "Leak test duration, hours",
+   "kind": "int",
+   "part": [
+    0,
+    2
+   ],
+   "min": 2,
+   "max": 24,
+   "width": 2,
+   "code": "S61101",
+   "mask": "00",
+   "default": "2"
+  },
+  "S61C01": {
+   "label": "CSLD report only mode",
+   "kind": "flag",
+   "code": "S61C01"
+  },
+  "S63300": {
+   "label": "Leak test report type",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "NORMAL"
+    ],
+    [
+     "1",
+     "ENHANCED"
+    ]
+   ],
+   "code": "S63300",
+   "wire_line": "LEAK TEST REPORT FORMAT:"
+  },
+  "S78101": {
+   "code": "S78101",
+   "kind": "slots",
+   "slots": 6,
+   "label": "Line Config. - Module 1"
+  },
+  "S78801": {
+   "label": "PLLD piping material",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "2.0/3.0 IN. FIBERGLASS"
+    ],
+    [
+     "02",
+     "2.0 IN. STEEL"
+    ],
+    [
+     "03",
+     "ENVIROFLEX PP1501"
+    ],
+    [
+     "04",
+     "1.5 IN. ENVIRN GFLEXII"
+    ],
+    [
+     "05",
+     "OMNIFLEX CP1501"
+    ],
+    [
+     "06",
+     "ENVIROFLEX PP1500"
+    ],
+    [
+     "07",
+     "ENVROFLX PP1502/2502"
+    ],
+    [
+     "08",
+     "OPW PISCES SP15"
+    ],
+    [
+     "09",
+     "OPW PISCES CP15"
+    ],
+    [
+     "10",
+     "WFG COFLX2000 RIBBED"
+    ],
+    [
+     "11",
+     "ENVROFLX PP1503/2503"
+    ],
+    [
+     "12",
+     "OMNIFLEX CP1503"
+    ],
+    [
+     "13",
+     "1.5/2 IN. ENVIRON GFLXD"
+    ],
+    [
+     "14",
+     "APT P175SC"
+    ],
+    [
+     "15",
+     "OPW PISCES CP15DW"
+    ],
+    [
+     "16",
+     "OPW PISCES CP20"
+    ],
+    [
+     "17",
+     "OPW PISCES SP20"
+    ],
+    [
+     "18",
+     "USER DEFINED"
+    ],
+    [
+     "19",
+     "PETROTECHNIK UPP EXTRA 63 MM"
+    ]
+   ],
+   "code": "S78801",
+   "default": "ENVIROFLEX PP1501"
+  },
+  "S78901": {
+   "label": "PLLD primary pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 10000.0,
+   "code": "S78901"
+  },
+  "S77F01": {
+   "label": "PLLD secondary pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 10000.0,
+   "code": "S77F01"
+  },
+  "S77901": {
+   "label": "PLLD primary pipe bulk modulus, PSI",
+   "kind": "float",
+   "min": 0.0,
+   "max": 99999.0,
+   "code": "S77901"
+  },
+  "S77A01": {
+   "label": "PLLD secondary pipe bulk modulus, PSI",
+   "kind": "float",
+   "min": 0.0,
+   "max": 99999.0,
+   "code": "S77A01"
+  },
+  "S77B01": {
+   "label": "PLLD thermal expansion coefficient",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1.0,
+   "code": "S77B01"
+  },
+  "S78C01": {
+   "label": "PLLD 0.20 GPH test schedule",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "DISABLED"
+    ],
+    [
+     "1",
+     "REPETITIVE"
+    ],
+    [
+     "2",
+     "MONTHLY"
+    ],
+    [
+     "3",
+     "MANUAL"
+    ]
+   ],
+   "code": "S78C01"
+  },
+  "S78301": {
+   "label": "PLLD 0.10 GPH test schedule",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "DISABLED"
+    ],
+    [
+     "1",
+     "REPETITIVE"
+    ],
+    [
+     "2",
+     "AUTO"
+    ],
+    [
+     "3",
+     "MANUAL"
+    ]
+   ],
+   "code": "S78301"
+  },
+  "S77E01": {
+   "label": "PLLD passive 0.10 GPH test",
+   "kind": "flag",
+   "code": "S77E01"
+  },
+  "S77C01": {
+   "label": "PLLD low pressure shutoff",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "NO"
+    ],
+    [
+     "1",
+     "YES"
+    ]
+   ],
+   "code": "S77C01"
+  },
+  "S78501": {
+   "label": "PLLD tank number",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S78501"
+  },
+  "S78A01": {
+   "label": "PLLD sensor type",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "NON-VENTED"
+    ],
+    [
+     "2",
+     "VENTED"
+    ],
+    [
+     "3",
+     "HIGH PRESSURE"
+    ]
+   ],
+   "code": "S78A01"
+  },
+  "S77D01": {
+   "label": "PLLD altitude pressure offset, PSI",
+   "kind": "float",
+   "min": -5.0,
+   "max": 5.0,
+   "code": "S77D01",
+   "mask": "+00.0"
+  },
+  "S7A101": {
+   "code": "S7A101",
+   "kind": "slots",
+   "slots": 3,
+   "label": "Line Config. Module 1"
+  },
+  "S7A301": {
+   "label": "WPLLD 0.20 GPH test schedule",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "DISABLED"
+    ],
+    [
+     "1",
+     "REPETITIVE"
+    ],
+    [
+     "2",
+     "MONTHLY"
+    ],
+    [
+     "3",
+     "MANUAL"
+    ]
+   ],
+   "code": "S7A301"
+  },
+  "S7AC01": {
+   "label": "WPLLD 0.10 GPH test schedule",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "DISABLED"
+    ],
+    [
+     "2",
+     "AUTO"
+    ],
+    [
+     "3",
+     "MANUAL"
+    ]
+   ],
+   "code": "S7AC01"
+  },
+  "S7AF01": {
+   "label": "WPLLD altitude pressure offset, PSI",
+   "kind": "float",
+   "min": -5.0,
+   "max": 5.0,
+   "code": "S7AF01",
+   "mask": "+00.0"
+  },
+  "S75101": {
+   "code": "S75101",
+   "kind": "slots",
+   "slots": 4,
+   "label": "Line Config. Module 1"
+  },
+  "S76001": {
+   "label": "VLLD location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S76001"
+  },
+  "S75301": {
+   "label": "VLLD 2 inch pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 10000.0,
+   "code": "S75301",
+   "mask": "000"
+  },
+  "S75401": {
+   "label": "VLLD 3 inch pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 10000.0,
+   "code": "S75401",
+   "mask": "000"
+  },
+  "S75601": {
+   "label": "VLLD piping material",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "STEEL"
+    ],
+    [
+     "02",
+     "FIBERGLASS"
+    ],
+    [
+     "03",
+     "2-WALL FIBERGLASS"
+    ],
+    [
+     "04",
+     "FLEXIBLE"
+    ]
+   ],
+   "code": "S75601"
+  },
+  "S76101": {
+   "label": "VLLD blend partner line",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S76101"
+  },
+  "S75901.method": {
+   "label": "VLLD test method",
+   "kind": "enum",
+   "part": [
+    2,
+    1
+   ],
+   "choices": [
+    [
+     "1",
+     "ON DATE"
+    ],
+    [
+     "2",
+     "ANNUALLY"
+    ],
+    [
+     "3",
+     "MONTHLY"
+    ],
+    [
+     "4",
+     "WEEKLY"
+    ],
+    [
+     "5",
+     "DAILY"
+    ]
+   ],
+   "code": "S75901"
+  },
+  "S75901.start": {
+   "label": "Line leak test start time",
+   "kind": "time",
+   "code": "S75901",
+   "part_when": {
+    "at": [
+     2,
+     1
+    ],
+    "default": "1",
+    "map": {
+     "1": [
+      9,
+      4
+     ],
+     "2": [
+      7,
+      4
+     ],
+     "3": [
+      5,
+      4
+     ],
+     "4": [
+      4,
+      4
+     ],
+     "5": [
+      3,
+      4
+     ]
+    }
+   }
+  },
+  "S75901.rate": {
+   "label": "VLLD test type",
+   "kind": "enum",
+   "part": [
+    0,
+    2
+   ],
+   "choices": [
+    [
+     "01",
+     "0.2 GAL/HR"
+    ],
+    [
+     "02",
+     "0.1 GAL/HR"
+    ]
+   ],
+   "code": "S75901"
+  },
+  "S77101": {
+   "code": "S77101",
+   "kind": "slots",
+   "slots": 4,
+   "label": "Pump Sense Config. Module 1"
+  },
+  "S77201": {
+   "label": "Pump sensor tank number",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S77201"
+  },
+  "S7C401": {
+   "code": "S7C401",
+   "kind": "slots",
+   "slots": 4,
+   "label": "Pump Relay Config. Module 1"
+  },
+  "S7C501": {
+   "label": "Pump relay monitor label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S7C501"
+  },
+  "S7C601": {
+   "label": "Monitored device, AATT",
+   "kind": "digits",
+   "width": 4,
+   "allow": [
+    "00",
+    "11",
+    "15",
+    "16",
+    "21",
+    "26"
+   ],
+   "hint": "00 none 11 relay 15 pump sense 16 VLLD 21 PLLD 26 WPLLD",
+   "code": "S7C601"
+  },
+  "S7C701": {
+   "label": "Stuck relay delay, seconds",
+   "kind": "float",
+   "min": 5.0,
+   "max": 600.0,
+   "code": "S7C701",
+   "default": "60"
+  },
+  "S7C801": {
+   "label": "Maximum run time, hours",
+   "kind": "float",
+   "min": 1.0,
+   "max": 24.0,
+   "code": "S7C801",
+   "default": "8"
+  },
+  "S79201": {
+   "label": "Electronic dispenser interface string",
+   "kind": "text",
+   "maxlen": 12,
+   "code": "S79201"
+  },
+  "S79402": {
+   "label": "Auto shift 2 closing time",
+   "kind": "time",
+   "code": "S79402"
+  },
+  "S79403": {
+   "label": "Auto shift 3 closing time",
+   "kind": "time",
+   "code": "S79403"
+  },
+  "S79404": {
+   "label": "Auto shift 4 closing time",
+   "kind": "time",
+   "code": "S79404"
+  },
+  "S79700": {
+   "label": "Periodic reconciliation alarm",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "DISABLED"
+    ],
+    [
+     "02",
+     "ENABLED"
+    ]
+   ],
+   "code": "S79700"
+  },
+  "S79800": {
+   "label": "Periodic reconciliation alarm threshold",
+   "kind": "float",
+   "code": "S79800",
+   "default": "1.00"
+  },
+  "S79900": {
+   "label": "Periodic reconciliation alarm offset",
+   "kind": "float",
+   "code": "S79900",
+   "default": "130"
+  },
+  "S79A00": {
+   "label": "Remote printer report format",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "ROW"
+    ],
+    [
+     "1",
+     "COLUMN"
+    ]
+   ],
+   "code": "S79A00"
+  },
+  "S79F00": {
+   "label": "BIR temperature compensation",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "STANDARD"
+    ],
+    [
+     "1",
+     "TC VOLUME"
+    ]
+   ],
+   "code": "S79F00"
+  },
+  "S7B100": {
+   "label": "BIR meter/tank map, B SS FP MM TT",
+   "kind": "list",
+   "code": "S7B100"
+  },
+  "S70101": {
+   "code": "S70101",
+   "kind": "slots",
+   "slots": 8,
+   "label": "Sensor Config. - Module 1"
+  },
+  "S70301": {
+   "label": "Liquid sensor type",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "TRI-STATE"
+    ],
+    [
+     "2",
+     "NORMALLY CLOSED"
+    ],
+    [
+     "3",
+     "DUAL FLOAT HYDROSTATIC"
+    ],
+    [
+     "4",
+     "DUAL FLOAT DISCRIM"
+    ],
+    [
+     "5",
+     "DUAL FLOAT HIGH VAPOR"
+    ],
+    [
+     "6",
+     "INTERCEPTOR SENSOR"
+    ],
+    [
+     "7",
+     "DW SUMP 2-1 SENSOR"
+    ]
+   ],
+   "code": "S70301"
+  },
+  "S70601": {
+   "code": "S70601",
+   "kind": "slots",
+   "slots": 5,
+   "label": "Sensor Config. - Module 1"
+  },
+  "S71101": {
+   "code": "S71101",
+   "kind": "slots",
+   "slots": 5,
+   "label": "Sensor Config. - Module 1"
+  },
+  "S74101": {
+   "code": "S74101",
+   "kind": "slots",
+   "slots": 8,
+   "label": "Sensor Config. - Module 1"
+  },
+  "S74301": {
+   "label": "Type A sensor type",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "ULTRA 2"
+    ],
+    [
+     "2",
+     "ULTRA 3"
+    ]
+   ],
+   "code": "S74301"
+  },
+  "S74601": {
+   "code": "S74601",
+   "kind": "slots",
+   "slots": 5,
+   "label": "Sensor Config. - Module 1"
+  },
+  "S74801": {
+   "label": "Type B sensor type",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "ULTRA/Z-1"
+    ],
+    [
+     "2",
+     "ULTRA/Z-1 HV"
+    ]
+   ],
+   "code": "S74801"
+  },
+  "S72101": {
+   "code": "S72101",
+   "kind": "slots",
+   "slots": 8,
+   "label": "SS Config. - Module 1"
+  },
+  "S72201": {
+   "label": "Smart sensor label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S72201"
+  },
+  "S80101": {
+   "code": "S80101",
+   "kind": "slots",
+   "slots": 2,
+   "label": "Input Config. - Module 1"
+  },
+  "S80201": {
+   "label": "Input location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S80201"
+  },
+  "S80C01": {
+   "label": "External input type and orientation",
+   "kind": "enum",
+   "choices": [
+    [
+     "11",
+     "STANDARD"
+    ],
+    [
+     "21",
+     "GENERATOR"
+    ],
+    [
+     "31",
+     "PUMP SENSE"
+    ],
+    [
+     "41",
+     "STANDARD ACK"
+    ],
+    [
+     "51",
+     "VAPOR PROCESSOR"
+    ]
+   ],
+   "code": "S80C01"
+  },
+  "S80C01.ack": {
+   "label": "Standard acknowledge input orientation",
+   "kind": "enum",
+   "choices": [
+    [
+     "41",
+     "NORMALLY OPEN"
+    ],
+    [
+     "42",
+     "NORMALLY CLOSED"
+    ]
+   ],
+   "code": "S80C01"
+  },
+  "S80601": {
+   "code": "S80601",
+   "kind": "slots",
+   "slots": 4,
+   "label": "Relay Config. - Module 1"
+  },
+  "S80701": {
+   "label": "Relay location label",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S80701"
+  },
+  "S80A01": {
+   "label": "Relay type",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "PUMP CONTROL OUTPUT"
+    ],
+    [
+     "3",
+     "MOMENTARY"
+    ],
+    [
+     "4",
+     "PUMP COMM CONTROL"
+    ],
+    [
+     "5",
+     "VAPOR PROCESSOR"
+    ]
+   ],
+   "code": "S80A01"
+  },
+  "S80901": {
+   "label": "Relay orientation",
+   "kind": "enum",
+   "choices": [
+    [
+     "1",
+     "NORMALLY OPEN"
+    ],
+    [
+     "2",
+     "NORMALLY CLOSED"
+    ]
+   ],
+   "code": "S80901"
+  },
+  "S80B01": {
+   "label": "Relay tank assignment",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S80B01"
+  },
+  "S80801": {
+   "label": "Relay alarm assignment, AANNTTss",
+   "kind": "digits",
+   "width": 8,
+   "hint": "category, type, device, 00 clear or 01 set",
+   "code": "S80801"
+  },
+  "S78701": {
+   "label": "PLLD line disable alarm assignment, AANNTTss",
+   "kind": "digits",
+   "width": 8,
+   "hint": "category, type, device, 00 clear or 01 set",
+   "code": "S78701"
+  },
+  "S7A701": {
+   "label": "WPLLD line disable alarm assignment, AANNTTss",
+   "kind": "digits",
+   "width": 8,
+   "hint": "category, type, device, 00 clear or 01 set",
+   "code": "S7A701"
+  },
+  "S75B01": {
+   "label": "VLLD line disable alarm assignment, AANNTTss",
+   "kind": "digits",
+   "width": 8,
+   "hint": "category, type, device, 00 clear or 01 set",
+   "code": "S75B01"
+  },
+  "S54900": {
+   "label": "Tank annual test needed warning",
+   "kind": "flag",
+   "code": "S54900",
+   "wire_line": "TANK ANN TEST NEEDED WRN:"
+  },
+  "S88101.dial": {
+   "label": "Dial type",
+   "kind": "enum",
+   "part": [
+    8,
+    1
+   ],
+   "choices": [
+    [
+     "0",
+     "TONE"
+    ],
+    [
+     "1",
+     "PULSE"
+    ]
+   ],
+   "code": "S88101"
+  },
+  "S88101.rings": {
+   "label": "Rings before answer",
+   "kind": "int",
+   "part": [
+    9,
+    2
+   ],
+   "min": 0,
+   "max": 99,
+   "width": 2,
+   "code": "S88101"
+  },
+  "S88501": {
+   "code": "S88501",
+   "kind": "enum",
+   "choices": [
+    [
+     "00",
+     "NETCOMM SMART M7F"
+    ],
+    [
+     "01",
+     "US ROBOTICS (UK)"
+    ]
+   ],
+   "label": "SiteLink modem type",
+   "wire_line": "MODEM TYPE :"
+  },
+  "S88601": {
+   "label": "Modem setup string",
+   "kind": "text",
+   "maxlen": 20,
+   "code": "S88601"
+  },
+  "S88701": {
+   "label": "Dial tone validation interval, hours",
+   "kind": "int",
+   "min": 1,
+   "max": 9999,
+   "width": 4,
+   "code": "S88701"
+  },
+  "S52101": {
+   "label": "Receiver configured",
+   "kind": "flag",
+   "code": "S52101"
+  },
+  "S52401": {
+   "label": "Receiver dialing destination type",
+   "kind": "enum",
+   "choices": [
+    [
+     "01",
+     "TELETYPE"
+    ],
+    [
+     "02",
+     "FACSIMILE"
+    ],
+    [
+     "03",
+     "COMPUTER"
+    ]
+   ],
+   "code": "S52401"
+  },
+  "S52601": {
+   "label": "Dial retry number",
+   "kind": "int",
+   "min": 3,
+   "max": 99,
+   "width": 2,
+   "code": "S52601"
+  },
+  "S52701": {
+   "label": "Dial retry delay, minutes",
+   "kind": "int",
+   "min": 0,
+   "max": 60,
+   "width": 2,
+   "code": "S52701"
+  },
+  "S52801": {
+   "label": "Confirmation report",
+   "kind": "flag",
+   "code": "S52801"
+  },
+  "S52A01": {
+   "label": "Reports to send, NN then two digits each",
+   "kind": "list",
+   "code": "S52A01"
+  },
+  "S52B01": {
+   "label": "Auto dial type and start time",
+   "kind": "list",
+   "code": "S52B01"
+  },
+  "S75C01": {
+   "label": "VLLD last annual test",
+   "kind": "date",
+   "code": "S75C01"
+  },
+  "S63401": {
+   "label": "HRM reconciliation warning limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S63401",
+   "mask": "000000"
+  },
+  "S63501": {
+   "label": "HRM reconciliation alarm limit",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "code": "S63501",
+   "mask": "000000"
+  },
+  "S60A01": {
+   "code": "S60A01",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "Linear calculated full volume, gallons",
+   "mask": "000000"
+  },
+  "S63C01": {
+   "code": "S63C01",
+   "kind": "float",
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "50 point full volume, gallons",
+   "mask": "000000"
+  },
+  "S60501": {
+   "code": "S60501",
+   "kind": "float",
+   "part": [
+    0,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "4 point full volume, gallons",
+   "mask": "000000"
+  },
+  "S60601": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    0,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point full volume, gallons",
+   "mask": "000000"
+  },
+  "S60101.profile": {
+   "code": "S60101",
+   "kind": "profile",
+   "label": "Tank profile"
+  },
+  "S60501.p75": {
+   "code": "S60501",
+   "kind": "float",
+   "part": [
+    8,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "4 point 75% height volume, gallons"
+  },
+  "S60501.p50": {
+   "code": "S60501",
+   "kind": "float",
+   "part": [
+    16,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "4 point 50% height volume, gallons"
+  },
+  "S60501.p25": {
+   "code": "S60501",
+   "kind": "float",
+   "part": [
+    24,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "4 point 25% height volume, gallons"
+  },
+  "S60601.p95": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    8,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 95% height volume, gallons"
+  },
+  "S60601.p90": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    16,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 90% height volume, gallons"
+  },
+  "S60601.p85": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    24,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 85% height volume, gallons"
+  },
+  "S60601.p80": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    32,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 80% height volume, gallons"
+  },
+  "S60601.p75": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    40,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 75% height volume, gallons"
+  },
+  "S60601.p70": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    48,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 70% height volume, gallons"
+  },
+  "S60601.p65": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    56,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 65% height volume, gallons"
+  },
+  "S60601.p60": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    64,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 60% height volume, gallons"
+  },
+  "S60601.p55": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    72,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 55% height volume, gallons"
+  },
+  "S60601.p50": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    80,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 50% height volume, gallons"
+  },
+  "S60601.p45": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    88,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 45% height volume, gallons"
+  },
+  "S60601.p40": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    96,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 40% height volume, gallons"
+  },
+  "S60601.p35": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    104,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 35% height volume, gallons"
+  },
+  "S60601.p30": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    112,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 30% height volume, gallons"
+  },
+  "S60601.p25": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    120,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 25% height volume, gallons"
+  },
+  "S60601.p20": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    128,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 20% height volume, gallons"
+  },
+  "S60601.p15": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    136,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 15% height volume, gallons"
+  },
+  "S60601.p10": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    144,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 10% height volume, gallons"
+  },
+  "S60601.p5": {
+   "code": "S60601",
+   "kind": "float",
+   "part": [
+    152,
+    8
+   ],
+   "min": 0.0,
+   "max": 1000000.0,
+   "label": "20 point 5% height volume, gallons"
+  },
+  "chart.code": {
+   "kind": "chartcode",
+   "label": "Tank chart security code",
+   "scope": "system",
+   "prompt": "CODE :"
+  },
+  "chart.serial": {
+   "kind": "consoletext",
+   "which": "serial_number",
+   "label": "Console serial number",
+   "maxlen": 20,
+   "scope": "system",
+   "prompt": "S/N :"
+  },
+  "chart.wm": {
+   "kind": "consoletext",
+   "which": "wm_office",
+   "label": "Weights and measures office",
+   "maxlen": 20,
+   "scope": "system",
+   "prompt": "W&M:"
+  },
+  "chart.capacity": {
+   "kind": "consolefloat",
+   "which": "tank_capacity",
+   "label": "Tank capacity, gallons",
+   "min": 0.0,
+   "max": 1000000.0,
+   "scope": "device",
+   "prompt": "TANK CAPACITY :"
+  },
+  "chart.probe": {
+   "kind": "view",
+   "which": "probe_serial",
+   "label": "Probe serial number",
+   "scope": "device",
+   "prompt": "PROBE S/N :"
+  },
+  "vmc.serial": {
+   "kind": "consoletextdev",
+   "which": "vmc_serials",
+   "label": "VMC controller serial number",
+   "maxlen": 6,
+   "scope": "device",
+   "prompt": "x %d:"
+  },
+  "set.euro_prefix": {
+   "kind": "setting",
+   "which": "euro_prefix",
+   "label": "Euro protocol command prefix",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "S",
+    "d"
+   ],
+   "default": "S"
+  },
+  "set.bdim_delay": {
+   "kind": "setting",
+   "which": "bdim_delay",
+   "label": "BDIM transaction alarm delay, hours",
+   "prompt": "HOURS:",
+   "scope": "system",
+   "number": [
+    0,
+    999
+   ],
+   "width": 3,
+   "default": "024"
+  },
+  "set.inventory_units": {
+   "kind": "setting",
+   "which": "inventory_units",
+   "label": "Inventory alarm threshold units",
+   "prompt": "CONFIG:",
+   "scope": "system",
+   "choices": [
+    "STANDARD",
+    "ALL %FULL",
+    "ALL VOLUME",
+    "ALL HEIGHT",
+    "CUSTOM"
+   ],
+   "default": "STANDARD"
+  },
+  "set.custom_max": {
+   "kind": "setting",
+   "which": "custom_max",
+   "label": "Custom threshold units, Max Or Label",
+   "prompt": "MAX OR LABEL:",
+   "scope": "system",
+   "choices": [
+    "%MAX",
+    "%FULL",
+    "VOLUME",
+    "HEIGHT"
+   ],
+   "default": "%FULL"
+  },
+  "set.custom_high": {
+   "kind": "setting",
+   "which": "custom_high",
+   "label": "Custom threshold units, High Product",
+   "prompt": "HIGH PRODUCT:",
+   "scope": "system",
+   "choices": [
+    "%MAX",
+    "%FULL",
+    "VOLUME",
+    "HEIGHT"
+   ],
+   "default": "%FULL"
+  },
+  "set.custom_overfill": {
+   "kind": "setting",
+   "which": "custom_overfill",
+   "label": "Custom threshold units, Overfill",
+   "prompt": "OVERFILL:",
+   "scope": "system",
+   "choices": [
+    "%MAX",
+    "%FULL",
+    "VOLUME",
+    "HEIGHT"
+   ],
+   "default": "%FULL"
+  },
+  "set.custom_delivery": {
+   "kind": "setting",
+   "which": "custom_delivery",
+   "label": "Custom threshold units, Delivery Needed",
+   "prompt": "DELIVERY NEEDED:",
+   "scope": "system",
+   "choices": [
+    "%MAX",
+    "%FULL",
+    "VOLUME",
+    "HEIGHT"
+   ],
+   "default": "%FULL"
+  },
+  "set.custom_low": {
+   "kind": "setting",
+   "which": "custom_low",
+   "label": "Custom threshold units, Low Product",
+   "prompt": "LOW PRODUCT:",
+   "scope": "system",
+   "choices": [
+    "%MAX",
+    "%FULL",
+    "VOLUME",
+    "HEIGHT"
+   ],
+   "default": "%FULL"
+  },
+  "set.fiscal_height": {
+   "kind": "setting",
+   "which": "fiscal_height",
+   "label": "Fiscal height security",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "DISABLED",
+    "ENABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.alarm_reduction": {
+   "kind": "setting",
+   "which": "alarm_reduction",
+   "label": "Alarm reduction",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "ENABLED",
+    "DISABLED"
+   ],
+   "default": "ENABLED"
+  },
+  "set.delivery_override": {
+   "kind": "setting",
+   "which": "delivery_override",
+   "label": "Service notice delivery override",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "DISABLED",
+    "ENABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.country": {
+   "kind": "setting",
+   "which": "country",
+   "label": "ISO 3166 country code",
+   "prompt": "",
+   "scope": "system",
+   "maxlen": 3,
+   "default": ""
+  },
+  "set.water_filter": {
+   "kind": "setting",
+   "which": "water_filter",
+   "label": "Water alarm filter",
+   "prompt": "WATER ALARM FILTER:",
+   "scope": "device",
+   "choices": [
+    "OFF",
+    "LOW",
+    "MEDIUM",
+    "HIGH"
+   ],
+   "default": "LOW"
+  },
+  "set.water_delay": {
+   "kind": "setting",
+   "which": "water_delay",
+   "label": "Water alarm delay, seconds",
+   "prompt": "WATER ALARM DELAY:",
+   "scope": "device",
+   "number": [
+    30,
+    180
+   ],
+   "width": 3,
+   "default": "180",
+   "unit": "S"
+  },
+  "set.blender": {
+   "kind": "setting",
+   "which": "blender",
+   "label": "Mechanical blender",
+   "prompt": "MECHANICAL BLENDER:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.blend_partners": {
+   "kind": "setting",
+   "which": "blend_partners",
+   "label": "Blend partners",
+   "prompt": "Q#:",
+   "scope": "device",
+   "maxlen": 6,
+   "default": "00, 00"
+  },
+  "S53000": {
+   "code": "S53000",
+   "kind": "flag",
+   "label": "System beeper",
+   "wire_line": "BEEPER:"
+  },
+  "S88901": {
+   "code": "S88901",
+   "kind": "enum",
+   "choices": [
+    [
+     "0",
+     "LOW"
+    ],
+    [
+     "1",
+     "HIGH"
+    ]
+   ],
+   "label": "DTR normal state",
+   "default": "HIGH",
+   "wire_line": "DTR NORMAL STATE:"
+  },
+  "set.autotx_1": {
+   "kind": "setting",
+   "which": "autotx_1",
+   "label": "Auto-transmit: Auto Leak Alarm Limit",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_2": {
+   "kind": "setting",
+   "which": "autotx_2",
+   "label": "Auto-transmit: Auto High Water Limit",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_3": {
+   "kind": "setting",
+   "which": "autotx_3",
+   "label": "Auto-transmit: Auto Overfill Limit",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_4": {
+   "kind": "setting",
+   "which": "autotx_4",
+   "label": "Auto-transmit: Auto Low Product",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_5": {
+   "kind": "setting",
+   "which": "autotx_5",
+   "label": "Auto-transmit: Auto Theft Limit",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_6": {
+   "kind": "setting",
+   "which": "autotx_6",
+   "label": "Auto-transmit: Auto Delivery Start",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_7": {
+   "kind": "setting",
+   "which": "autotx_7",
+   "label": "Auto-transmit: Auto Delivery End",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_8": {
+   "kind": "setting",
+   "which": "autotx_8",
+   "label": "Auto-transmit: Auto External Input On",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_9": {
+   "kind": "setting",
+   "which": "autotx_9",
+   "label": "Auto-transmit: Auto External Input Off",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_10": {
+   "kind": "setting",
+   "which": "autotx_10",
+   "label": "Auto-transmit: Auto Sensor Fuel Alarm",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_11": {
+   "kind": "setting",
+   "which": "autotx_11",
+   "label": "Auto-transmit: Auto Sensor Water Alarm",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.autotx_12": {
+   "kind": "setting",
+   "which": "autotx_12",
+   "label": "Auto-transmit: Auto Sensor Out Alarm",
+   "prompt": "",
+   "scope": "device",
+   "choices": [
+    "DISABLED",
+    "TRANSMIT",
+    "TRANSMIT/REPEAT"
+   ],
+   "default": "DISABLED"
+  },
+  "set.auto_delay": {
+   "kind": "setting",
+   "which": "auto_delay",
+   "label": "Auto-transmit delay time, seconds",
+   "prompt": "AUTO DELAY TIME:",
+   "scope": "device",
+   "number": [
+    0,
+    254
+   ],
+   "width": 3,
+   "default": "005"
+  },
+  "set.auto_repeat": {
+   "kind": "setting",
+   "which": "auto_repeat",
+   "label": "Auto-transmit repeat time, seconds",
+   "prompt": "AUTO REPEAT TIME:",
+   "scope": "device",
+   "number": [
+    0,
+    240
+   ],
+   "width": 3,
+   "default": "005"
+  },
+  "set.tank_test_method": {
+   "kind": "setting",
+   "which": "tank_test_method",
+   "label": "In-tank leak test method",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "ALL TANK",
+    "SINGLE TANK"
+   ],
+   "default": "ALL TANK"
+  },
+  "set.line_test_method": {
+   "kind": "setting",
+   "which": "line_test_method",
+   "label": "Line leak test method",
+   "prompt": "",
+   "scope": "system",
+   "choices": [
+    "ALL LINES",
+    "SINGLE LINE"
+   ],
+   "default": "ALL LINES"
+  },
+  "set.evr_type": {
+   "kind": "setting",
+   "which": "evr_type",
+   "scope": "system",
+   "label": "EVR type",
+   "prompt": "",
+   "choices": [
+    "BALANCE",
+    "VACUUM ASSIST"
+   ],
+   "default": "BALANCE"
+  },
+  "set.evr_vac_type": {
+   "kind": "setting",
+   "which": "evr_vac_type",
+   "scope": "system",
+   "label": "Vacuum assist type",
+   "prompt": "",
+   "choices": [
+    "VAPOR VAC",
+    "HEALY VAC"
+   ],
+   "default": "VAPOR VAC"
+  },
+  "set.evr_high_orvr": {
+   "kind": "setting",
+   "which": "evr_high_orvr",
+   "scope": "system",
+   "label": "Accept high ORVR",
+   "prompt": "ACCEPT HIGH ORVR:",
+   "choices": [
+    "ENABLED",
+    "DISABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.evr_al_min": {
+   "kind": "setting",
+   "which": "evr_al_min",
+   "scope": "system",
+   "label": "Nozzle air to liquid ratio, minimum",
+   "prompt": "MIN:",
+   "maxlen": 5,
+   "default": "+1.00"
+  },
+  "set.evr_al_max": {
+   "kind": "setting",
+   "which": "evr_al_max",
+   "scope": "system",
+   "label": "Nozzle air to liquid ratio, maximum",
+   "prompt": "MAX:",
+   "maxlen": 5,
+   "default": "+1.20"
+  },
+  "set.evr_vp_type": {
+   "kind": "setting",
+   "which": "evr_vp_type",
+   "scope": "system",
+   "label": "Vapor processor type",
+   "prompt": "",
+   "choices": [
+    "NONE",
+    "ARID PERMEATOR"
+   ],
+   "default": "NONE"
+  },
+  "set.evr_afm": {
+   "kind": "setting",
+   "which": "evr_afm",
+   "scope": "device",
+   "label": "Air flow meter",
+   "prompt": "SN#:",
+   "choices": [
+    "ENABLED",
+    "DISABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.evr_ps": {
+   "kind": "setting",
+   "which": "evr_ps",
+   "scope": "system",
+   "label": "Vapor pressure sensor",
+   "prompt": "SN#:",
+   "choices": [
+    "ENABLED",
+    "DISABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.evr_fuel_pos": {
+   "kind": "setting",
+   "which": "evr_fuel_pos",
+   "scope": "device",
+   "label": "Fuel position label",
+   "prompt": "",
+   "maxlen": 2,
+   "default": "01"
+  },
+  "set.evr_hose_label": {
+   "kind": "setting",
+   "which": "evr_hose_label",
+   "scope": "device",
+   "label": "Hose label",
+   "prompt": "",
+   "maxlen": 11,
+   "default": "UNASSIGNED"
+  },
+  "set.evr_afm_id": {
+   "kind": "setting",
+   "which": "evr_afm_id",
+   "scope": "device",
+   "label": "Air flow meter ID",
+   "prompt": "",
+   "maxlen": 10,
+   "default": ""
+  },
+  "S7B200": {
+   "label": "Meter calibration offset, percent",
+   "kind": "float",
+   "min": -10.0,
+   "max": 10.0,
+   "code": "S7B200",
+   "default": "+0.000",
+   "wire_line": "METER CALIBRATION\nOFFSET:",
+   "wire_format": "%.3f%%"
+  },
+  "S7B400": {
+   "label": "Individual meter offset, FF MM TT +o.oo",
+   "kind": "list",
+   "code": "S7B400"
+  },
+  "S55000": {
+   "code": "S55000",
+   "kind": "enum",
+   "wire_line": "INVENTORY ALARMS UNITS:",
+   "label": "Inventory alarms units configuration",
+   "choices": [
+    [
+     "1",
+     "Standard"
+    ],
+    [
+     "3",
+     "All Volume"
+    ],
+    [
+     "4",
+     "All Height"
+    ],
+    [
+     "5",
+     "Custom"
+    ]
+   ]
+  },
+  "S55100.alarm": {
+   "code": "S55100",
+   "kind": "enum",
+   "part": [
+    0,
+    1
+   ],
+   "label": "Custom units alarm type",
+   "choices": [
+    [
+     "1",
+     "Max Product"
+    ],
+    [
+     "2",
+     "High Product"
+    ],
+    [
+     "3",
+     "Overfill"
+    ],
+    [
+     "4",
+     "Delivery Needed"
+    ],
+    [
+     "5",
+     "Low Product"
+    ]
+   ]
+  },
+  "S55100.units": {
+   "code": "S55100",
+   "kind": "enum",
+   "part": [
+    1,
+    1
+   ],
+   "label": "Custom units type",
+   "choices": [
+    [
+     "3",
+     "Volume"
+    ],
+    [
+     "4",
+     "Height"
+    ]
+   ]
+  },
+  "S58100": {
+   "code": "S58100",
+   "kind": "flag",
+   "label": "Alarm filter",
+   "wire_line": "ALARM FILTER:"
+  },
+  "S64801": {
+   "code": "S64801",
+   "kind": "float",
+   "label": "Probe water minimum, inches",
+   "min": 0.0,
+   "max": 20.0
+  },
+  "S64B01": {
+   "code": "S64B01",
+   "kind": "flag",
+   "label": "Tank water alarm filter delay"
+  },
+  "S65101": {
+   "code": "S65101",
+   "kind": "float",
+   "label": "Max or label alarm threshold",
+   "min": 0.0,
+   "max": 999999.0
+  },
+  "S65201": {
+   "code": "S65201",
+   "kind": "float",
+   "label": "High product alarm threshold",
+   "min": 0.0,
+   "max": 999999.0
+  },
+  "S65301": {
+   "code": "S65301",
+   "kind": "float",
+   "label": "Overfill alarm threshold",
+   "min": 0.0,
+   "max": 999999.0
+  },
+  "S65401": {
+   "code": "S65401",
+   "kind": "float",
+   "label": "Delivery needed alarm threshold",
+   "min": 0.0,
+   "max": 999999.0
+  },
+  "S65501": {
+   "code": "S65501",
+   "kind": "float",
+   "label": "Low product alarm threshold",
+   "min": 0.0,
+   "max": 999999.0
+  },
+  "S7D701": {
+   "code": "S7D701",
+   "kind": "flag",
+   "label": "Pressure line leak alternate modes"
+  },
+  "S7D801": {
+   "code": "S7D801",
+   "kind": "float",
+   "min": 0.0,
+   "max": 999999.0,
+   "label": "pressure line leak switchover threshold, gallons"
+  },
+  "S7D901": {
+   "code": "S7D901",
+   "kind": "float",
+   "min": 0.0,
+   "max": 9999.9,
+   "label": "pressure line leak switchover threshold, inches"
+  },
+  "S7DA01": {
+   "label": "Auto active pump switchover",
+   "kind": "flag",
+   "code": "S7DA01",
+   "words": [
+    "NO",
+    "YES"
+   ]
+  },
+  "S7DB01": {
+   "label": "Auto active switchover volume threshold, gallons",
+   "kind": "float",
+   "min": 0.0,
+   "max": 100000.0,
+   "code": "S7DB01",
+   "mask": "000",
+   "default": "200"
+  },
+  "S7DC01": {
+   "label": "Auto active switchover height threshold, inches",
+   "kind": "float",
+   "min": 0.0,
+   "max": 200.0,
+   "code": "S7DC01",
+   "mask": "0.0",
+   "default": "2.0"
+  },
+  "S81101": {
+   "code": "S81101",
+   "kind": "flag",
+   "label": "External input alternate modes"
+  },
+  "S81201": {
+   "code": "S81201",
+   "kind": "float",
+   "min": 0.0,
+   "max": 999999.0,
+   "label": "external input switchover threshold, gallons"
+  },
+  "S81301": {
+   "code": "S81301",
+   "kind": "float",
+   "min": 0.0,
+   "max": 9999.9,
+   "label": "external input switchover threshold, inches"
+  },
+  "S61101.ondate": {
+   "label": "Leak test date",
+   "kind": "date",
+   "part": [
+    4,
+    6
+   ],
+   "code": "S61101",
+   "alt": "611schedule"
+  },
+  "S61101.annual": {
+   "label": "Leak test month, week and day",
+   "kind": "schedule",
+   "shape": "MWD",
+   "part": [
+    4,
+    4
+   ],
+   "width": 4,
+   "code": "S61101",
+   "default": "JAN WEEK 1 MON",
+   "alt": "611schedule"
+  },
+  "S61101.monthly": {
+   "label": "Leak test week and day",
+   "kind": "schedule",
+   "shape": "WD",
+   "part": [
+    4,
+    2
+   ],
+   "width": 2,
+   "code": "S61101",
+   "default": "WEEK 1 MON",
+   "alt": "611schedule"
+  },
+  "S61101.weekly": {
+   "label": "Leak test day",
+   "kind": "schedule",
+   "shape": "D",
+   "part": [
+    4,
+    1
+   ],
+   "width": 1,
+   "code": "S61101",
+   "default": "MON",
+   "alt": "611schedule"
+  },
+  "S61301": {
+   "label": "CSLD probability of detection",
+   "kind": "enum",
+   "code": "S61301",
+   "choices": [
+    [
+     "1",
+     "95%"
+    ],
+    [
+     "2",
+     "99%"
+    ],
+    [
+     "3",
+     "CUSTOM"
+    ]
+   ]
+  },
+  "S61401": {
+   "label": "CSLD climate factor",
+   "kind": "enum",
+   "code": "S61401",
+   "choices": [
+    [
+     "1",
+     "MODERATE"
+    ],
+    [
+     "2",
+     "EXTREME"
+    ]
+   ]
+  },
+  "S61801": {
+   "label": "CSLD evaporation compensation",
+   "kind": "flag",
+   "code": "S61801",
+   "words": [
+    "NO",
+    "YES"
+   ]
+  },
+  "S61901": {
+   "label": "Stage II vapor recovery",
+   "kind": "flag",
+   "code": "S61901",
+   "words": [
+    "NO",
+    "YES"
+   ],
+   "default": "YES"
+  },
+  "S51B01.date": {
+   "label": "Daylight saving start date",
+   "kind": "schedule",
+   "shape": "MWD",
+   "part": [
+    0,
+    4
+   ],
+   "width": 4,
+   "code": "S51B01",
+   "default": "APR WEEK 1 SUN",
+   "weeks": 6
+  },
+  "S51B01.time": {
+   "label": "Daylight saving start time",
+   "kind": "time",
+   "part": [
+    4,
+    4
+   ],
+   "code": "S51B01",
+   "default": "2:00 AM"
+  },
+  "S51B02.date": {
+   "label": "Daylight saving end date",
+   "kind": "schedule",
+   "shape": "MWD",
+   "part": [
+    0,
+    4
+   ],
+   "width": 4,
+   "code": "S51B02",
+   "default": "OCT WEEK 6 SUN",
+   "weeks": 6
+  },
+  "S51B02.time": {
+   "label": "Daylight saving end time",
+   "kind": "time",
+   "part": [
+    4,
+    4
+   ],
+   "code": "S51B02",
+   "default": "2:00 AM"
+  },
+  "S75901.ondate": {
+   "label": "Line leak test date",
+   "kind": "date",
+   "part": [
+    3,
+    6
+   ],
+   "code": "S75901",
+   "alt": "759schedule"
+  },
+  "S75901.annual": {
+   "label": "Line leak test annual schedule",
+   "kind": "schedule",
+   "shape": "MWD",
+   "part": [
+    3,
+    4
+   ],
+   "width": 4,
+   "code": "S75901",
+   "default": "JAN WEEK 1 MON",
+   "alt": "759schedule"
+  },
+  "S75901.monthly": {
+   "label": "Line leak test monthly schedule",
+   "kind": "schedule",
+   "shape": "WD",
+   "part": [
+    3,
+    2
+   ],
+   "width": 2,
+   "code": "S75901",
+   "default": "WEEK 1 MON",
+   "alt": "759schedule"
+  },
+  "S75901.weekly": {
+   "label": "Line leak test weekly schedule",
+   "kind": "schedule",
+   "shape": "D",
+   "part": [
+    3,
+    1
+   ],
+   "width": 1,
+   "code": "S75901",
+   "default": "MON",
+   "alt": "759schedule"
+  },
+  "set.avg_sales_1": {
+   "kind": "setting",
+   "which": "avg_sales_1",
+   "scope": "device",
+   "label": "Average daily sales, SUN",
+   "prompt": "AVG SALES SUN:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_2": {
+   "kind": "setting",
+   "which": "avg_sales_2",
+   "scope": "device",
+   "label": "Average daily sales, MON",
+   "prompt": "AVG SALES MON:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_3": {
+   "kind": "setting",
+   "which": "avg_sales_3",
+   "scope": "device",
+   "label": "Average daily sales, TUE",
+   "prompt": "AVG SALES TUE:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_4": {
+   "kind": "setting",
+   "which": "avg_sales_4",
+   "scope": "device",
+   "label": "Average daily sales, WED",
+   "prompt": "AVG SALES WED:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_5": {
+   "kind": "setting",
+   "which": "avg_sales_5",
+   "scope": "device",
+   "label": "Average daily sales, THU",
+   "prompt": "AVG SALES THU:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_6": {
+   "kind": "setting",
+   "which": "avg_sales_6",
+   "scope": "device",
+   "label": "Average daily sales, FRI",
+   "prompt": "AVG SALES FRI:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.avg_sales_7": {
+   "kind": "setting",
+   "which": "avg_sales_7",
+   "scope": "device",
+   "label": "Average daily sales, SAT",
+   "prompt": "AVG SALES SAT:",
+   "default": "0",
+   "mask": "0"
+  },
+  "set.evr_afm_label": {
+   "kind": "setting",
+   "which": "evr_afm_label",
+   "scope": "system",
+   "label": "Air flow meter label",
+   "prompt": "",
+   "default": ""
+  },
+  "set.evr_ps_label": {
+   "kind": "setting",
+   "which": "evr_ps_label",
+   "scope": "system",
+   "label": "Vapor pressure sensor label",
+   "prompt": "",
+   "default": ""
+  },
+  "S79600": {
+   "label": "Periodic reconciliation rolling length, days",
+   "kind": "int",
+   "min": 1,
+   "max": 31,
+   "width": 2,
+   "code": "S79600",
+   "mask": "00 DAYS",
+   "default": "31"
+  },
+  "set.print_precision_line": {
+   "kind": "setting",
+   "which": "print_precision_line",
+   "scope": "system",
+   "label": "Print precision line test results",
+   "prompt": "TEST RESULTS:",
+   "choices": [
+    "DISABLED",
+    "ENABLED"
+   ],
+   "default": "DISABLED"
+  },
+  "set.evr_hose_name": {
+   "kind": "setting",
+   "which": "evr_hose_name",
+   "scope": "device",
+   "label": "Fuel hose label table entry",
+   "prompt": "",
+   "maxlen": 11,
+   "default": ""
+  },
+  "set.evr_start_time": {
+   "kind": "setting",
+   "which": "evr_start_time",
+   "scope": "system",
+   "label": "ISD analysis start time",
+   "prompt": "TIME:",
+   "maxlen": 8,
+   "default": "11:59 PM"
+  },
+  "set.evr_post_delay": {
+   "kind": "setting",
+   "which": "evr_post_delay",
+   "scope": "system",
+   "label": "ISD post delay duration",
+   "prompt": "DELAY MINUTES:",
+   "maxlen": 3,
+   "default": "001"
+  },
+  "set.pmc_off": {
+   "kind": "pmc_threshold",
+   "which": "off",
+   "label": "Vapor processor off",
+   "prompt": "IWC",
+   "default": "+0.000"
+  },
+  "set.pmc_on": {
+   "kind": "pmc_threshold",
+   "which": "on",
+   "label": "Vapor processor on",
+   "prompt": "IWC",
+   "default": "+0.000"
+  }
+ },
+ "setup_menu": [
+  {
+   "function": "SYSTEM SETUP",
+   "steps": [
+    {
+     "text": "System Language - English/ and second language as ordered",
+     "code": "S51700",
+     "field": "S51700.lang",
+     "scope": "console",
+     "head": "SYSTEM LANGUAGE",
+     "print": {
+      "head": "SYSTEM LANGUAGE",
+      "line": " {}"
+     }
+    },
+    {
+     "text": "System Units (U.S./Metric/Imperial Gallons)",
+     "code": "S51700",
+     "field": "S51700.units",
+     "scope": "console",
+     "print": {
+      "head": "SYSTEM UNITS",
+      "line": " {}"
+     },
+     "print_before": "System Language"
+    },
+    {
+     "text": "Date/Time Format",
+     "code": "S50F00",
+     "scope": "console",
+     "head": "SYSTEM DATE/TIME FORMAT"
+    },
+    {
+     "text": "Set Month Day Year",
+     "code": "S50100",
+     "field": "S50100.date",
+     "scope": "console",
+     "head": "SET: MONTH DAY YEAR",
+     "l2": "DATE:",
+     "print": {
+      "line": "{}",
+      "value": "clock"
+     },
+     "print_before": "System Units"
+    },
+    {
+     "text": "Set Time",
+     "code": "S50100",
+     "field": "S50100.time",
+     "scope": "console",
+     "l2": "TIME:",
+     "print": {}
+    },
+    {
+     "text": "Station Header Line 1 (Line 2/Line 3/Line 4)",
+     "code": "S50301",
+     "scope": "console",
+     "head": "ENTER STATION HEADER",
+     "l2": "#%d:",
+     "repeat": true,
+     "print": {
+      "line": "{}"
+     }
+    },
+    {
+     "text": "Shift #1 Start Time (Shift 2/Shift 3/Shift 4)",
+     "code": "S50201",
+     "scope": "console",
+     "head": "SHIFT #%d START TIME",
+     "l2": "TIME:",
+     "repeat": true,
+     "print": {
+      "line": "SHIFT TIME %d :{:>9}"
+     }
+    },
+    {
+     "text": "Shift BIR Printouts (Enable/Disable)",
+     "code": "S51100",
+     "when": {
+      "software": "bir"
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Daily BIR Printouts (Enable/Disable)",
+     "code": "S51200",
+     "when": {
+      "software": "bir"
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Ticketed Delivery (Enable/Disable)",
+     "code": "S51C00",
+     "scope": "console"
+    },
+    {
+     "text": "TC Ticketed Delivery (Enable/Disable)",
+     "code": "S51D00",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Close Day Of Week",
+     "code": "S51E00",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Daily Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53400",
+     "field": "S53400.d",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Weekly Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53400",
+     "field": "S53400.w",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Periodic Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53400",
+     "field": "S53400.p",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Daily Book Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53300",
+     "field": "S53300.d",
+     "scope": "console",
+     "head": "DAILY BOOK VAR RPTS",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Weekly Book Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53300",
+     "field": "S53300.w",
+     "scope": "console",
+     "head": "WEEKLY BOOK VAR RPTS",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Periodic Book Dlvy Var Rpts (Disable/Enable)",
+     "code": "S53300",
+     "field": "S53300.p",
+     "scope": "console",
+     "head": "PERIODIC BOOK VAR RPTS",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Daily Var Analy Rpts (Disable/Enable)",
+     "code": "S53200",
+     "field": "S53200.d",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Weekly Var Analy Rpts (Disable/Enable)",
+     "code": "S53200",
+     "field": "S53200.w",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Periodic Var Analy Rpts (Disable/Enable)",
+     "code": "S53200",
+     "field": "S53200.p",
+     "scope": "console",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Tank Per Tst Needed Wrn (Disable/Enable)",
+     "code": "S54600",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Tank Per Tst Needed Wrn Days",
+     "code": "S54700",
+     "when": {
+      "code": "S54600",
+      "is": [
+       "1"
+      ],
+      "module": "probe"
+     },
+     "scope": "console",
+     "head": "TANK PER TST NEEDED WRN",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Tank Per Tst Needed Alm Days",
+     "code": "S54800",
+     "when": {
+      "code": "S54600",
+      "is": [
+       "1"
+      ],
+      "module": "probe"
+     },
+     "scope": "console",
+     "head": "TANK PER TST NEEDED ALM",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Tank Ann Tst Needed Wrn (Disable/Enable)",
+     "code": "S54900",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Tank Ann Tst Needed Wrn Days",
+     "code": "S54A00",
+     "when": {
+      "code": "S54900",
+      "is": [
+       "1"
+      ],
+      "module": "probe"
+     },
+     "scope": "console",
+     "head": "TANK ANN TST NEEDED WRN",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Tank Ann Tst Needed Alm Days",
+     "code": "S54B00",
+     "when": {
+      "code": "S54900",
+      "is": [
+       "1"
+      ],
+      "module": "probe"
+     },
+     "scope": "console",
+     "head": "TANK ANN TST NEEDED ALM",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Line Reenable Method (Pass Line Test/Alarm Acknowledge)",
+     "code": "S55300",
+     "when": {
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "LINE RE-ENABLE METHOD"
+    },
+    {
+     "text": "Line Per Tst Needed Wrn (Disable/Enable)",
+     "code": "S55600",
+     "when": {
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Line Per Tst Needed Wrn Days",
+     "code": "S55700",
+     "when": {
+      "code": "S55600",
+      "is": [
+       "1"
+      ],
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "LINE PER TST NEEDED WRN",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Line Per Tst Needed Alm Days",
+     "code": "S55800",
+     "when": {
+      "code": "S55600",
+      "is": [
+       "1"
+      ],
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "LINE PER TST NEEDED ALM",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Line Ann Tst Needed Wrn (Disable/Enable)",
+     "code": "S55900",
+     "when": {
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Line Ann Tst Needed Wrn Days",
+     "code": "S55A00",
+     "when": {
+      "code": "S55900",
+      "is": [
+       "1"
+      ],
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "LINE ANN TST NEEDED WRN",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Line Ann TsT Needed ALM Days",
+     "code": "S55B00",
+     "when": {
+      "code": "S55900",
+      "is": [
+       "1"
+      ],
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "LINE ANN TST NEEDED ALM",
+     "l2": "DAYS ="
+    },
+    {
+     "text": "Remote Printer Page Eject",
+     "code": "S50C00",
+     "scope": "console",
+     "head": "REMOTE PRINTER",
+     "l2": "PAGE EJECT"
+    },
+    {
+     "text": "Print Tc Volume",
+     "code": "S50D00",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console",
+     "head": "PRINT TC VOLUMES"
+    },
+    {
+     "text": "Temp Compensation",
+     "code": "S50E00",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console",
+     "l2": "VALUE (DEG F):",
+     "print": {
+      "head": "TEMP COMPENSATION",
+      "line": "VALUE (DEG F ):{:>7}"
+     }
+    },
+    {
+     "text": "Tanker Load Report",
+     "code": "S51300",
+     "scope": "console"
+    },
+    {
+     "text": "Stick Height Offset (Disable/Enable)",
+     "code": "S60B00",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console"
+    },
+    {
+     "text": "Ullage (90%/95%)",
+     "code": "S56400",
+     "when": {
+      "module": "probe"
+     },
+     "scope": "console",
+     "print": {
+      "line": "ULLAGE: {}"
+     }
+    },
+    {
+     "text": "H-Protocol Data Format",
+     "code": "S51400",
+     "scope": "console"
+    },
+    {
+     "text": "Precision Test Duration (12 - 744 hrs [w/o CSLD]/60 - 744 hrs [w/CSLD])",
+     "code": "S51900",
+     "when": {
+      "module": [
+       "plld",
+       "wplld"
+      ]
+     },
+     "scope": "console",
+     "head": "PRECISION TEST DURATION",
+     "l2": "HOURS:"
+    },
+    {
+     "text": "0.2 gph (0.76 lph) Line Test Auto-Confirm (Enable/Disable)",
+     "code": "S55400",
+     "when": {
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "0.2 GPH LINE TEST",
+     "l2": "AUTO-CONFIRM:"
+    },
+    {
+     "text": "0.1 gph (0.38 lph) Line Test Auto-Confirm (Enable/Disable)",
+     "code": "S55500",
+     "when": {
+      "module": [
+       "plld",
+       "wplld",
+       "vlld"
+      ]
+     },
+     "scope": "console",
+     "head": "0.1 GPH LINE TEST",
+     "l2": "AUTO-CONFIRM:"
+    },
+    {
+     "text": "Print Precision Line Test Results",
+     "code": null,
+     "scope": "console",
+     "head": "PRINT PRECISION LINE",
+     "console": "set.print_precision_line"
+    },
+    {
+     "text": "Daylight Savings Time (Disable/Enable)",
+     "code": "S51A00",
+     "scope": "console",
+     "print": {
+      "head": "DAYLIGHT SAVING TIME",
+      "line": "{}"
+     }
+    },
+    {
+     "text": "Start Date",
+     "code": "S51B01",
+     "field": "S51B01.date",
+     "scope": "console",
+     "head": "START DATE",
+     "when": {
+      "code": "S51A00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Start Time",
+     "code": "S51B01",
+     "field": "S51B01.time",
+     "scope": "console",
+     "head": "START TIME",
+     "l2": "TIME:",
+     "when": {
+      "code": "S51A00",
+      "is": [
+       "1"
+      ]
+     },
+     "print": {
+      "head": "START TIME",
+      "line": "{:>8}"
+     }
+    },
+    {
+     "text": "End Date",
+     "code": "S51B02",
+     "field": "S51B02.date",
+     "scope": "console",
+     "head": "END DATE",
+     "when": {
+      "code": "S51A00",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "End Time",
+     "code": "S51B02",
+     "field": "S51B02.time",
+     "scope": "console",
+     "head": "END TIME",
+     "l2": "TIME:",
+     "when": {
+      "code": "S51A00",
+      "is": [
+       "1"
+      ]
+     },
+     "print": {
+      "head": "END TIME",
+      "line": "{:>8}"
+     }
+    },
+    {
+     "text": "HRM-QPLD Printouts (Enable/Disable)",
+     "code": "S51500",
+     "when": {
+      "software": "bir"
+     },
+     "scope": "console",
+     "head": "QPLD MONTHLY PRINTOUT"
+    },
+    {
+     "text": "Re-direct Local PrintouT (Enable/Disable)",
+     "code": "S51600",
+     "scope": "console"
+    },
+    {
+     "text": "Euro Protocol Prefix",
+     "scope": "console",
+     "head": "EURO PROTOCOL PREFIX",
+     "console": "set.euro_prefix"
+    },
+    {
+     "text": "Bdim Trans Alarm Delay",
+     "scope": "console",
+     "head": "BDIM TRANS ALARM DELAY",
+     "console": "set.bdim_delay",
+     "when": {
+      "module": [
+       "io",
+       "rs232"
+      ]
+     }
+    },
+    {
+     "text": "System Security Code",
+     "code": "S50400",
+     "scope": "console",
+     "head": "SYSTEM SECURITY",
+     "l2": "CODE:",
+     "print": {
+      "head": "SYSTEM SECURITY",
+      "line": "CODE : {}"
+     }
+    },
+    {
+     "text": "Maintenance History (Enable/Disable)",
+     "code": "S56500",
+     "scope": "console",
+     "when": {
+      "feature": "mt"
+     }
+    },
+    {
+     "text": "Tank Chart Security",
+     "code": null,
+     "console": "chart.code",
+     "scope": "console"
+    },
+    {
+     "text": "Console Serial Number",
+     "code": null,
+     "console": "chart.serial",
+     "scope": "console",
+     "head": "CONSOLE SERIAL NUMBER:",
+     "when": {
+      "chart_secured": true
+     }
+    },
+    {
+     "text": "Weights And Measures",
+     "code": null,
+     "console": "chart.wm",
+     "scope": "console",
+     "head": "WEIGHTS AND MEASURES:",
+     "when": {
+      "chart_secured": true
+     }
+    },
+    {
+     "text": "Custom Alarms",
+     "code": "S5BD00",
+     "scope": "console",
+     "head": "CUSTOM ALARM LABELS",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Service Notice",
+     "scope": "console",
+     "head": "SERVICE NOTICE",
+     "code": "S56600",
+     "field": "S56600",
+     "when": {
+      "feature": "service"
+     }
+    },
+    {
+     "text": "Delivery Override",
+     "scope": "console",
+     "head": "DELIVERY OVERRIDE",
+     "console": "set.delivery_override",
+     "when": {
+      "code": "S56600",
+      "is": [
+       "1"
+      ],
+      "module": "probe",
+      "feature": "service"
+     }
+    },
+    {
+     "text": "ISO 3166 Country",
+     "scope": "console",
+     "head": "ISO 3166 COUNTRY",
+     "console": "set.country"
+    },
+    {
+     "text": "Inventory Alarms Threshold Units",
+     "scope": "console",
+     "head": "INVENTORY ALARMS UNITS",
+     "console": "set.inventory_units",
+     "when": {
+      "feature": "invthresh"
+     },
+     "print_after": "Fiscal Height Security"
+    },
+    {
+     "text": "Custom Threshold Max Or Label",
+     "scope": "console",
+     "head": "INVENTORY ALARM CUSTOM",
+     "console": "set.custom_max",
+     "when": {
+      "setting": "inventory_units",
+      "is": [
+       "CUSTOM"
+      ],
+      "feature": "invthresh"
+     },
+     "print_after": "Inventory Alarms Threshold Units",
+     "print_always": true,
+     "print": {
+      "line": "MAX OR LABEL: {}",
+      "value": "threshold:max"
+     }
+    },
+    {
+     "text": "Custom Threshold High Product",
+     "scope": "console",
+     "head": "INVENTORY ALARM CUSTOM",
+     "console": "set.custom_high",
+     "when": {
+      "setting": "inventory_units",
+      "is": [
+       "CUSTOM"
+      ],
+      "feature": "invthresh"
+     },
+     "print_after": "Custom Threshold Max Or Label",
+     "print_always": true,
+     "print": {
+      "line": "HIGH PRODUCT: {}",
+      "value": "threshold:high"
+     }
+    },
+    {
+     "text": "Custom Threshold Overfill",
+     "scope": "console",
+     "head": "INVENTORY ALARM CUSTOM",
+     "console": "set.custom_overfill",
+     "when": {
+      "setting": "inventory_units",
+      "is": [
+       "CUSTOM"
+      ],
+      "feature": "invthresh"
+     },
+     "print_after": "Custom Threshold High Product",
+     "print_always": true,
+     "print": {
+      "line": "OVERFILL    : {}",
+      "value": "threshold:overfill"
+     }
+    },
+    {
+     "text": "Custom Threshold Delivery Needed",
+     "scope": "console",
+     "head": "INVENTORY ALARM CUSTOM",
+     "console": "set.custom_delivery",
+     "when": {
+      "setting": "inventory_units",
+      "is": [
+       "CUSTOM"
+      ],
+      "feature": "invthresh"
+     },
+     "print_after": "Custom Threshold Overfill",
+     "print_always": true,
+     "print": {
+      "line": "DELIV NEEDED: {}",
+      "value": "threshold:delivery"
+     }
+    },
+    {
+     "text": "Custom Threshold Low Product",
+     "scope": "console",
+     "head": "INVENTORY ALARM CUSTOM",
+     "console": "set.custom_low",
+     "when": {
+      "setting": "inventory_units",
+      "is": [
+       "CUSTOM"
+      ],
+      "feature": "invthresh"
+     },
+     "print_after": "Custom Threshold Delivery Needed",
+     "print_always": true,
+     "print": {
+      "line": "LOW PRODUCT : {}",
+      "value": "threshold:low"
+     }
+    },
+    {
+     "text": "System Beeper (Enable/Disable)",
+     "scope": "console",
+     "head": "BEEPER",
+     "code": "S53000",
+     "field": "S53000"
+    },
+    {
+     "text": "Mass/Density",
+     "scope": "console",
+     "head": "MASS/DENSITY",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Mass/Density",
+     "scope": "console",
+     "head": "MASS/DENSITY",
+     "code": "S56000",
+     "field": "S56000"
+    },
+    {
+     "text": "Fiscal Height Security",
+     "scope": "console",
+     "head": "FISCAL HEIGHT SECURITY",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "feature": "fiscal"
+     }
+    },
+    {
+     "text": "Fiscal Height Security",
+     "scope": "console",
+     "head": "FISCAL HEIGHT SECURITY",
+     "console": "set.fiscal_height",
+     "when": {
+      "feature": "fiscal"
+     }
+    },
+    {
+     "text": "Alarm Reduction",
+     "scope": "console",
+     "head": "ALARM REDUCTION",
+     "console": "set.alarm_reduction",
+     "when": {
+      "feature": "alarmreduce"
+     }
+    }
+   ]
+  },
+  {
+   "function": "COMMUNICATION SETUP",
+   "steps": [
+    {
+     "text": "Baud Rate",
+     "code": "S88101",
+     "field": "S88101.baud"
+    },
+    {
+     "text": "Parity",
+     "code": "S88101",
+     "field": "S88101.parity"
+    },
+    {
+     "text": "Stop Bit",
+     "code": "S88101",
+     "field": "S88101.stop"
+    },
+    {
+     "text": "Data Length",
+     "code": "S88101",
+     "field": "S88101.data"
+    },
+    {
+     "text": "Dial Type",
+     "code": "S88101",
+     "field": "S88101.dial",
+     "when": {
+      "module": "modem"
+     }
+    },
+    {
+     "text": "Answer On",
+     "code": "S88101",
+     "field": "S88101.rings",
+     "when": {
+      "module": "modem"
+     }
+    },
+    {
+     "text": "Security Code",
+     "code": "S53601",
+     "l2": "CODE:"
+    },
+    {
+     "text": "Modem Type",
+     "code": "S88501",
+     "when": {
+      "module": "modem"
+     },
+     "l2": "SELECT MODEM:"
+    },
+    {
+     "text": "Modem Setup String",
+     "code": "S88601",
+     "when": {
+      "module": "modem"
+     },
+     "head": "MODEM SETUP STRING",
+     "l2": ""
+    },
+    {
+     "text": "Dial Tone Interval",
+     "code": "S88701",
+     "when": {
+      "module": "modem"
+     }
+    },
+    {
+     "text": "DTR Normal State",
+     "code": "S88901",
+     "field": "S88901",
+     "l2": "DTR NORMAL STATE:"
+    },
+    {
+     "text": "Auto Transmit Setup",
+     "head": "AUTO TRANSMIT SETUP",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Transmit Message Setup",
+     "head": "TRANSMIT MESSAGE SETUP",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Auto Leak Alarm Limit",
+     "head": "AUTO LEAK ALARM LIMIT",
+     "console": "set.autotx_1"
+    },
+    {
+     "text": "Auto High Water Limit",
+     "head": "AUTO HIGH WATER LIMIT",
+     "console": "set.autotx_2"
+    },
+    {
+     "text": "Auto Overfill Limit",
+     "head": "AUTO OVERFILL LIMIT",
+     "console": "set.autotx_3"
+    },
+    {
+     "text": "Auto Low Product",
+     "head": "AUTO LOW PRODUCT",
+     "console": "set.autotx_4"
+    },
+    {
+     "text": "Auto Theft Limit",
+     "head": "AUTO THEFT LIMIT",
+     "console": "set.autotx_5"
+    },
+    {
+     "text": "Auto Delivery Start",
+     "head": "AUTO DELIVERY START",
+     "console": "set.autotx_6"
+    },
+    {
+     "text": "Auto Delivery End",
+     "head": "AUTO DELIVERY END",
+     "console": "set.autotx_7"
+    },
+    {
+     "text": "Auto External Input On",
+     "head": "AUTO EXTERNAL INPUT ON",
+     "console": "set.autotx_8"
+    },
+    {
+     "text": "Auto External Input Off",
+     "head": "AUTO EXTERNAL INPUT OFF",
+     "console": "set.autotx_9"
+    },
+    {
+     "text": "Auto Sensor Fuel Alarm",
+     "head": "AUTO SENSOR FUEL ALARM",
+     "console": "set.autotx_10"
+    },
+    {
+     "text": "Auto Sensor Water Alarm",
+     "head": "AUTO SENSOR WATER ALARM",
+     "console": "set.autotx_11"
+    },
+    {
+     "text": "Auto Sensor Out Alarm",
+     "head": "AUTO SENSOR OUT ALARM",
+     "console": "set.autotx_12"
+    },
+    {
+     "text": "Auto Delay Time",
+     "head": "AUTO TRANSMIT MESSAGE",
+     "console": "set.auto_delay",
+     "when": {
+      "any_setting": [
+       "autotx_1",
+       "autotx_2",
+       "autotx_3",
+       "autotx_4",
+       "autotx_5",
+       "autotx_6",
+       "autotx_7",
+       "autotx_8",
+       "autotx_9",
+       "autotx_10",
+       "autotx_11",
+       "autotx_12"
+      ],
+      "is": [
+       "TRANSMIT",
+       "TRANSMIT/REPEAT"
+      ],
+      "device": true
+     }
+    },
+    {
+     "text": "Auto Repeat Time",
+     "head": "AUTO TRANSMIT MESSAGE",
+     "console": "set.auto_repeat",
+     "when": {
+      "any_setting": [
+       "autotx_1",
+       "autotx_2",
+       "autotx_3",
+       "autotx_4",
+       "autotx_5",
+       "autotx_6",
+       "autotx_7",
+       "autotx_8",
+       "autotx_9",
+       "autotx_10",
+       "autotx_11",
+       "autotx_12"
+      ],
+      "is": [
+       "TRANSMIT/REPEAT"
+      ],
+      "device": true
+     }
+    },
+    {
+     "text": "Receiver Configuration",
+     "code": "S52101",
+     "when": {
+      "module": "modem"
+     },
+     "head": "RCVR CONFIG",
+     "l2": ""
+    },
+    {
+     "text": "Receiver Location",
+     "code": "S52201",
+     "when": {
+      "module": "modem"
+     },
+     "head": "ENTER RCVR LOCATION"
+    },
+    {
+     "text": "Receiver Telephone Number",
+     "code": "S52301",
+     "when": {
+      "module": "modem"
+     },
+     "head": "ENTER RCVR PHONE NO."
+    },
+    {
+     "text": "Receiver Type",
+     "code": "S52401",
+     "when": {
+      "module": "modem"
+     },
+     "l2": "RCVR TYPE:"
+    },
+    {
+     "text": "Retry Number",
+     "code": "S52601",
+     "when": {
+      "module": "modem"
+     },
+     "l2": "DIAL RETRY NUMBER:"
+    },
+    {
+     "text": "Retry Delay Time",
+     "code": "S52701",
+     "when": {
+      "module": "modem"
+     },
+     "l2": "DIAL RETRY DELAY:"
+    },
+    {
+     "text": "Confirmation Report",
+     "code": "S52801",
+     "when": {
+      "module": "modem"
+     },
+     "l2": "CONFIRMATION REPORT:"
+    },
+    {
+     "text": "Receiver Report List",
+     "code": "S52A01",
+     "when": {
+      "module": "modem"
+     },
+     "head": "D%d: RCVR REPORT LIST",
+     "l2": ""
+    },
+    {
+     "text": "Auto Dial Method",
+     "code": "S52B01",
+     "when": {
+      "module": "modem"
+     }
+    },
+    {
+     "text": "Auto Dial Alarm",
+     "code": "S52C01",
+     "when": {
+      "module": "modem"
+     },
+     "head": "AUTO DIAL ALARM SETUP",
+     "l2": ""
+    },
+    {
+     "text": "RS-232 End Of Message",
+     "code": "S53100"
+    }
+   ]
+  },
+  {
+   "function": "IN-TANK SETUP",
+   "steps": [
+    {
+     "text": "Tank Config Module 1 (Up To 3)",
+     "code": "S60101"
+    },
+    {
+     "text": "Product Label",
+     "code": "S60201"
+    },
+    {
+     "text": "Product Code",
+     "code": "S60301"
+    },
+    {
+     "text": "Thermal Coeff.",
+     "code": "S60901",
+     "l2": "THERMAL COEFF:"
+    },
+    {
+     "text": "Tank Density",
+     "code": "S61E01",
+     "when": {
+      "code": "S56000",
+      "is": [
+       "1"
+      ]
+     },
+     "l2": "DENSITY",
+     "gap": "         :"
+    },
+    {
+     "text": "Tank Diameter",
+     "code": "S60701"
+    },
+    {
+     "text": "Tank Profile (1 Pt/4 Pts/20 Pts/linear/50 Pts)",
+     "code": "S60101",
+     "field": "S60101.profile",
+     "profile": true
+    },
+    {
+     "text": "Full Volume",
+     "code": "S60401",
+     "code_by_profile": {
+      "00": "S60401",
+      "01": "S60501",
+      "02": "S60601",
+      "03": "S60A01",
+      "04": "S63C01"
+     },
+     "l2": "FULL VOL:"
+    },
+    {
+     "text": "Tank Capacity",
+     "code": null,
+     "console": "chart.capacity",
+     "when": {
+      "profile": [
+       "04"
+      ],
+      "chart_secured": true
+     },
+     "head": "T%d: (PRODUCT LABEL)",
+     "l2": "TANK CAPACITY",
+     "gap": "   :"
+    },
+    {
+     "text": "Probe S/N",
+     "code": null,
+     "console": "chart.probe",
+     "when": {
+      "profile": [
+       "04"
+      ],
+      "chart_secured": true
+     },
+     "head": "T%d: (PRODUCT LABEL)",
+     "l2": "PROBE S/N",
+     "gap": "       :"
+    },
+    {
+     "text": "View Height/Vol Pts",
+     "code": null,
+     "point": "view",
+     "when": {
+      "profile": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "75% Volume",
+     "code": "S60501",
+     "field": "S60501.p75",
+     "when": {
+      "profile": [
+       "01"
+      ]
+     }
+    },
+    {
+     "text": "50% Volume",
+     "code": "S60501",
+     "field": "S60501.p50",
+     "when": {
+      "profile": [
+       "01"
+      ]
+     }
+    },
+    {
+     "text": "25% Volume",
+     "code": "S60501",
+     "field": "S60501.p25",
+     "when": {
+      "profile": [
+       "01"
+      ]
+     }
+    },
+    {
+     "text": "95% Volume",
+     "code": "S60601",
+     "field": "S60601.p95",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "90% Volume",
+     "code": "S60601",
+     "field": "S60601.p90",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "85% Volume",
+     "code": "S60601",
+     "field": "S60601.p85",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "80% Volume",
+     "code": "S60601",
+     "field": "S60601.p80",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "75% Volume",
+     "code": "S60601",
+     "field": "S60601.p75",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "70% Volume",
+     "code": "S60601",
+     "field": "S60601.p70",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "65% Volume",
+     "code": "S60601",
+     "field": "S60601.p65",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "60% Volume",
+     "code": "S60601",
+     "field": "S60601.p60",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "55% Volume",
+     "code": "S60601",
+     "field": "S60601.p55",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "50% Volume",
+     "code": "S60601",
+     "field": "S60601.p50",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "45% Volume",
+     "code": "S60601",
+     "field": "S60601.p45",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "40% Volume",
+     "code": "S60601",
+     "field": "S60601.p40",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "35% Volume",
+     "code": "S60601",
+     "field": "S60601.p35",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "30% Volume",
+     "code": "S60601",
+     "field": "S60601.p30",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "25% Volume",
+     "code": "S60601",
+     "field": "S60601.p25",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "20% Volume",
+     "code": "S60601",
+     "field": "S60601.p20",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "15% Volume",
+     "code": "S60601",
+     "field": "S60601.p15",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "10% Volume",
+     "code": "S60601",
+     "field": "S60601.p10",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "5% Volume",
+     "code": "S60601",
+     "field": "S60601.p5",
+     "when": {
+      "profile": [
+       "02"
+      ]
+     }
+    },
+    {
+     "text": "Add Height/Vol Pts",
+     "code": null,
+     "point": "count",
+     "when": {
+      "profile": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "Height",
+     "code": null,
+     "point": "height",
+     "when": {
+      "profile": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "Volume At This Height",
+     "code": null,
+     "point": "volume",
+     "when": {
+      "profile": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "Remove Height/Vol Pt",
+     "code": null,
+     "point": "remove",
+     "when": {
+      "profile": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "Meter Data Present",
+     "code": "S61501",
+     "when": {
+      "software": "bir"
+     }
+    },
+    {
+     "text": "Vapor Loss Factor",
+     "code": "S63D01"
+    },
+    {
+     "text": "End Factor (None/Flat/Hemispherical/Other)",
+     "code": "S63901",
+     "field": "S63901.shape",
+     "when": {
+      "code": "S61501",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "End Value",
+     "code": "S63901",
+     "field": "S63901.factor",
+     "when": {
+      "code": "S63901",
+      "part": [
+       0,
+       1
+      ],
+      "is": [
+       "3"
+      ]
+     }
+    },
+    {
+     "text": "Calibration Update",
+     "code": "S61601",
+     "when": {
+      "code": "S61501",
+      "is": [
+       "1"
+      ]
+     },
+     "l2": "CAL UPDATE:"
+    },
+    {
+     "text": "Float Size",
+     "code": "S62F01"
+    },
+    {
+     "text": "Water Minimum",
+     "code": "S60E01",
+     "field": "S60E01.watermin",
+     "when": {
+      "feature": "waterthresh"
+     }
+    },
+    {
+     "text": "Water Warning Limit (Not Active For Tanks With High Alcohol Probes)",
+     "code": "S62701",
+     "l2": "WATER WARNING:"
+    },
+    {
+     "text": "High Water Limit (Not Active For Tanks With High Alcohol Probes)",
+     "code": "S62401"
+    },
+    {
+     "text": "Water Alarm Filter",
+     "console": "set.water_filter"
+    },
+    {
+     "text": "Water Alarm Delay",
+     "console": "set.water_delay",
+     "when": {
+      "setting": "water_filter",
+      "is": [
+       "OFF"
+      ],
+      "device": true
+     }
+    },
+    {
+     "text": "Max Or Label Volume",
+     "code": "S62801",
+     "l2": "MAX OR LABEL VOL:"
+    },
+    {
+     "text": "Overfill Limit",
+     "code": "S62301"
+    },
+    {
+     "text": "High Product",
+     "code": "S62201"
+    },
+    {
+     "text": "Delivery Limit",
+     "code": "S62901"
+    },
+    {
+     "text": "Low Product",
+     "code": "S62101"
+    },
+    {
+     "text": "Leak Alarm Unit",
+     "code": "S62601",
+     "l2": "LEAK ALARM LIMIT:"
+    },
+    {
+     "text": "Sudden Loss Limit",
+     "code": "S62501"
+    },
+    {
+     "text": "Tank Tilt",
+     "code": "S60801"
+    },
+    {
+     "text": "Probe Offset",
+     "code": "S60F01"
+    },
+    {
+     "text": "Siphon Manifolded",
+     "code": "S61201",
+     "head": "T%d: SIPHON MANIFOLDED",
+     "l2": "T#:"
+    },
+    {
+     "text": "Line Manifolded",
+     "code": "S61D01",
+     "head": "T%d: LINE MANIFOLDED",
+     "l2": "T#:"
+    },
+    {
+     "text": "Leak Minimum Periodic",
+     "code": "S63601",
+     "l2": "LEAK MIN PERIODIC:"
+    },
+    {
+     "text": "Leak Minimum Annual",
+     "code": "S62A01",
+     "l2": "LEAK MIN ANNUAL:"
+    },
+    {
+     "text": "Periodic Test Type",
+     "code": "S62C01",
+     "head": "T%d: PERIODIC TEST TYPE"
+    },
+    {
+     "text": "Annual Test Fail Alarm",
+     "code": "S62D01",
+     "field": "S62D01.annual",
+     "head": "T%d: ANNUAL TEST FAIL",
+     "l2": "ALARM"
+    },
+    {
+     "text": "Periodic Test Fail Alarm",
+     "code": "S62D01",
+     "field": "S62D01.periodic",
+     "head": "T%d: PERIODIC TEST FAIL",
+     "l2": "ALARM"
+    },
+    {
+     "text": "Gross Test Fail Alarm",
+     "code": "S62D01",
+     "field": "S62D01.gross",
+     "head": "T%d: GROSS TEST FAIL",
+     "l2": "ALARM"
+    },
+    {
+     "text": "Annual Test Averaging",
+     "code": "S63101",
+     "field": "S63101.annual",
+     "l2": "ANN TEST AVERAGING:"
+    },
+    {
+     "text": "Periodic Test Averaging",
+     "code": "S63101",
+     "field": "S63101.periodic",
+     "l2": "PER TEST AVERAGING:"
+    },
+    {
+     "text": "Tank Test Notify",
+     "code": "S63001",
+     "l2": "TANK TEST NOTIFY:"
+    },
+    {
+     "text": "Tank Test Siphon Break",
+     "code": "S63201",
+     "l2": "TNK TST SIPHON BREAK:"
+    },
+    {
+     "text": "Stick Offset",
+     "code": "S60C01",
+     "when": {
+      "code": "S60B00",
+      "is": [
+       "1"
+      ]
+     },
+     "l2": "STICK OFFSET:",
+     "gap": "  "
+    },
+    {
+     "text": "HRM Reconciliation Warning Limit",
+     "code": "S63401",
+     "l2": "RECON WARN LIMIT:",
+     "gap": ""
+    },
+    {
+     "text": "HRM Reconciliation Alarm Limit",
+     "code": "S63501",
+     "l2": "RECON ALM LIMIT:",
+     "gap": ""
+    },
+    {
+     "text": "Delivery Delay",
+     "code": "S61001"
+    },
+    {
+     "text": "Pump Threshold",
+     "code": "S63A01",
+     "l2": "PUMP THRESHOLD :"
+    }
+   ]
+  },
+  {
+   "function": "FUEL MANAGEMENT SETUP",
+   "steps": [
+    {
+     "text": "Delivery Warn Days XX.X",
+     "code": "S68100",
+     "head": "FUEL MANAGEMENT SETUP",
+     "l2": "DELIVERY WARN DAYS:"
+    },
+    {
+     "text": "Fuel Management Auto Print",
+     "code": "S68200",
+     "head": "FUEL MGT AUTO PRINT",
+     "l2": "TIME:"
+    },
+    {
+     "text": "Average Daily Sales SUN",
+     "code": null,
+     "console": "set.avg_sales_1",
+     "head": "product",
+     "l2": "AVG SALES SUN:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales MON",
+     "code": null,
+     "console": "set.avg_sales_2",
+     "head": "product",
+     "l2": "AVG SALES MON:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales TUE",
+     "code": null,
+     "console": "set.avg_sales_3",
+     "head": "product",
+     "l2": "AVG SALES TUE:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales WED",
+     "code": null,
+     "console": "set.avg_sales_4",
+     "head": "product",
+     "l2": "AVG SALES WED:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales THU",
+     "code": null,
+     "console": "set.avg_sales_5",
+     "head": "product",
+     "l2": "AVG SALES THU:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales FRI",
+     "code": null,
+     "console": "set.avg_sales_6",
+     "head": "product",
+     "l2": "AVG SALES FRI:",
+     "align": "right"
+    },
+    {
+     "text": "Average Daily Sales SAT",
+     "code": null,
+     "console": "set.avg_sales_7",
+     "head": "product",
+     "l2": "AVG SALES SAT:",
+     "align": "right"
+    }
+   ]
+  },
+  {
+   "function": "IN-TANK LEAK TEST SETUP",
+   "steps": [
+    {
+     "text": "Test Method (Single Tank/All Tanks)",
+     "code": null,
+     "head": "LEAK TEST METHOD",
+     "scope": "console",
+     "console": "set.tank_test_method"
+    },
+    {
+     "text": "Test Frequency (On Date/Annually/Monthly/Weekly/Daily/Automatic/CSLD)",
+     "code": "S61101",
+     "field": "S61101.method",
+     "setup_scope": "TEST"
+    },
+    {
+     "text": "Test Date",
+     "code": "S61101",
+     "field": "S61101.ondate",
+     "setup_scope": "TEST ON DATES",
+     "scope_plural": true,
+     "l2": "DATE:",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "1"
+      ],
+      "default": "1"
+     }
+    },
+    {
+     "text": "Test Month Week Day",
+     "code": "S61101",
+     "field": "S61101.annual",
+     "setup_scope": "TEST ANNUALLY",
+     "scope_plural": true,
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "2"
+      ],
+      "default": "1"
+     }
+    },
+    {
+     "text": "Test Week Day",
+     "code": "S61101",
+     "field": "S61101.monthly",
+     "setup_scope": "TEST MONTHLY",
+     "scope_plural": true,
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "3"
+      ],
+      "default": "1"
+     }
+    },
+    {
+     "text": "Test Day",
+     "code": "S61101",
+     "field": "S61101.weekly",
+     "setup_scope": "TEST WEEKLY",
+     "scope_plural": true,
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "4"
+      ],
+      "default": "1"
+     }
+    },
+    {
+     "text": "CSLD Probability Of Detection",
+     "code": "S61301",
+     "setup_scope": "CSLD Pd",
+     "scope_plural": true,
+     "l2": "Pd =",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "7"
+      ],
+      "software": "csld",
+      "default": "1"
+     }
+    },
+    {
+     "text": "CSLD Climate Factor",
+     "code": "S61401",
+     "setup_scope": "CLIMATE FACTOR",
+     "scope_plural": true,
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "7"
+      ],
+      "software": "csld",
+      "default": "1"
+     }
+    },
+    {
+     "text": "CSLD Evaporation Compensation",
+     "code": "S61801",
+     "setup_scope": "EVAP COMP",
+     "l2": "EVAP COMP:",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "7"
+      ],
+      "software": "csld",
+      "default": "1"
+     }
+    },
+    {
+     "text": "Stage II Vapor Recovery",
+     "code": "S61901",
+     "setup_scope": "STAGE II VAPOR",
+     "l2": "STAGE II VAPOR:",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "7"
+      ],
+      "software": "csld",
+      "default": "1"
+     }
+    },
+    {
+     "text": "Gross Test Auto-Confirm (If CSLD select with Pump Sense)",
+     "code": "S61B01",
+     "l2": "AUTO-CONFIRM:",
+     "setup_scope": "GROSS TEST"
+    },
+    {
+     "text": "Test Start Time",
+     "code": "S61101",
+     "field": "S61101.start",
+     "setup_scope": "START TIME",
+     "l2": "TIME:"
+    },
+    {
+     "text": "Leak Test Rate (0.2gph [0.76 lph]/0.1 gph [0.38 lph])",
+     "code": "S61101",
+     "field": "S61101.rate",
+     "setup_scope": "TEST RATE"
+    },
+    {
+     "text": "Test Duration",
+     "code": "S61101",
+     "field": "S61101.duration",
+     "setup_scope": "TEST DURATION",
+     "l2": "DURATION:"
+    },
+    {
+     "text": "Leak Test Early Stop",
+     "code": "S61A01",
+     "setup_scope": "TST EARLY STOP",
+     "scope_plural": true
+    },
+    {
+     "text": "Report Only - if CSLD selected",
+     "code": "S61C01",
+     "setup_scope": "REPORT ONLY",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "is": [
+       "7"
+      ],
+      "software": "csld",
+      "default": "1"
+     }
+    },
+    {
+     "text": "Leak Test Report Format (Normal/Enhanced)",
+     "code": "S63300"
+    }
+   ]
+  },
+  {
+   "function": "PRESSURE LINE LEAK SETUP",
+   "steps": [
+    {
+     "text": "Line Config. - Module 1 ( up to 3)",
+     "code": "S78101"
+    },
+    {
+     "text": "Pressure Line Label",
+     "code": "S78201",
+     "head": "PRESSURE LINE LABEL"
+    },
+    {
+     "text": "Piping Type",
+     "code": "S78801",
+     "l2": "TYP:"
+    },
+    {
+     "text": "Line Length",
+     "code": "S78901",
+     "l2": "LINE LENGTH:"
+    },
+    {
+     "text": "User Defined Pipe Type - 1st Line Length",
+     "code": "S78901",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "1ST LINE LENGTH:"
+    },
+    {
+     "text": "User Defined Pipe Type - 2nd Line Length",
+     "code": "S77F01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "2ND LINE LENGTH:"
+    },
+    {
+     "text": "User Defined Pipe Type - 1st Bulk Modulus",
+     "code": "S77901",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "1ST BULK MODULUS:"
+    },
+    {
+     "text": "User Defined Pipe Type - 2nd Bulk Modulus",
+     "code": "S77A01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "2ND BULK MODULUS:"
+    },
+    {
+     "text": "User Defined Pipe Type - Thermal Coeff.",
+     "code": "S77B01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "THERMAL COEFF:"
+    },
+    {
+     "text": "Thermal Coefficient - If certain piping types selected",
+     "code": "S77B01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "14",
+       "17",
+       "19"
+      ]
+     },
+     "l2": "THERMAL COEFF:"
+    },
+    {
+     "text": "0.2 gph (0.76 lph) Line Leak Test Scheduling (Disabled/Repetitive/Monthly/Manual)",
+     "code": "S78C01",
+     "when": {
+      "software": "plld020"
+     },
+     "l2": "0.20 GPH TEST:"
+    },
+    {
+     "text": "0.1 gph (0.38 lph) Line Leak Test SchedulingTest (Disabled/Repetitive/Auto/Manual)",
+     "code": "S78301",
+     "when": {
+      "software": "plld010"
+     },
+     "l2": "0.10 GPH TEST:"
+    },
+    {
+     "text": "Passive 0.1 gph (0.38 lph) Line Leak Testing (if certain pipe type selections made and 0.1 gph",
+     "code": "S77E01",
+     "when": {
+      "code": "S78301",
+      "is": [
+       "2"
+      ],
+      "software": "plld010"
+     },
+     "l2": "PASSIVE 0.10 GPH:"
+    },
+    {
+     "text": "Shutdown Rate (3.0 gph [11.3 lph]/0.2 gph [0.76lph]/0.1 gph [0.38 lph]/None)",
+     "code": "S78401",
+     "l2": "SHUTDOWN RATE:"
+    },
+    {
+     "text": "Low Pressure Alarm Shutoff (No/Select Value)",
+     "code": "S77C01",
+     "l2": "LOW PRESSURE SHUTOFF:"
+    },
+    {
+     "text": "Select Tank - in which PLLD controlled pump is installed (None/Select Number)",
+     "code": "S78501",
+     "when": {
+      "tanks": true
+     },
+     "head": "Q%d: SELECT TANK",
+     "l2": "TANK#:"
+    },
+    {
+     "text": "Dispense Mode",
+     "code": "S78601",
+     "head": "Q%d: ENTER DISPENSE MODE",
+     "l2": ""
+    },
+    {
+     "text": "Pressure Transducer (Non-Vented/Vented/High Pressure)",
+     "code": "S78A01",
+     "l2": "SENSOR:"
+    },
+    {
+     "text": "Pressure Offset Value",
+     "code": "S77D01",
+     "l2": "PRESSURE OFFSET:"
+    },
+    {
+     "text": "Mechanical Blender",
+     "head": "Q %d: PLLD NUMBER %d",
+     "console": "set.blender"
+    },
+    {
+     "text": "Blend Partners",
+     "head": "Q %d: BLEND PARTNERS",
+     "console": "set.blend_partners",
+     "when": {
+      "setting": "blender",
+      "is": [
+       "YES"
+      ],
+      "device": true
+     }
+    }
+   ]
+  },
+  {
+   "function": "WPLLD LINE LEAK SETUP",
+   "steps": [
+    {
+     "text": "Line Config. Module 1 ( up to 3)",
+     "code": "S7A101"
+    },
+    {
+     "text": "WPLLD Line Label",
+     "code": "S7A201",
+     "head": "WPLLD LINE LABEL"
+    },
+    {
+     "text": "Piping Type",
+     "code": "S7A801",
+     "l2": "TYP:"
+    },
+    {
+     "text": "Line Length",
+     "code": "S7A901",
+     "l2": "LINE LENGTH:"
+    },
+    {
+     "text": "0.2 gph (0.76 lph) Test (Disabled/Repetitive/Monthly/Manual)",
+     "code": "S7A301",
+     "when": {
+      "software": "plld020"
+     },
+     "l2": "0.20 GPH TEST:"
+    },
+    {
+     "text": "0.1 gph (0.38 lph) Test (Disabled/Auto/Manual)",
+     "code": "S7AC01",
+     "when": {
+      "software": "plld010"
+     },
+     "l2": "0.10 GPH TEST:"
+    },
+    {
+     "text": "Shutdown Rate (3.0 gph [11.3 lph]/0.2 gph [0.76lph]/0.1 gph [0.38 lph]/None)",
+     "code": "S7A401",
+     "l2": "SHUTDOWN RATE:"
+    },
+    {
+     "text": "Dispense Mode",
+     "code": "S7A601",
+     "head": "W%d: ENTER DISPENSE MODE",
+     "l2": ""
+    },
+    {
+     "text": "Pressure Offset Value",
+     "code": "S7AF01",
+     "l2": "PRESSURE OFFSET:"
+    }
+   ]
+  },
+  {
+   "function": "LINE LEAK DETECTOR SETUP",
+   "steps": [
+    {
+     "text": "Line Config. Module 1 ( up to 8)",
+     "code": "S75101"
+    },
+    {
+     "text": "Enter Pipe Label",
+     "code": "S76001"
+    },
+    {
+     "text": "Tank #",
+     "code": "S75201",
+     "when": {
+      "tanks": true
+     },
+     "head": "P%d: SELECT TANK",
+     "l2": "TANK#:"
+    },
+    {
+     "text": "Dispense Mode (Standard/Manifold:Alternate/Manifold:Sequential/Manifold:All Pumps)",
+     "code": "S75D01",
+     "head": "P%d: ENTER DISPENSE MODE",
+     "l2": ""
+    },
+    {
+     "text": "Fuel Type (Gasoline/Diesel)",
+     "code": "S75E01"
+    },
+    {
+     "text": "2-inch (50mm) Piping Length",
+     "code": "S75301",
+     "l2": "2\" PIPING LENGTH:"
+    },
+    {
+     "text": "3-inch (76mm) Piping Length",
+     "code": "S75401",
+     "l2": "3\" PIPING LENGTH:"
+    },
+    {
+     "text": "Pipe Type (Steel/Fiberglass/2-wall Fiberglass/Flexible)",
+     "code": "S75601",
+     "l2": "PIPE TYPE:"
+    },
+    {
+     "text": "Pump Pressure",
+     "code": "S75501",
+     "l2": "PUMP PSI:"
+    },
+    {
+     "text": "Shutdown Rate (3.0 gph [11.3 lph]/0.2 gph [0.76lph]/0.1 gph [0.38 lph])",
+     "code": "S75701",
+     "l2": "SHUTDOWN:"
+    },
+    {
+     "text": "Pumpside Test",
+     "code": "S75801"
+    },
+    {
+     "text": "Wait Mode (Temp. Meas./Vol. Chg. Meas.)",
+     "code": "S75F01"
+    },
+    {
+     "text": "NPB Partner",
+     "code": "S76101",
+     "head": "P%d: SELECT NBP PARTNER",
+     "l2": ""
+    },
+    {
+     "text": "Last Annual Test Passed",
+     "code": "S75C01",
+     "head": "LAST ANNUAL TEST PASSED",
+     "l2": "DATE:"
+    }
+   ]
+  },
+  {
+   "function": "LINE LEAK TEST SETUP",
+   "steps": [
+    {
+     "text": "Leak Test Method (All Lines/Single Line)",
+     "code": null,
+     "head": "LEAK TEST METHOD",
+     "scope": "console",
+     "console": "set.line_test_method"
+    },
+    {
+     "text": "Test Frequency (On Date/Annually [Month/ Week, Day]/Monthly [Week, Day]/ Weekly [Day]/",
+     "code": "S75901",
+     "field": "S75901.method",
+     "scope_setting": "line_test_method",
+     "setup_scope": "TEST"
+    },
+    {
+     "text": "Test Date",
+     "code": "S75901",
+     "field": "S75901.ondate",
+     "setup_scope": "TEST ON DATE",
+     "l2": "DATE:",
+     "when": {
+      "code": "S75901",
+      "part": [
+       2,
+       1
+      ],
+      "default": "1",
+      "is": [
+       "1"
+      ]
+     },
+     "scope_setting": "line_test_method"
+    },
+    {
+     "text": "Test Month Week Day",
+     "code": "S75901",
+     "field": "S75901.annual",
+     "setup_scope": "TEST ANNUALLY",
+     "when": {
+      "code": "S75901",
+      "part": [
+       2,
+       1
+      ],
+      "default": "1",
+      "is": [
+       "2"
+      ]
+     },
+     "scope_setting": "line_test_method"
+    },
+    {
+     "text": "Test Week Day",
+     "code": "S75901",
+     "field": "S75901.monthly",
+     "setup_scope": "TEST MONTHLY",
+     "when": {
+      "code": "S75901",
+      "part": [
+       2,
+       1
+      ],
+      "default": "1",
+      "is": [
+       "3"
+      ]
+     },
+     "scope_setting": "line_test_method"
+    },
+    {
+     "text": "Test Day",
+     "code": "S75901",
+     "field": "S75901.weekly",
+     "setup_scope": "TEST WEEKLY",
+     "when": {
+      "code": "S75901",
+      "part": [
+       2,
+       1
+      ],
+      "default": "1",
+      "is": [
+       "4"
+      ]
+     },
+     "scope_setting": "line_test_method"
+    },
+    {
+     "text": "Leak Test Start Time",
+     "code": "S75901",
+     "field": "S75901.start",
+     "scope_setting": "line_test_method",
+     "setup_scope": "START TIME",
+     "l2": "TIME:"
+    },
+    {
+     "text": "Test Rate (0.2 gph [0.76 lph]/0.1 gph [0.38 lph])",
+     "code": "S75901",
+     "field": "S75901.rate",
+     "scope_setting": "line_test_method",
+     "setup_scope": "TEST RATE"
+    }
+   ]
+  },
+  {
+   "function": "LINE LEAK LOCKOUT SETUP",
+   "steps": [
+    {
+     "text": "Lockout Schedule (Daily [Start Time/Stop Time]/ Individual [Start Day/Time/Stop Day/Time])",
+     "code": "S75A01",
+     "head": "LOCKOUT SCHEDULE",
+     "l2": "",
+     "scope": "console"
+    }
+   ]
+  },
+  {
+   "function": "PUMP SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Pump Sense Config. Module 1 ( up to 8)",
+     "code": "S77101"
+    },
+    {
+     "text": "Select Tank",
+     "code": "S77201",
+     "head": "S%d: SELECT TANK",
+     "l2": ""
+    },
+    {
+     "text": "Dispense Mode",
+     "code": "S77301",
+     "head": "S%d: ENTER DISPENSE MODE",
+     "l2": ""
+    },
+    {
+     "text": "Auto Active Switchover",
+     "code": null,
+     "scope": "console",
+     "head": "AUTO ACTIVE SWITCHOVER",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "code": "S77301",
+      "is": [
+       "5"
+      ]
+     }
+    },
+    {
+     "text": "Active Switchover",
+     "code": "S7DA01",
+     "head": "S%d: ACTIVE SWITCHOVER",
+     "l2": "ENABLE:",
+     "when": {
+      "code": "S77301",
+      "is": [
+       "5"
+      ]
+     }
+    },
+    {
+     "text": "Switchover Volume",
+     "code": "S7DB01",
+     "head": "S%d: SWITCHOVER VOLUME",
+     "l2": "THRESHOLD:",
+     "when": {
+      "code": "S77301",
+      "is": [
+       "5"
+      ]
+     }
+    },
+    {
+     "text": "Switchover Height",
+     "code": "S7DC01",
+     "head": "S%d: SWITCHOVER HEIGHT",
+     "l2": "THRESHOLD:",
+     "when": {
+      "code": "S77301",
+      "is": [
+       "5"
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "function": "PUMP RELAY MONITOR SETUP",
+   "steps": [
+    {
+     "text": "Pump Relay Config. Module 1 ( up to 8)",
+     "code": "S7C401"
+    },
+    {
+     "text": "Enter Pump Monitor Label",
+     "code": "S7C501",
+     "head": "ENTER PUMP MONITOR LABEL"
+    },
+    {
+     "text": "Select Pump Relay (None/PumpSense/PLLD/WPLLD/VLLD/Relay [Pump Control Output",
+     "code": "S7C601",
+     "head": "r%d: SELECT PUMP RELAY",
+     "l2": ""
+    },
+    {
+     "text": "Stuck Delay - 5 - 600 sec (Visible only if Relay assigned)",
+     "code": "S7C701",
+     "when": {
+      "code": "S7C601",
+      "not": [
+       "00"
+      ],
+      "part": [
+       0,
+       2
+      ],
+      "default": "00"
+     },
+     "l2": "STUCK DELAY (SEC):"
+    },
+    {
+     "text": "Select Max Run Time - 1 - 24 hr (Visible If None was selected for Pump Relay)",
+     "code": "S7C801",
+     "when": {
+      "code": "S7C601",
+      "is": [
+       "00"
+      ],
+      "part": [
+       0,
+       2
+      ],
+      "default": "00"
+     },
+     "l2": "MAX RUN TIME (HR):"
+    }
+   ]
+  },
+  {
+   "function": "RECONCILIATION SETUP",
+   "steps": [
+    {
+     "text": "Dispenser Module Data String",
+     "code": "S79201",
+     "head": "DISP. MODULE DATA STRING",
+     "l2": "EDIM #%d:"
+    },
+    {
+     "text": "Automatic Daily Closing Time",
+     "code": "S79300",
+     "head": "AUTOMATIC DAILY CLOSING",
+     "l2": "TIME:"
+    },
+    {
+     "text": "Auto Shift #1 Closing Time",
+     "code": "S79401",
+     "l2": "TIME:",
+     "scope": "console",
+     "head": "AUTO SHIFT #1 CLOSING"
+    },
+    {
+     "text": "Auto Shift #2 Closing Time",
+     "code": "S79402",
+     "l2": "TIME:",
+     "scope": "console",
+     "head": "AUTO SHIFT #2 CLOSING"
+    },
+    {
+     "text": "Auto Shift #3 Closing Time",
+     "code": "S79403",
+     "l2": "TIME:",
+     "scope": "console",
+     "head": "AUTO SHIFT #3 CLOSING"
+    },
+    {
+     "text": "Auto Shift #4 Closing Time",
+     "code": "S79404",
+     "l2": "TIME:",
+     "scope": "console",
+     "head": "AUTO SHIFT #4 CLOSING"
+    },
+    {
+     "text": "Periodic Reconciliation Mode (Monthly/Rolling [Length])",
+     "code": "S79500",
+     "head": "PERIODIC RECONCILIATION",
+     "l2": "MODE:"
+    },
+    {
+     "text": "Periodic Reconciliation Length",
+     "code": "S79600",
+     "head": "PERIODIC RECONCILIATION",
+     "l2": "LENGTH:",
+     "scope": "console",
+     "when": {
+      "code": "S79500",
+      "is": [
+       "1"
+      ]
+     }
+    },
+    {
+     "text": "Periodic Reconciliation Alarm (Disabled/Enabled)",
+     "code": "S79700",
+     "head": "PERIODIC RECONCILIATION",
+     "l2": "ALARM:",
+     "scope": "console"
+    },
+    {
+     "text": "Periodic Reconciliation Alarm Threshold",
+     "code": "S79800",
+     "head": "PERIODIC RECONCILIATION",
+     "l2": "ALARM THRESHOLD:",
+     "scope": "console"
+    },
+    {
+     "text": "Periodic Reconciliation Offset",
+     "code": "S79900",
+     "head": "PERIODIC RECONCILIATION",
+     "l2": "ALARM OFFSET:",
+     "scope": "console"
+    },
+    {
+     "text": "Remote Report Format (Line/Column)",
+     "code": "S79A00",
+     "head": "REMOTE REPORT FORMAT",
+     "l2": "SELECT:",
+     "scope": "console"
+    },
+    {
+     "text": "Temp Compensation (Standard/TC Vol)",
+     "code": "S79F00",
+     "head": "TEMP COMPENSATION",
+     "scope": "console"
+    },
+    {
+     "text": "Meter Calibration Offset",
+     "code": "S7B200",
+     "head": "METER CALIBRATION",
+     "l2": "OFFSET:"
+    },
+    {
+     "text": "Individual Meter Offset",
+     "code": "S7B400",
+     "head": "INDIVIDUAL METER OFFSET",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Meter Offset Row",
+     "code": "S7B400",
+     "head": "FUEL METER TANK OFFSET",
+     "l2": ""
+    },
+    {
+     "text": "Modify Tank/Meter Map",
+     "code": "S7B100",
+     "head": "MODIFY TANK/METER MAP",
+     "body": "PRESS <ENTER>",
+     "scope": "console"
+    }
+   ]
+  },
+  {
+   "function": "LIQUID SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Sensor Config. - Module 1 (up to 8)",
+     "code": "S70101"
+    },
+    {
+     "text": "Sensor Location",
+     "code": "S70201"
+    },
+    {
+     "text": "Sensor Types (Tri-State/NC/Dual Float Hydrostatic/Dual Float Discriminating/Dual Float High",
+     "code": "S70301",
+     "head": "L%d: ENTER SENSOR TYPE",
+     "l2": ""
+    },
+    {
+     "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
+     "code": "S70401",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "VAPOR SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Sensor Config. - Module 1 (up to 8)",
+     "code": "S70601"
+    },
+    {
+     "text": "Sensor Location",
+     "code": "S70701"
+    },
+    {
+     "text": "Sensor Threshold",
+     "code": "S70801"
+    },
+    {
+     "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
+     "code": "S70901",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "GROUNDWATER SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Sensor Config. - Module 1 (up to 8)",
+     "code": "S71101"
+    },
+    {
+     "text": "Sensor Location",
+     "code": "S71201"
+    },
+    {
+     "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
+     "code": "S71301",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "2-WIRE CL SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Sensor Config. - Module 1 (up to 8)",
+     "code": "S74101"
+    },
+    {
+     "text": "Sensor Location",
+     "code": "S74201"
+    },
+    {
+     "text": "Sensor Types (Discrim. Interstitial/Ultra 2)",
+     "code": "S74301",
+     "head": "C%d: ENTER SENSOR TYPE",
+     "l2": ""
+    },
+    {
+     "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
+     "code": "S74401",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "3-WIRE CL SENSOR SETUP",
+   "steps": [
+    {
+     "text": "Sensor Config. - Module 1 (up to 8)",
+     "code": "S74601"
+    },
+    {
+     "text": "Sensor Location",
+     "code": "S74701"
+    },
+    {
+     "text": "Sensor Mode (Standard/High Vapor)",
+     "code": "S74801",
+     "head": "H%d: ENTER SENSOR TYPE",
+     "l2": ""
+    },
+    {
+     "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
+     "code": "S74901",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "EXTERNAL INPUT SETUP",
+   "steps": [
+    {
+     "text": "Input Config. - Module 1 (up to 8)",
+     "code": "S80101"
+    },
+    {
+     "text": "Input Name",
+     "code": "S80201"
+    },
+    {
+     "text": "External Input Type (Standard [NO/NC]/Generator [Select Orientation (NO/NC)/Generator",
+     "code": "S80C01",
+     "head": "I%d: EXTERNAL INPUT TYPE",
+     "l2": ""
+    },
+    {
+     "text": "Standard ACK (NO/NC)",
+     "code": "S80C01",
+     "field": "S80C01.ack",
+     "when": {
+      "code": "S80C01",
+      "is": [
+       "41",
+       "42"
+      ],
+      "part": [
+       0,
+       2
+      ]
+     },
+     "head": "I%d: SELECT ORIENTATION",
+     "l2": ""
+    }
+   ]
+  },
+  {
+   "function": "OUTPUT RELAY SETUP",
+   "steps": [
+    {
+     "text": "Relay Config. - Module 1 (up to 8)",
+     "code": "S80601"
+    },
+    {
+     "text": "Enter Relay Designation",
+     "code": "S80701"
+    },
+    {
+     "text": "Select Relay Type (Standard [NO/NC]/Pump Control Output [Select Tank (None/Tank #)]/",
+     "code": "S80A01",
+     "head": "R%d: SELECT RELAY TYPE",
+     "l2": ""
+    },
+    {
+     "text": "Select Relay Type - Select Orientation (NO/NC)",
+     "code": "S80901",
+     "when": {
+      "code": "S80A01",
+      "is": [
+       "1",
+       "3"
+      ],
+      "default": "1"
+     },
+     "head": "R %d:SELECT ORIENTATION",
+     "l2": ""
+    },
+    {
+     "text": "Select Relay Type - Select Tank (None/Tank #)",
+     "code": "S80B01",
+     "when": {
+      "code": "S80A01",
+      "is": [
+       "2"
+      ],
+      "default": "1"
+     },
+     "head": "R%d: SELECT TANK",
+     "l2": ""
+    },
+    {
+     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
+     "code": "S80801",
+     "when": {
+      "code": "S80A01",
+      "not": [
+       "4"
+      ],
+      "default": "1"
+     }
+    }
+   ]
+  },
+  {
+   "function": "PLLD LINE DISABLE SETUP",
+   "steps": [
+    {
+     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
+     "code": "S78701"
+    }
+   ]
+  },
+  {
+   "function": "WPLLD LINE DISABLE SETUP",
+   "steps": [
+    {
+     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
+     "code": "S7A701"
+    }
+   ]
+  },
+  {
+   "function": "VLLD LINE DISABLE SETUP",
+   "steps": [
+    {
+     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
+     "code": "S75B01"
+    }
+   ]
+  },
+  {
+   "function": "SMART SENSOR SETUP",
+   "steps": [
+    {
+     "text": "SS Config. - Module 1 (up to 8)",
+     "code": "S72101"
+    },
+    {
+     "text": "Enter SmartSensor Label",
+     "code": "S72201"
+    },
+    {
+     "text": "Select SS Category (Air Flow Meter[ISD System Device - ref. manual 577013-800]/ Vapor",
+     "code": "S72301",
+     "l2": "CATEGORY:"
+    }
+   ]
+  },
+  {
+   "function": "EVR/ISD SETUP",
+   "steps": [
+    {
+     "text": "EVR Type (Balance/Vacuum Assist)",
+     "scope": "console",
+     "head": "EVR TYPE",
+     "console": "set.evr_type"
+    },
+    {
+     "text": "Vacuum Assist Type (Vapor Vac/Healy Vac)",
+     "scope": "console",
+     "head": "VACUUM ASSIST TYPE",
+     "console": "set.evr_vac_type",
+     "when": {
+      "setting": "evr_type",
+      "is": [
+       "VACUUM ASSIST"
+      ]
+     }
+    },
+    {
+     "text": "Accept High ORVR (Enabled/Disabled)",
+     "scope": "console",
+     "head": "ACCEPT HIGH ORVR",
+     "console": "set.evr_high_orvr"
+    },
+    {
+     "text": "Nozzle A/L Range Minimum",
+     "scope": "console",
+     "head": "NOZZLE A/L RANGE",
+     "l2": "MIN:",
+     "console": "set.evr_al_min"
+    },
+    {
+     "text": "Nozzle A/L Range Maximum",
+     "scope": "console",
+     "head": "NOZZLE A/L RANGE",
+     "l2": "MAX:",
+     "console": "set.evr_al_max"
+    },
+    {
+     "text": "Vapor Processor Type (None/Arid Permeator)",
+     "scope": "console",
+     "head": "VAPOR PROCESSOR TYPE",
+     "console": "set.evr_vp_type"
+    },
+    {
+     "text": "Air Flow Meter Enable/Disable",
+     "head": "LABEL: (AFM label)",
+     "l2": "SN#:",
+     "console": "set.evr_afm"
+    },
+    {
+     "text": "Vapor Pressure Sensor Enable/Disable",
+     "scope": "console",
+     "head": "LABEL: (PS label)",
+     "l2": "SN#:",
+     "console": "set.evr_ps"
+    },
+    {
+     "text": "Edit Fuel Hose Labels",
+     "head": "HOSE LABEL %d",
+     "console": "set.evr_hose_name",
+     "repeat": true
+    },
+    {
+     "text": "Fuel Position Label",
+     "head": "h%d: FUEL POS LABEL",
+     "console": "set.evr_fuel_pos",
+     "repeat": true
+    },
+    {
+     "text": "Assign Hose Label",
+     "head": "h%d: ASSIGN HOSE LABEL",
+     "console": "set.evr_hose_label",
+     "repeat": true
+    },
+    {
+     "text": "Assign AF Meter ID",
+     "head": "h%d: ASSIGN AF METER ID",
+     "console": "set.evr_afm_id",
+     "repeat": true
+    },
+    {
+     "text": "Add New Fuel Hose",
+     "head": "ADD NEW FUEL HOSE %d",
+     "body": "PRESS <ENTER>",
+     "isdflow": "addhose"
+    },
+    {
+     "text": "Clear Fuel Hose",
+     "head": "CLEAR FUEL HOSE %d",
+     "body": "PRESS <ENTER>",
+     "isdflow": "clearhose",
+     "repeat": true
+    },
+    {
+     "text": "Auto Map Grade - Hose",
+     "head": "AUTO MAP GRADE - HOSE",
+     "body": "PRESS <ENTER>",
+     "isdflow": "automap",
+     "when": {
+      "isd_hoses": true
+     }
+    },
+    {
+     "text": "Manual Map Grade - Hose",
+     "head": "MANUAL MAP GRADE - HOSE",
+     "body": "PRESS <ENTER>",
+     "isdflow": "manualmap",
+     "when": {
+      "isd_hoses": true
+     }
+    },
+    {
+     "text": "Set Analysis Start Time",
+     "scope": "console",
+     "head": "SET START TIME",
+     "console": "set.evr_start_time"
+    },
+    {
+     "text": "Set Post Delay Duration",
+     "scope": "console",
+     "head": "SET POST DELAY DURATION",
+     "console": "set.evr_post_delay"
+    }
+   ]
+  },
+  {
+   "function": "PMC SETUP",
+   "steps": [
+    {
+     "text": "Turn Off Vapor Processor",
+     "scope": "console",
+     "head": "Turn Off Vapor Processor",
+     "console": "set.pmc_off"
+    },
+    {
+     "text": "Turn On Vapor Processor",
+     "scope": "console",
+     "head": "Turn On Vapor Processor",
+     "console": "set.pmc_on"
+    }
+   ],
+   "when": {
+    "vst_processor": true
+   }
+  },
+  {
+   "function": "VMC SETUP",
+   "steps": [
+    {
+     "text": "Add VMC Serial Number",
+     "code": null,
+     "scope": "console",
+     "head": "ADD VMC SERIAL NUMBER",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Add VMC Serial Number Entry",
+     "code": null,
+     "scope": "console",
+     "console": "vmc.serial",
+     "head": "ADD VMC SERIAL NUMBER"
+    },
+    {
+     "text": "Edit VMC Serial Number",
+     "code": null,
+     "scope": "console",
+     "head": "EDIT VMC SERIAL NUMBER",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Edit VMC Serial Number Entry",
+     "code": null,
+     "scope": "console",
+     "console": "vmc.serial",
+     "head": "EDIT VMC SERIAL NUMBER"
+    },
+    {
+     "text": "Remove VMC Serial Number",
+     "code": null,
+     "scope": "console",
+     "head": "REMOVE VMC SERIAL NUMBER",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Remove VMC Serial Number Entry",
+     "code": null,
+     "scope": "console",
+     "console": "vmc.serial",
+     "head": "REMOVE VMC SERIAL NUMBER"
+    }
+   ]
+  },
+  {
+   "function": "ARCHIVE UTILITY",
+   "steps": [
+    {
+     "text": "Save Setup Data",
+     "code": null,
+     "archive": "save"
+    },
+    {
+     "text": "Restore Setup Data",
+     "code": null,
+     "archive": "restore"
+    },
+    {
+     "text": "Clear Setup Data",
+     "code": null,
+     "archive": "clear"
+    }
+   ]
+  }
+ ],
+ "status_device_code": {
+  "02": "T",
+  "03": "L",
+  "04": "V",
+  "05": "I",
+  "06": "P",
+  "07": "G",
+  "08": "C",
+  "12": "H",
+  "13": "U",
+  "14": "D",
+  "18": "M",
+  "19": "E",
+  "20": "T",
+  "21": "Q",
+  "26": "W",
+  "28": "s",
+  "34": "r",
+  "35": "X",
+  "36": "x",
+  "31": "h",
+  "32": "f"
+ }
+}
