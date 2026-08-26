@@ -1,0 +1,4675 @@
+{
+ "001": {
+  "inquire": false,
+  "name": "System Reset",
+  "page": 12,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "002": {
+  "inquire": false,
+  "name": "Clear Power Reset Flag",
+  "page": 13,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "003": {
+  "inquire": false,
+  "name": "Remote Alarm Reset",
+  "page": 14,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "010": {
+  "inquire": false,
+  "name": "Cancel Autodial Computer Mode Session",
+  "page": 15,
+  "section": "7.1",
+  "set": true,
+  "version": 14
+ },
+ "031": {
+  "inquire": false,
+  "name": "Confirm Clear Function",
+  "page": 16,
+  "section": "7.1",
+  "set": true,
+  "version": 10
+ },
+ "051": {
+  "inquire": false,
+  "name": "Clear In-Tank Delivery Reports",
+  "page": 17,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "052": {
+  "inquire": false,
+  "name": "Start In-Tank Leak Detect Test",
+  "page": 18,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "053": {
+  "inquire": false,
+  "name": "Stop In-Tank Leak Detect Test",
+  "page": 19,
+  "section": "7.1",
+  "set": true,
+  "version": 1
+ },
+ "054": {
+  "inquire": false,
+  "name": "Delete CSLD Rate Table",
+  "page": 20,
+  "section": "7.1",
+  "set": true,
+  "version": 5
+ },
+ "081": {
+  "inquire": false,
+  "name": "Start Pressure Line Leak Test (3.00 GPH only in V18)",
+  "page": 21,
+  "section": "7.1",
+  "set": true,
+  "version": 7
+ },
+ "082": {
+  "inquire": false,
+  "name": "Stop Pressure Line Leak Test",
+  "page": 22,
+  "section": "7.1",
+  "set": true,
+  "version": 7
+ },
+ "083": {
+  "inquire": false,
+  "name": "Start WPLLD Line Leak Test (3.00 GPH only in V18)",
+  "page": 23,
+  "section": "7.1",
+  "set": true,
+  "version": 10
+ },
+ "084": {
+  "inquire": false,
+  "name": "Stop WPLLD Line Leak Test",
+  "page": 24,
+  "section": "7.1",
+  "set": true,
+  "version": 10
+ },
+ "087": {
+  "inquire": false,
+  "name": "Start Pressure Line Leak Test by Type",
+  "page": 25,
+  "section": "7.1",
+  "set": true,
+  "version": 18
+ },
+ "088": {
+  "inquire": false,
+  "name": "Start WPLLD Line Leak Test by Type",
+  "page": 26,
+  "section": "7.1",
+  "set": true,
+  "version": 18
+ },
+ "089": {
+  "inquire": false,
+  "name": "Pressure Line Leak Pressure Offset Reset",
+  "page": 27,
+  "section": "7.1",
+  "set": true,
+  "version": 19
+ },
+ "090": {
+  "inquire": false,
+  "name": "WPLLD Line Leak Pressure Offset Reset",
+  "page": 28,
+  "section": "7.1",
+  "set": true,
+  "version": 19
+ },
+ "091": {
+  "inquire": false,
+  "name": "Close Current Shift",
+  "page": 29,
+  "section": "7.1",
+  "set": true,
+  "version": 15
+ },
+ "092": {
+  "inquire": false,
+  "name": "Start Pressure Line Leak Profile Line Test",
+  "page": 30,
+  "section": "7.1",
+  "set": true,
+  "version": 23
+ },
+ "093": {
+  "inquire": false,
+  "name": "Stop Pressure Line Leak Profile Line Test",
+  "page": 31,
+  "section": "7.1",
+  "set": true,
+  "version": 23
+ },
+ "094": {
+  "inquire": false,
+  "name": "Recalculate Pressure Line Leak Profile Bulk Modulus",
+  "page": 32,
+  "section": "7.1",
+  "set": true,
+  "version": 23
+ },
+ "095": {
+  "inquire": false,
+  "name": "Start Vacuum Sensor Manual Test",
+  "page": 33,
+  "section": "7.1",
+  "set": true,
+  "version": 24
+ },
+ "096": {
+  "inquire": false,
+  "name": "Stop Vacuum Sensor Manual Evacuation Test",
+  "page": 34,
+  "section": "7.1",
+  "set": true,
+  "version": 24
+ },
+ "097": {
+  "inquire": false,
+  "name": "Start Vacuum Sensor Evacuation Hold",
+  "page": 35,
+  "section": "7.1",
+  "set": true,
+  "version": 24
+ },
+ "098": {
+  "inquire": false,
+  "name": "Stop Vacuum Sensor Evacuation Hold",
+  "page": 36,
+  "section": "7.1",
+  "set": true,
+  "version": 24
+ },
+ "099": {
+  "inquire": false,
+  "name": "Start Mag Sump Leak Test",
+  "page": 37,
+  "section": "7.1",
+  "set": true,
+  "version": 26
+ },
+ "09A": {
+  "inquire": false,
+  "name": "Start Mag Sump Leak Test Measuring Height Phase",
+  "page": 38,
+  "section": "7.1",
+  "set": true,
+  "version": 26
+ },
+ "09B": {
+  "inquire": false,
+  "name": "Stop Mag Sump Leak Test",
+  "page": 39,
+  "section": "7.1",
+  "set": true,
+  "version": 26
+ },
+ "101": {
+  "inquire": true,
+  "name": "System Status Report",
+  "page": 40,
+  "section": "7.2.1",
+  "set": false,
+  "version": 1
+ },
+ "102": {
+  "inquire": true,
+  "name": "System Configuration Report",
+  "page": 47,
+  "section": "7.2.1",
+  "set": false,
+  "version": 1
+ },
+ "111": {
+  "inquire": true,
+  "name": "Priority Alarm History Report",
+  "page": 49,
+  "section": "7.2.1",
+  "set": false,
+  "version": 2
+ },
+ "112": {
+  "inquire": true,
+  "name": "Non-Priority Alarm History Report",
+  "page": 50,
+  "section": "7.2.1",
+  "set": false,
+  "version": 2
+ },
+ "113": {
+  "inquire": true,
+  "name": "Active Alarm Report",
+  "page": 51,
+  "section": "7.2.1",
+  "set": false,
+  "version": 14
+ },
+ "114": {
+  "inquire": true,
+  "name": "Cleared Alarm Report",
+  "page": 52,
+  "section": "7.2.1",
+  "set": false,
+  "version": 19
+ },
+ "115": {
+  "inquire": true,
+  "name": "Maintenance Tracker Unacknowledged Alarm Report",
+  "page": 53,
+  "section": "7.2.1",
+  "set": false,
+  "version": 27
+ },
+ "116": {
+  "inquire": true,
+  "name": "Service Report History",
+  "page": 54,
+  "section": "7.2.1",
+  "set": false,
+  "version": 19
+ },
+ "119": {
+  "inquire": true,
+  "name": "Maintenance History Report",
+  "page": 55,
+  "section": "7.2.1",
+  "set": false,
+  "version": 27
+ },
+ "11A": {
+  "inquire": true,
+  "name": "Service Report History",
+  "page": 57,
+  "section": "7.2.1",
+  "set": false,
+  "version": 27
+ },
+ "11B": {
+  "inquire": true,
+  "name": "Service Notice Session Report",
+  "page": 58,
+  "section": "7.2.1",
+  "set": false,
+  "version": 28
+ },
+ "132": {
+  "name": "Fiscal Height Security Report",
+  "version": 32,
+  "set": false,
+  "inquire": true,
+  "page": 57,
+  "section": null
+ },
+ "201": {
+  "inquire": true,
+  "name": "In-Tank Inventory Report",
+  "page": 59,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "202": {
+  "inquire": true,
+  "name": "In-Tank Delivery Report",
+  "page": 60,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "203": {
+  "inquire": true,
+  "name": "In-Tank Leak Detect Report",
+  "page": 61,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "204": {
+  "inquire": true,
+  "name": "In-Tank Shift Inventory Report",
+  "page": 62,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "205": {
+  "inquire": true,
+  "name": "In-Tank Status Report",
+  "page": 63,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "206": {
+  "inquire": true,
+  "name": "In-Tank Alarm History Report",
+  "page": 64,
+  "section": "7.2.2",
+  "set": false,
+  "version": 1
+ },
+ "207": {
+  "inquire": true,
+  "name": "In-Tank Leak Test History Report",
+  "page": 66,
+  "section": "7.2.2",
+  "set": false,
+  "version": 2
+ },
+ "208": {
+  "inquire": true,
+  "name": "In-Tank Leak Test Results Report",
+  "page": 68,
+  "section": "7.2.2",
+  "set": false,
+  "version": 2
+ },
+ "20A": {
+  "inquire": true,
+  "name": "HRM Adjusted Delivery Report",
+  "page": 69,
+  "section": "7.2.2",
+  "set": false,
+  "version": 110
+ },
+ "20B": {
+  "inquire": true,
+  "name": "BIR Adjusted Delivery Report",
+  "page": 70,
+  "section": "7.2.2",
+  "set": false,
+  "version": 110
+ },
+ "20C": {
+  "inquire": true,
+  "name": "In-Tank Most Recent Delivery Report",
+  "page": 72,
+  "section": "7.2.2",
+  "set": false,
+  "version": 15
+ },
+ "20D": {
+  "inquire": true,
+  "name": "In-Tank Stick Height Report",
+  "page": 73,
+  "section": "7.2.2",
+  "set": false,
+  "version": 15
+ },
+ "211": {
+  "inquire": true,
+  "name": "Tank Chart Report",
+  "page": 74,
+  "section": "7.2.2",
+  "set": false,
+  "version": 14
+ },
+ "212": {
+  "inquire": true,
+  "name": "In-Tank Leak Test History Report 2",
+  "page": 75,
+  "section": "7.2.2",
+  "set": false,
+  "version": 24
+ },
+ "213": {
+  "inquire": true,
+  "name": "In-Tank Extended Standard Delivery Report",
+  "page": 77,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "214": {
+  "inquire": true,
+  "name": "In-Tank Mass/Density Inventory Report",
+  "page": 79,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "215": {
+  "inquire": true,
+  "name": "In-Tank Mass/Density Delivery Report",
+  "page": 80,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "216": {
+  "inquire": true,
+  "name": "Tank 50 Point Heights, Volumes and Slope Report",
+  "page": 81,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "217": {
+  "inquire": true,
+  "name": "Tank Profile",
+  "page": 82,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "218": {
+  "inquire": true,
+  "name": "Tank Chart Audit Trail",
+  "page": 83,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "219": {
+  "inquire": true,
+  "name": "Tank Chart Security Status",
+  "page": 84,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "21A": {
+  "inquire": true,
+  "name": "In-Tank Inventory Report With 90/95% Ullage",
+  "page": 85,
+  "section": "7.2.2",
+  "set": false,
+  "version": 27
+ },
+ "21B": {
+  "inquire": true,
+  "name": "BIR Extended Adjusted Delivery Report",
+  "page": 86,
+  "section": "7.2.2",
+  "set": false,
+  "version": 26
+ },
+ "221": {
+  "inquire": true,
+  "name": "Ticketed Delivery Report",
+  "page": 88,
+  "section": "7.2.2",
+  "set": false,
+  "version": 116
+ },
+ "222": {
+  "inquire": true,
+  "name": "Bill of Lading Report",
+  "page": 89,
+  "section": "7.2.2",
+  "set": true,
+  "version": 23
+ },
+ "225": {
+  "inquire": true,
+  "name": "Periodic Delivery Variance Report",
+  "page": 90,
+  "section": "7.2.2",
+  "set": false,
+  "version": 116
+ },
+ "226": {
+  "inquire": true,
+  "name": "Weekly Delivery Variance Report",
+  "page": 92,
+  "section": "7.2.2",
+  "set": false,
+  "version": 116
+ },
+ "227": {
+  "inquire": true,
+  "name": "Daily Delivery Variance Report",
+  "page": 93,
+  "section": "7.2.2",
+  "set": false,
+  "version": 116
+ },
+ "237": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7.3",
+  "name": "In-Tank Product Inventory Report"
+ },
+ "238": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7.3",
+  "name": "In-Tank Siphon Manifolded Inventory Report"
+ },
+ "239": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7.3",
+  "name": "In-Tank Manifolded Delivery Report"
+ },
+ "23A": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7.3",
+  "name": "In-Tank Manifolded Delivery Report"
+ },
+ "251": {
+  "inquire": true,
+  "name": "CSLD Results Report",
+  "page": 94,
+  "section": "7.2.2",
+  "set": false,
+  "version": 3
+ },
+ "281": {
+  "inquire": true,
+  "name": "Fuel Management Report",
+  "page": 95,
+  "section": "7.2.2",
+  "set": false,
+  "version": 3
+ },
+ "282": {
+  "inquire": true,
+  "name": "FLS Diagnostic: Volume History Table",
+  "page": 96,
+  "section": "7.2.2",
+  "set": false,
+  "version": 19
+ },
+ "2E2": {
+  "inquire": true,
+  "name": "In-Tank Stored Inventory Report",
+  "page": 97,
+  "section": "7.2.2",
+  "set": false,
+  "version": 14
+ },
+ "301": {
+  "inquire": true,
+  "name": "Liquid Sensor Status Report",
+  "page": 98,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "302": {
+  "inquire": true,
+  "name": "Liquid Sensor Alarm History Report",
+  "page": 99,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "306": {
+  "inquire": true,
+  "name": "Vapor Sensor Status Report",
+  "page": 100,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "307": {
+  "inquire": true,
+  "name": "Vapor Sensor Alarm History Report",
+  "page": 101,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "311": {
+  "inquire": true,
+  "name": "Groundwater Sensor Status Report",
+  "page": 102,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "312": {
+  "inquire": true,
+  "name": "Groundwater Sensor Alarm History Report",
+  "page": 103,
+  "section": "7.2.3",
+  "set": false,
+  "version": 1
+ },
+ "315": {
+  "inquire": true,
+  "name": "Smart Sensor Status Report",
+  "page": 104,
+  "section": "7.2.3",
+  "set": false,
+  "version": 24
+ },
+ "316": {
+  "inquire": true,
+  "name": "Smart Sensor Alarm History Report",
+  "page": 105,
+  "section": "7.2.3",
+  "set": false,
+  "version": 24
+ },
+ "317": {
+  "inquire": true,
+  "name": "Mag Sump Leak Test In Progress/Last Test Report",
+  "page": 106,
+  "section": "7.2.3",
+  "set": false,
+  "version": 26
+ },
+ "318": {
+  "inquire": true,
+  "name": "Mag Sump Leak Test Last Passed Test Report",
+  "page": 108,
+  "section": "7.2.3",
+  "set": false,
+  "version": 26
+ },
+ "319": {
+  "inquire": true,
+  "name": "Mag Sump Leak Test Last 10 Test Passed Report",
+  "page": 109,
+  "section": "7.2.3",
+  "set": false,
+  "version": 26
+ },
+ "31A": {
+  "inquire": true,
+  "name": "Mag Sump Leak Test Last Passed Each Year Report",
+  "page": 110,
+  "section": "7.2.3",
+  "set": false,
+  "version": 26
+ },
+ "322": {
+  "inquire": true,
+  "name": "Pump Relay Monitor Status Report",
+  "page": 111,
+  "section": "7.2.3",
+  "set": false,
+  "version": 27
+ },
+ "323": {
+  "inquire": true,
+  "name": "Pump Relay Monitor Alarm History Report",
+  "page": 112,
+  "section": "7.2.3",
+  "set": false,
+  "version": 27
+ },
+ "333": {
+  "inquire": true,
+  "name": "Smart Sensor Install Log",
+  "page": 113,
+  "section": "7.2.3",
+  "set": false,
+  "version": 24
+ },
+ "341": {
+  "inquire": true,
+  "name": "Type A (2 Wire CL) Sensor Status Report",
+  "page": 114,
+  "section": "7.2.3",
+  "set": false,
+  "version": 2
+ },
+ "342": {
+  "inquire": true,
+  "name": "Type A (2 Wire CL) Sensor Alarm History Report",
+  "page": 115,
+  "section": "7.2.3",
+  "set": false,
+  "version": 2
+ },
+ "346": {
+  "inquire": true,
+  "name": "Type B (3 Wire CL) Sensor Status Report",
+  "page": 116,
+  "section": "7.2.3",
+  "set": false,
+  "version": 2
+ },
+ "347": {
+  "inquire": true,
+  "name": "Type B (3 Wire CL) Sensor Alarm History Report",
+  "page": 117,
+  "section": "7.2.3",
+  "set": false,
+  "version": 2
+ },
+ "34B": {
+  "inquire": true,
+  "name": "Universal Sensor Status Report",
+  "page": 118,
+  "section": "7.2.3",
+  "set": false,
+  "version": 4
+ },
+ "34C": {
+  "inquire": true,
+  "name": "Universal Sensor Alarm History Report",
+  "page": 119,
+  "section": "7.2.3",
+  "set": false,
+  "version": 4
+ },
+ "351": {
+  "inquire": true,
+  "name": "Volumetric Line Leak Result Report",
+  "page": 120,
+  "section": "7.2.4",
+  "set": false,
+  "version": 1
+ },
+ "352": {
+  "inquire": true,
+  "name": "Volumetric Line Leak Alarm History Report",
+  "page": 121,
+  "section": "7.2.4",
+  "set": false,
+  "version": 1
+ },
+ "353": {
+  "inquire": true,
+  "name": "Volumetric Line Leak Pump Status",
+  "page": 123,
+  "section": "7.2.4",
+  "set": false,
+  "version": 2
+ },
+ "373": {
+  "inquire": true,
+  "name": "Pressure Line Leak Test Results (with 0.20 test data)",
+  "page": 124,
+  "section": "7.2.4",
+  "set": false,
+  "version": 14
+ },
+ "374": {
+  "inquire": true,
+  "name": "Pressure Line Leak Test History (with 0.20 test data)",
+  "page": 126,
+  "section": "7.2.4",
+  "set": false,
+  "version": 14
+ },
+ "381": {
+  "inquire": true,
+  "name": "Pressure Line Leak Status",
+  "page": 127,
+  "section": "7.2.4",
+  "set": false,
+  "version": 7
+ },
+ "382": {
+  "inquire": true,
+  "name": "Pressure Line Leak Alarm History Report",
+  "page": 129,
+  "section": "7.2.4",
+  "set": false,
+  "version": 7
+ },
+ "383": {
+  "inquire": true,
+  "name": "Pressure Line Leak Test Results (0.10 test data only)",
+  "page": 130,
+  "section": "7.2.4",
+  "set": false,
+  "version": 7
+ },
+ "384": {
+  "inquire": true,
+  "name": "Pressure Line Leak Test History (0.10 test data only)",
+  "page": 132,
+  "section": "7.2.4",
+  "set": false,
+  "version": 7
+ },
+ "386": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Status",
+  "page": 133,
+  "section": "7.2.4",
+  "set": false,
+  "version": 10
+ },
+ "387": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Alarm History Report",
+  "page": 135,
+  "section": "7.2.4",
+  "set": false,
+  "version": 10
+ },
+ "388": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Test Results",
+  "page": 136,
+  "section": "7.2.4",
+  "set": false,
+  "version": 10
+ },
+ "389": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Test History",
+  "page": 138,
+  "section": "7.2.4",
+  "set": false,
+  "version": 12
+ },
+ "391": {
+  "inquire": true,
+  "name": "Tanker Load Report",
+  "page": 139,
+  "section": "7.2.5",
+  "set": false,
+  "version": 10
+ },
+ "392": {
+  "inquire": true,
+  "name": "Tanker Load Report II",
+  "page": 140,
+  "section": "7.2.5",
+  "set": false,
+  "version": 26
+ },
+ "401": {
+  "inquire": true,
+  "name": "Input Status Report",
+  "page": 142,
+  "section": "7.2.6",
+  "set": false,
+  "version": 1
+ },
+ "402": {
+  "inquire": true,
+  "name": "Input Alarm History Report",
+  "page": 143,
+  "section": "7.2.6",
+  "set": false,
+  "version": 1
+ },
+ "403": {
+  "inquire": true,
+  "name": "Input/Generator Alarm History Report",
+  "page": 144,
+  "section": "7.2.6",
+  "set": false,
+  "version": 5
+ },
+ "404": {
+  "name": "Input Generator Report",
+  "version": 31,
+  "set": false,
+  "inquire": true,
+  "page": 144,
+  "section": null
+ },
+ "406": {
+  "inquire": true,
+  "name": "Relay Status Report",
+  "page": 145,
+  "section": "7.2.6",
+  "set": false,
+  "version": 1
+ },
+ "411": {
+  "inquire": true,
+  "name": "VMCI Alarm History Report",
+  "page": 146,
+  "section": "7.2.6",
+  "set": false,
+  "version": 28
+ },
+ "412": {
+  "inquire": true,
+  "name": "VMC Alarm History Report",
+  "page": 147,
+  "section": "7.2.6",
+  "set": false,
+  "version": 28
+ },
+ "501": {
+  "inquire": true,
+  "name": "Set Time of day",
+  "page": 148,
+  "section": "7.3.1",
+  "set": true,
+  "version": 1
+ },
+ "502": {
+  "inquire": true,
+  "name": "Set Shift Start Time 1, 2, 3, 4",
+  "page": 149,
+  "section": "7.3.1",
+  "set": true,
+  "version": 1
+ },
+ "503": {
+  "inquire": true,
+  "name": "Set Print Header Line 1, 2, 3, 4",
+  "page": 150,
+  "section": "7.3.1",
+  "set": true,
+  "version": 1
+ },
+ "504": {
+  "inquire": true,
+  "name": "Set System RS-232 Security Code",
+  "page": 151,
+  "section": "7.3.1",
+  "set": true,
+  "version": 1
+ },
+ "505": {
+  "inquire": true,
+  "name": "Set System Type & Language Flags",
+  "page": 152,
+  "section": "7.3.1",
+  "set": true,
+  "version": 1
+ },
+ "506": {
+  "inquire": true,
+  "name": "Set Periodic Test Needed Warning",
+  "page": 153,
+  "section": "7.3.1",
+  "set": true,
+  "version": 2
+ },
+ "507": {
+  "inquire": true,
+  "name": "Set Days Before Periodic Test Needed Warning",
+  "page": 154,
+  "section": "7.3.1",
+  "set": true,
+  "version": 4
+ },
+ "508": {
+  "inquire": true,
+  "name": "Set Days Before Periodic Test Needed Alarm",
+  "page": 155,
+  "section": "7.3.1",
+  "set": true,
+  "version": 4
+ },
+ "509": {
+  "inquire": true,
+  "name": "Set Annual Test Needed Warning",
+  "page": 156,
+  "section": "7.3.1",
+  "set": true,
+  "version": 4
+ },
+ "50A": {
+  "inquire": true,
+  "name": "Set Days Before Annual Test Needed Warning",
+  "page": 157,
+  "section": "7.3.1",
+  "set": true,
+  "version": 4
+ },
+ "50B": {
+  "inquire": true,
+  "name": "Set Days Before Annual Test Needed Alarm",
+  "page": 158,
+  "section": "7.3.1",
+  "set": true,
+  "version": 4
+ },
+ "50C": {
+  "inquire": true,
+  "name": "Set Remote Printer Page Eject Flag",
+  "page": 159,
+  "section": "7.3.1",
+  "set": true,
+  "version": 5
+ },
+ "50D": {
+  "inquire": true,
+  "name": "Set Print Temperature Compensation Flag",
+  "page": 160,
+  "section": "7.3.1",
+  "set": true,
+  "version": 8
+ },
+ "50E": {
+  "inquire": true,
+  "name": "Set Temperature Compensation Value",
+  "page": 161,
+  "section": "7.3.1",
+  "set": true,
+  "version": 8
+ },
+ "50F": {
+  "inquire": true,
+  "name": "Set System Date/Time Display Format",
+  "page": 162,
+  "section": "7.3.1",
+  "set": true,
+  "version": 10
+ },
+ "511": {
+  "inquire": true,
+  "name": "Set BIR Shift Printouts Flag",
+  "page": 163,
+  "section": "7.3.1",
+  "set": true,
+  "version": 110
+ },
+ "512": {
+  "inquire": true,
+  "name": "Set BIR Daily Printouts Flag",
+  "page": 164,
+  "section": "7.3.1",
+  "set": true,
+  "version": 110
+ },
+ "513": {
+  "inquire": true,
+  "name": "Set Tanker Load Report Flag",
+  "page": 165,
+  "section": "7.3.1",
+  "set": true,
+  "version": 10
+ },
+ "514": {
+  "inquire": true,
+  "name": "Set H-Protocol Height/Volume format",
+  "page": 166,
+  "section": "7.3.1",
+  "set": true,
+  "version": 10
+ },
+ "515": {
+  "inquire": true,
+  "name": "Set HRM - QPLD Monthly Printout",
+  "page": 167,
+  "section": "7.3.1",
+  "set": true,
+  "version": 110
+ },
+ "516": {
+  "inquire": true,
+  "name": "Set Re-direct Local Printout Flag",
+  "page": 168,
+  "section": "7.3.1",
+  "set": true,
+  "version": 14
+ },
+ "517": {
+  "inquire": true,
+  "name": "Set System Type & Language Flags",
+  "page": 169,
+  "section": "7.3.1",
+  "set": true,
+  "version": 15
+ },
+ "518": {
+  "inquire": true,
+  "name": "Set Secondary Language Code Page Output",
+  "page": 170,
+  "section": "7.3.1",
+  "set": true,
+  "version": 15
+ },
+ "519": {
+  "inquire": true,
+  "name": "Set PLLD & WPLLD Duration Before Precision Retest",
+  "page": 171,
+  "section": "7.3.1",
+  "set": true,
+  "version": 15
+ },
+ "51A": {
+  "inquire": true,
+  "name": "Set Enable/Disable Auto Daylight Saving Time",
+  "page": 172,
+  "section": "7.3.1",
+  "set": true,
+  "version": 15
+ },
+ "51B": {
+  "inquire": true,
+  "name": "Set Start/End Daylight Saving Date and Time",
+  "page": 173,
+  "section": "7.3.1",
+  "set": true,
+  "version": 15
+ },
+ "51C": {
+  "inquire": true,
+  "name": "Set Ticketed Delivery Flag Enable",
+  "page": 174,
+  "section": "7.3.1",
+  "set": true,
+  "version": 116
+ },
+ "51D": {
+  "inquire": true,
+  "name": "Set Ticketed Delivery Temperature Compensation Flag",
+  "page": 175,
+  "section": "7.3.1",
+  "set": true,
+  "version": 116
+ },
+ "51E": {
+  "inquire": true,
+  "name": "Set Ticketed Delivery Close Day of Week",
+  "page": 176,
+  "section": "7.3.1",
+  "set": true,
+  "version": 116
+ },
+ "520": {
+  "inquire": true,
+  "name": "Set Receiver Auto Dial Type and Start Time II",
+  "page": 177,
+  "section": "7.3.2",
+  "set": true,
+  "version": 20
+ },
+ "521": {
+  "inquire": true,
+  "name": "Set Receiver Configuration Flag",
+  "page": 180,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "522": {
+  "inquire": true,
+  "name": "Set Receiver Location Label",
+  "page": 181,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "523": {
+  "inquire": true,
+  "name": "Set Receiver Telephone Number",
+  "page": 182,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "524": {
+  "inquire": true,
+  "name": "Set Receiver Dialing Destination Type",
+  "page": 183,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "525": {
+  "inquire": true,
+  "name": "Set Receiver Port Number to Dial",
+  "page": 184,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "526": {
+  "inquire": true,
+  "name": "Set Receiver Retry Number",
+  "page": 185,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "527": {
+  "inquire": true,
+  "name": "Set Receiver Retry Delay Time",
+  "page": 186,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "528": {
+  "inquire": true,
+  "name": "Set Receiver Confirmation Report Flag",
+  "page": 187,
+  "section": "7.3.2",
+  "set": true,
+  "version": 2
+ },
+ "529": {
+  "inquire": true,
+  "name": "Set Fax Auto Dial Method",
+  "page": 188,
+  "section": "7.3.2",
+  "set": true,
+  "version": 19
+ },
+ "52A": {
+  "inquire": true,
+  "name": "Set Receiver Report List",
+  "page": 189,
+  "section": "7.3.2",
+  "set": true,
+  "version": 3
+ },
+ "52B": {
+  "inquire": true,
+  "name": "Set Receiver Auto Dial Type and Start Time",
+  "page": 190,
+  "section": "7.3.2",
+  "set": true,
+  "version": 3
+ },
+ "52C": {
+  "inquire": true,
+  "name": "Set Receiver Auto Dial On Alarms",
+  "page": 192,
+  "section": "7.3.2",
+  "set": true,
+  "version": 3
+ },
+ "52D": {
+  "inquire": true,
+  "name": "Autodial Alarm Status",
+  "page": 193,
+  "section": "7.3.2",
+  "set": true,
+  "version": 17
+ },
+ "52E": {
+  "inquire": true,
+  "name": "Set Delay for Autodial on Alarm Clear",
+  "page": 194,
+  "section": "7.3.2",
+  "set": true,
+  "version": 19
+ },
+ "52F": {
+  "inquire": true,
+  "name": "Set Receiver Alarm Status",
+  "page": 195,
+  "section": "7.3.2",
+  "set": true,
+  "version": 19
+ },
+ "530": {
+  "inquire": true,
+  "name": "Beeper Enable/Disable",
+  "page": 196,
+  "section": "7.3.2",
+  "set": true,
+  "version": 26
+ },
+ "531": {
+  "inquire": true,
+  "name": "Set RS-232 End of Message",
+  "page": 197,
+  "section": "7.3.2",
+  "set": true,
+  "version": 8
+ },
+ "532": {
+  "inquire": true,
+  "name": "Set Ticketed Variance Analysis Printout Flags",
+  "page": 198,
+  "section": "7.3.3",
+  "set": true,
+  "version": 116
+ },
+ "533": {
+  "inquire": true,
+  "name": "Set Ticketed Delivery Book Variance Printout Flags",
+  "page": 199,
+  "section": "7.3.3",
+  "set": true,
+  "version": 116
+ },
+ "534": {
+  "inquire": true,
+  "name": "Set Ticketed Delivery Variance Printout Flags",
+  "page": 200,
+  "section": "7.3.3",
+  "set": true,
+  "version": 116
+ },
+ "536": {
+  "inquire": true,
+  "name": "Set RS-232 Security Code per Port",
+  "page": 201,
+  "section": "7.3.3",
+  "set": true,
+  "version": 20
+ },
+ "537": {
+  "inquire": true,
+  "name": "Set Display Format RS-232 ETX per Port",
+  "page": 202,
+  "section": "7.3.3",
+  "set": true,
+  "version": 20
+ },
+ "538": {
+  "inquire": true,
+  "name": "Set Computer Format RS-232 ETX per Port",
+  "page": 203,
+  "section": "7.3.3",
+  "set": true,
+  "version": 20
+ },
+ "546": {
+  "inquire": true,
+  "name": "Set Tank Periodic Test Needed Warning",
+  "page": 204,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "547": {
+  "inquire": true,
+  "name": "Set Days Before Tank Periodic Test Needed Warning",
+  "page": 205,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "548": {
+  "inquire": true,
+  "name": "Set Days Before Tank Periodic Test Needed Alarm",
+  "page": 206,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "549": {
+  "inquire": true,
+  "name": "Set Tank Annual Test Needed Warning",
+  "page": 207,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "54A": {
+  "inquire": true,
+  "name": "Set Days Before Tank Annual Test Needed Warning",
+  "page": 208,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "54B": {
+  "inquire": true,
+  "name": "Set Days Before Tank Annual Test Needed Alarm",
+  "page": 209,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "54C": {
+  "inquire": true,
+  "name": "Set CSLD Evaporation Reid Vapor Pressure Chart",
+  "page": 210,
+  "section": "7.3.3",
+  "set": true,
+  "version": 19
+ },
+ "54D": {
+  "inquire": true,
+  "name": "Set IS03166 3 Character Country Code",
+  "page": 211,
+  "section": "7.3.3",
+  "set": true,
+  "version": 29
+ },
+ "54E": {
+  "name": "Set Vapor Monitoring Type",
+  "version": 31,
+  "set": true,
+  "inquire": true,
+  "page": 212,
+  "section": null
+ },
+ "550": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Inventory Alarms Units Configuration"
+ },
+ "551": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Inventory Alarms Custom Units"
+ },
+ "553": {
+  "inquire": true,
+  "name": "Set Line Re-Enable Method",
+  "page": 212,
+  "section": "7.3.3",
+  "set": true,
+  "version": 19
+ },
+ "554": {
+  "inquire": true,
+  "name": "Set Periodic Line Leak Test Auto-Confirm",
+  "page": 213,
+  "section": "7.3.3",
+  "set": true,
+  "version": 18
+ },
+ "555": {
+  "inquire": true,
+  "name": "Set Annual Line Leak Test Auto-Confirm",
+  "page": 214,
+  "section": "7.3.3",
+  "set": true,
+  "version": 18
+ },
+ "556": {
+  "inquire": true,
+  "name": "Set Line Periodic Test Needed Warning",
+  "page": 215,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "557": {
+  "inquire": true,
+  "name": "Set Days Before Line Periodic Test Needed Warning",
+  "page": 216,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "558": {
+  "inquire": true,
+  "name": "Set Days Before Line Periodic Test Needed Alarm",
+  "page": 217,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "559": {
+  "inquire": true,
+  "name": "Set Line Annual Test Needed Warning",
+  "page": 218,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "55A": {
+  "inquire": true,
+  "name": "Set Days Before Line Annual Test Needed Warning",
+  "page": 219,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "55B": {
+  "inquire": true,
+  "name": "Set Days Before Line Annual Test Needed Alarm",
+  "page": 220,
+  "section": "7.3.3",
+  "set": true,
+  "version": 15
+ },
+ "55E": {
+  "name": "Set Fiscal Height Security Enable/Disable",
+  "version": 32,
+  "set": true,
+  "inquire": true,
+  "page": 222,
+  "section": null
+ },
+ "560": {
+  "inquire": true,
+  "name": "Set Mass/Density Enable/Disable",
+  "page": 221,
+  "section": "7.3.3",
+  "set": true,
+  "version": 26
+ },
+ "564": {
+  "inquire": true,
+  "name": "Set Ullage",
+  "page": 222,
+  "section": "7.3.3",
+  "set": true,
+  "version": 27
+ },
+ "565": {
+  "inquire": true,
+  "name": "Set Maintenance History",
+  "page": 223,
+  "section": "7.3.3",
+  "set": true,
+  "version": 27
+ },
+ "566": {
+  "inquire": true,
+  "name": "Set Service Notice Enable",
+  "page": 224,
+  "section": "7.3.3",
+  "set": true,
+  "version": 28
+ },
+ "567": {
+  "inquire": true,
+  "name": "Set Service Notice Delivery Override Enable",
+  "page": 225,
+  "section": "7.3.3",
+  "set": true,
+  "version": 28
+ },
+ "568": {
+  "inquire": true,
+  "name": "Set Service Notice Session Enable",
+  "page": 226,
+  "section": "7.3.3",
+  "set": true,
+  "version": 28
+ },
+ "569": {
+  "inquire": true,
+  "name": "Set Service Notice Session Duration",
+  "page": 227,
+  "section": "7.3.3",
+  "set": true,
+  "version": 28
+ },
+ "56A": {
+  "inquire": true,
+  "name": "System Tank Chart Security Code Audit Trail",
+  "page": 228,
+  "section": "7.3.3",
+  "set": false,
+  "version": 29
+ },
+ "581": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Alarm Filter"
+ },
+ "5BC": {
+  "inquire": true,
+  "name": "Set Receiver Auto Dial on Alarm II",
+  "page": 229,
+  "section": "7.3.3",
+  "set": true,
+  "version": 19
+ },
+ "5BD": {
+  "inquire": true,
+  "name": "Set Enable/Disable Custom Alarms",
+  "page": 230,
+  "section": "7.3.3",
+  "set": true,
+  "version": 23
+ },
+ "5BE": {
+  "inquire": true,
+  "name": "Set Custom Alarm Labels",
+  "page": 231,
+  "section": "7.3.3",
+  "set": true,
+  "version": 23
+ },
+ "5BF": {
+  "inquire": true,
+  "name": "Set Custom Alarm Label, device number, and indications",
+  "page": 232,
+  "section": "7.3.3",
+  "set": true,
+  "version": 26
+ },
+ "5E2": {
+  "inquire": true,
+  "name": "Set Inventory Record Time 1, 2, 3, 4",
+  "page": 234,
+  "section": "7.3.3",
+  "set": true,
+  "version": 14
+ },
+ "601": {
+  "inquire": true,
+  "name": "Set Tank Configuration",
+  "page": 235,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "602": {
+  "inquire": true,
+  "name": "Set Tank Product Label",
+  "page": 236,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "603": {
+  "inquire": true,
+  "name": "Set Tank Product Code",
+  "page": 237,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "604": {
+  "inquire": true,
+  "name": "Set Tank 1 Point Full Height Volume",
+  "page": 238,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "605": {
+  "inquire": true,
+  "name": "Set Tank 4 Point Full, 3/4, 1/2, 1/4 Volumes",
+  "page": 239,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "606": {
+  "inquire": true,
+  "name": "Set Tank 20 Point Full, 95%, 90%,...Volumes",
+  "page": 240,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "607": {
+  "inquire": true,
+  "name": "Set Tank Diameter",
+  "page": 241,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "608": {
+  "inquire": true,
+  "name": "Set Tank Tilt",
+  "page": 242,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "609": {
+  "inquire": true,
+  "name": "Set Tank Thermal Expansion Coefficient",
+  "page": 243,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "60A": {
+  "inquire": true,
+  "name": "Set Tank Linear Calculated Full Volume",
+  "page": 244,
+  "section": "7.3.4",
+  "set": true,
+  "version": 9
+ },
+ "60B": {
+  "inquire": true,
+  "name": "Set Tank Stick Height Function Enable",
+  "page": 245,
+  "section": "7.3.4",
+  "set": true,
+  "version": 15
+ },
+ "60C": {
+  "inquire": true,
+  "name": "Set Tank Stick Height Offset",
+  "page": 246,
+  "section": "7.3.4",
+  "set": true,
+  "version": 15
+ },
+ "60E": {
+  "inquire": true,
+  "name": "Set Tank Programmable Float Parameters",
+  "page": 247,
+  "section": "7.3.4",
+  "set": true,
+  "version": 22
+ },
+ "60F": {
+  "inquire": true,
+  "name": "Set Tank Probe Offset",
+  "page": 248,
+  "section": "7.3.4",
+  "set": true,
+  "version": 22
+ },
+ "610": {
+  "inquire": true,
+  "name": "Set Tank Delivery Delay",
+  "page": 249,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "611": {
+  "inquire": true,
+  "name": "Set Tank Leak Test Type & Start Time",
+  "page": 250,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "612": {
+  "inquire": true,
+  "name": "Set Tank SIPHON Manifolded Partners",
+  "page": 252,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "613": {
+  "inquire": true,
+  "name": "Set CSLD Probability of Detection",
+  "page": 253,
+  "section": "7.3.4",
+  "set": true,
+  "version": 3
+ },
+ "614": {
+  "inquire": true,
+  "name": "Set CSLD Climate Factor",
+  "page": 254,
+  "section": "7.3.4",
+  "set": true,
+  "version": 5
+ },
+ "615": {
+  "inquire": true,
+  "name": "Set BIR Meter Data Present",
+  "page": 255,
+  "section": "7.3.4",
+  "set": true,
+  "version": 108
+ },
+ "616": {
+  "inquire": true,
+  "name": "Set AccuChart Update Scheduling",
+  "page": 256,
+  "section": "7.3.4",
+  "set": true,
+  "version": 110
+ },
+ "618": {
+  "inquire": true,
+  "name": "Set Tank CSLD Evaporation Compensation",
+  "page": 257,
+  "section": "7.3.4",
+  "set": true,
+  "version": 19
+ },
+ "619": {
+  "inquire": true,
+  "name": "Set Tank Stage II Vapor Recovery",
+  "page": 258,
+  "section": "7.3.4",
+  "set": true,
+  "version": 19
+ },
+ "61A": {
+  "inquire": true,
+  "name": "Set In-Tank Leak Test Early Stop",
+  "page": 259,
+  "section": "7.3.4",
+  "set": true,
+  "version": 20
+ },
+ "61B": {
+  "inquire": true,
+  "name": "Set In-Tank Static Gross Test Auto-Confirm",
+  "page": 260,
+  "section": "7.3.4",
+  "set": true,
+  "version": 121
+ },
+ "61C": {
+  "inquire": true,
+  "name": "Set CSLD Report Only Mode",
+  "page": 261,
+  "section": "7.3.4",
+  "set": true,
+  "version": 121
+ },
+ "61D": {
+  "inquire": true,
+  "name": "Set Tank LINE Manifolded Partners",
+  "page": 262,
+  "section": "7.3.4",
+  "set": true,
+  "version": 23
+ },
+ "61E": {
+  "inquire": true,
+  "name": "Set Tank Density",
+  "page": 263,
+  "section": "7.3.4",
+  "set": true,
+  "version": 26
+ },
+ "61F": {
+  "inquire": true,
+  "name": "Set Delivery Density",
+  "page": 264,
+  "section": "7.3.4",
+  "set": true,
+  "version": 26
+ },
+ "621": {
+  "inquire": true,
+  "name": "Set Tank Low Level Limit",
+  "page": 265,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "622": {
+  "inquire": true,
+  "name": "Set Tank High Level Limit",
+  "page": 266,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "623": {
+  "inquire": true,
+  "name": "Set Tank Overfill Level Limit",
+  "page": 267,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "624": {
+  "inquire": true,
+  "name": "Set Tank High Water Level Limit",
+  "page": 268,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "625": {
+  "inquire": true,
+  "name": "Set Tank Sudden Loss Limit",
+  "page": 269,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "626": {
+  "inquire": true,
+  "name": "Set Tank Leak Alarm Limit",
+  "page": 270,
+  "section": "7.3.4",
+  "set": true,
+  "version": 1
+ },
+ "627": {
+  "inquire": true,
+  "name": "Set Tank High Water Warning Limit",
+  "page": 271,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "628": {
+  "inquire": true,
+  "name": "Set Tank Maximum Volume Limit",
+  "page": 272,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "629": {
+  "inquire": true,
+  "name": "Set Tank Delivery Required Limit",
+  "page": 273,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "62A": {
+  "inquire": true,
+  "name": "Set Tank Annual Leak Test Minimum Volume",
+  "page": 274,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "62B": {
+  "inquire": true,
+  "name": "Set Tank Last Annual Test",
+  "page": 275,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "62C": {
+  "inquire": true,
+  "name": "Set Tank Periodic Test Type",
+  "page": 276,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "62D": {
+  "inquire": true,
+  "name": "Set Enable/Disable Tank Leak Test Fail Alarms",
+  "page": 277,
+  "section": "7.3.4",
+  "set": true,
+  "version": 2
+ },
+ "62E": {
+  "inquire": true,
+  "name": "Set CAP0 Probe Conductive Boot Flag",
+  "page": 278,
+  "section": "7.3.4",
+  "set": true,
+  "version": 3
+ },
+ "62F": {
+  "inquire": true,
+  "name": "Set Mag Probe Float Size",
+  "page": 279,
+  "section": "7.3.4",
+  "set": true,
+  "version": 3
+ },
+ "630": {
+  "inquire": true,
+  "name": "Set Tank Leak Test Notify",
+  "page": 280,
+  "section": "7.3.4",
+  "set": true,
+  "version": 3
+ },
+ "631": {
+  "inquire": true,
+  "name": "Set Tank Leak Test Averaging",
+  "page": 281,
+  "section": "7.3.4",
+  "set": true,
+  "version": 5
+ },
+ "632": {
+  "inquire": true,
+  "name": "Set Tank Test Siphon Break",
+  "page": 282,
+  "section": "7.3.4",
+  "set": true,
+  "version": 5
+ },
+ "633": {
+  "inquire": true,
+  "name": "Set Leak Test Report Type",
+  "page": 283,
+  "section": "7.3.4",
+  "set": true,
+  "version": 9
+ },
+ "634": {
+  "inquire": true,
+  "name": "Set Tank HRM Reconciliation Warning Limit",
+  "page": 284,
+  "section": "7.3.4",
+  "set": true,
+  "version": 110
+ },
+ "635": {
+  "inquire": true,
+  "name": "Set Tank HRM Reconciliation Alarm Limit",
+  "page": 285,
+  "section": "7.3.4",
+  "set": true,
+  "version": 110
+ },
+ "636": {
+  "inquire": true,
+  "name": "Set Tank Periodic Leak Test Minimum Volume",
+  "page": 286,
+  "section": "7.3.4",
+  "set": true,
+  "version": 14
+ },
+ "639": {
+  "inquire": true,
+  "name": "Set Tank AccuChart End Shape Type and Factor",
+  "page": 287,
+  "section": "7.3.4",
+  "set": true,
+  "version": 115
+ },
+ "63A": {
+  "inquire": true,
+  "name": "Set Tank Low Level Threshold for Sequential Line Manifold",
+  "page": 288,
+  "section": "7.3.4",
+  "set": true,
+  "version": 22
+ },
+ "63B": {
+  "inquire": true,
+  "name": "Set Tank 50 Point Heights and Volumes",
+  "page": 289,
+  "section": "7.3.4",
+  "set": true,
+  "version": 26
+ },
+ "63C": {
+  "inquire": true,
+  "name": "Set Tank 50 Point Full Volume",
+  "page": 291,
+  "section": "7.3.4",
+  "set": true,
+  "version": 26
+ },
+ "63D": {
+  "inquire": true,
+  "name": "Set Tank Vapor Loss Factor",
+  "page": 292,
+  "section": "7.3.4",
+  "set": true,
+  "version": 29
+ },
+ "642": {
+  "name": "Set Tank Water Alarm Filter Level",
+  "version": 31,
+  "set": true,
+  "inquire": true,
+  "page": 295,
+  "section": null
+ },
+ "648": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Probe Water Minimum"
+ },
+ "64B": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank Water Alarm Filter Delay"
+ },
+ "651": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank Max or Label Alarm Threshold"
+ },
+ "652": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank High Product Alarm Threshold"
+ },
+ "653": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank Overfill Alarm Threshold"
+ },
+ "654": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank Delivery Needed Alarm Threshold"
+ },
+ "655": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Tank Low Product Alarm Threshold"
+ },
+ "680": {
+  "inquire": true,
+  "name": "Fuel Management General Setup Inquiry",
+  "page": 293,
+  "section": "7.3.4",
+  "set": false,
+  "version": 6
+ },
+ "681": {
+  "inquire": true,
+  "name": "Set Fuel Management Delivery Needed Warning",
+  "page": 294,
+  "section": "7.3.4",
+  "set": true,
+  "version": 6
+ },
+ "682": {
+  "inquire": true,
+  "name": "Set Fuel Management Automatic Report Print Time",
+  "page": 295,
+  "section": "7.3.4",
+  "set": true,
+  "version": 6
+ },
+ "683": {
+  "inquire": true,
+  "name": "Set Fuel Management Average Daily Sales",
+  "page": 296,
+  "section": "7.3.4",
+  "set": true,
+  "version": 6
+ },
+ "701": {
+  "inquire": true,
+  "name": "Set Liquid Sensor Configuration",
+  "page": 297,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "702": {
+  "inquire": true,
+  "name": "Set Liquid Sensor Location Label",
+  "page": 298,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "703": {
+  "inquire": true,
+  "name": "Set Liquid Sensor Type",
+  "page": 299,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "704": {
+  "inquire": true,
+  "name": "Set Liquid Sensor Category",
+  "page": 300,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "706": {
+  "inquire": true,
+  "name": "Set Vapor Sensor Configuration",
+  "page": 301,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "707": {
+  "inquire": true,
+  "name": "Set Vapor Sensor Location Label",
+  "page": 302,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "708": {
+  "inquire": true,
+  "name": "Set Vapor Sensor Alarm Threshold",
+  "page": 303,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "709": {
+  "inquire": true,
+  "name": "Set Vapor Sensor Category",
+  "page": 304,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "711": {
+  "inquire": true,
+  "name": "Set Groundwater Sensor Configuration",
+  "page": 305,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "712": {
+  "inquire": true,
+  "name": "Set Groundwater Sensor Location Label",
+  "page": 306,
+  "section": "7.3.5",
+  "set": true,
+  "version": 1
+ },
+ "713": {
+  "inquire": true,
+  "name": "Set Groundwater Sensor Category",
+  "page": 307,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "721": {
+  "inquire": true,
+  "name": "Set Smart Sensor Configuration",
+  "page": 308,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "722": {
+  "inquire": true,
+  "name": "Set Smart Sensor Label",
+  "page": 309,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "723": {
+  "inquire": true,
+  "name": "Set Smart Sensor Category",
+  "page": 310,
+  "section": "7.3.5",
+  "set": true,
+  "version": 25
+ },
+ "727": {
+  "inquire": true,
+  "name": "Set MAG Sensor Alarm Upgrade Delay",
+  "page": 311,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "728": {
+  "inquire": true,
+  "name": "Set MAG Sensor Alarm Threshold",
+  "page": 312,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "729": {
+  "inquire": true,
+  "name": "Set Vacuum Sensor Pump Number",
+  "page": 314,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "72A": {
+  "inquire": true,
+  "name": "Set Vacuum Sensor Volume",
+  "page": 315,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "72B": {
+  "inquire": true,
+  "name": "Set Vacuum Sensor Relief Valve Present",
+  "page": 316,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "72C": {
+  "inquire": true,
+  "name": "Set Vacuum Sensor Relief Valve Pressure",
+  "page": 317,
+  "section": "7.3.5",
+  "set": true,
+  "version": 24
+ },
+ "741": {
+  "inquire": true,
+  "name": "Set Type A (2 Wire CL) Sensor Configuration",
+  "page": 318,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "742": {
+  "inquire": true,
+  "name": "Set Type A (2 Wire CL) Sensor Location Label",
+  "page": 319,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "743": {
+  "inquire": true,
+  "name": "Set Type A (2 Wire CL) Sensor Type",
+  "page": 320,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "744": {
+  "inquire": true,
+  "name": "Set Type A (2 Wire CL) Sensor Category",
+  "page": 321,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "746": {
+  "inquire": true,
+  "name": "Set Type B (3 Wire CL) Sensor Configuration",
+  "page": 322,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "747": {
+  "inquire": true,
+  "name": "Set Type B (3 Wire CL) Sensor Location Label",
+  "page": 323,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "748": {
+  "inquire": true,
+  "name": "Set Type B (3 Wire CL) Sensor Type",
+  "page": 324,
+  "section": "7.3.5",
+  "set": true,
+  "version": 5
+ },
+ "749": {
+  "inquire": true,
+  "name": "Set Type B (3 Wire CL) Sensor Category",
+  "page": 325,
+  "section": "7.3.5",
+  "set": true,
+  "version": 2
+ },
+ "74B": {
+  "inquire": true,
+  "name": "Set Universal Sensor Configuration",
+  "page": 326,
+  "section": "7.3.5",
+  "set": true,
+  "version": 4
+ },
+ "74C": {
+  "inquire": true,
+  "name": "Set Universal Sensor Location Label",
+  "page": 327,
+  "section": "7.3.5",
+  "set": true,
+  "version": 4
+ },
+ "74D": {
+  "inquire": true,
+  "name": "Set Universal Sensor Type",
+  "page": 328,
+  "section": "7.3.5",
+  "set": true,
+  "version": 4
+ },
+ "74E": {
+  "inquire": true,
+  "name": "Set Universal Sensor Category",
+  "page": 329,
+  "section": "7.3.5",
+  "set": true,
+  "version": 4
+ },
+ "751": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Configuration",
+  "page": 330,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "752": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Tank Number",
+  "page": 331,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "753": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak 2 Inch Pipe Length",
+  "page": 332,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "754": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak 3 Inch Pipe Length",
+  "page": 333,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "755": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Pump PSI",
+  "page": 334,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "756": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Piping Material",
+  "page": 335,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "757": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Shutdown Rate",
+  "page": 336,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "758": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Pump Side Test",
+  "page": 337,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "759": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Test Type & Start Time",
+  "page": 338,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "75A": {
+  "inquire": true,
+  "name": "Set Line Leak Lockout Schedule (All Types)",
+  "page": 340,
+  "section": "7.3.6",
+  "set": true,
+  "version": 1
+ },
+ "75B": {
+  "inquire": true,
+  "name": "Set Line Disable Alarm Assignments",
+  "page": 341,
+  "section": "7.3.6",
+  "set": true,
+  "version": 2
+ },
+ "75C": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Last Annual Test",
+  "page": 342,
+  "section": "7.3.6",
+  "set": true,
+  "version": 2
+ },
+ "75D": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Dispense Mode",
+  "page": 343,
+  "section": "7.3.6",
+  "set": true,
+  "version": 4
+ },
+ "75E": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Fuel Type",
+  "page": 344,
+  "section": "7.3.6",
+  "set": true,
+  "version": 4
+ },
+ "75F": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Wait Method",
+  "page": 345,
+  "section": "7.3.6",
+  "set": true,
+  "version": 5
+ },
+ "760": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Location Label",
+  "page": 346,
+  "section": "7.3.6",
+  "set": true,
+  "version": 6
+ },
+ "761": {
+  "inquire": true,
+  "name": "Set Volumetric Line Leak Blend Partner",
+  "page": 347,
+  "section": "7.3.6",
+  "set": true,
+  "version": 7
+ },
+ "771": {
+  "inquire": true,
+  "name": "Set Pump Sensor Configuration",
+  "page": 348,
+  "section": "7.3.7",
+  "set": true,
+  "version": 2
+ },
+ "772": {
+  "inquire": true,
+  "name": "Set Pump Sensor Tank Number",
+  "page": 349,
+  "section": "7.3.7",
+  "set": true,
+  "version": 2
+ },
+ "773": {
+  "inquire": true,
+  "name": "Set Pump Sensor Dispense Mode",
+  "page": 350,
+  "section": "7.3.7",
+  "set": false,
+  "version": 4
+ },
+ "774": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Continuous Handle Alarm Timeout",
+  "page": 351,
+  "section": "7.3.8",
+  "set": true,
+  "version": 27
+ },
+ "775": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Profile Line Test Leak Rate",
+  "page": 352,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "776": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Profile Line Test Reference Pressure",
+  "page": 353,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "777": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Primary Pipe Diameter",
+  "page": 354,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "778": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Secondary Pipe Diameter",
+  "page": 355,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "779": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Primary Pipe Bulk Modulus",
+  "page": 356,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "77A": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Secondary Pipe Bulk Modulus",
+  "page": 357,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "77B": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Thermal Expansion Coefficient",
+  "page": 358,
+  "section": "7.3.8",
+  "set": true,
+  "version": 23
+ },
+ "77C": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Low Pressure Shutoff",
+  "page": 359,
+  "section": "7.3.8",
+  "set": true,
+  "version": 19
+ },
+ "77D": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Altitude Pressure Offset",
+  "page": 360,
+  "section": "7.3.8",
+  "set": true,
+  "version": 19
+ },
+ "77E": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Passive 0.10 GPH Test Enable Flag",
+  "page": 361,
+  "section": "7.3.8",
+  "set": true,
+  "version": 24
+ },
+ "77F": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Secondary Pipe Length",
+  "page": 362,
+  "section": "7.3.8",
+  "set": true,
+  "version": 17
+ },
+ "780": {
+  "inquire": true,
+  "name": "Pressure Line Leak General Setup Inquiry",
+  "page": 363,
+  "section": "7.3.8",
+  "set": false,
+  "version": 7
+ },
+ "781": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Configuration",
+  "page": 364,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "782": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Label",
+  "page": 365,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "783": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak 0.10 GPH Test Schedule",
+  "page": 366,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "784": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Shutdown Rate",
+  "page": 367,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "785": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Tank Number",
+  "page": 368,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "786": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Dispense Mode",
+  "page": 369,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "787": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Disable Alarm Assignments",
+  "page": 370,
+  "section": "7.3.8",
+  "set": true,
+  "version": 7
+ },
+ "788": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Piping Material",
+  "page": 371,
+  "section": "7.3.8",
+  "set": true,
+  "version": 9
+ },
+ "789": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Primary Pipe Length",
+  "page": 372,
+  "section": "7.3.8",
+  "set": true,
+  "version": 9
+ },
+ "78A": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Sensor Type",
+  "page": 373,
+  "section": "7.3.8",
+  "set": true,
+  "version": 11
+ },
+ "78B": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak 0.10 GPH Test Schedule",
+  "page": 374,
+  "section": "7.3.8",
+  "set": true,
+  "version": 16
+ },
+ "78C": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak 0.20 GPH Test Schedule",
+  "page": 375,
+  "section": "7.3.8",
+  "set": true,
+  "version": 12
+ },
+ "78E": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak 0.10 GPH Auto Test Enable",
+  "page": 376,
+  "section": "7.3.8",
+  "set": true,
+  "version": 17
+ },
+ "78F": {
+  "inquire": true,
+  "name": "Set Pressure Line Leak Dispense Threshold",
+  "page": 377,
+  "section": "7.3.8",
+  "set": true,
+  "version": 17
+ },
+ "790": {
+  "inquire": true,
+  "name": "DIM Software Revision",
+  "page": 378,
+  "section": "7.3.9",
+  "set": false,
+  "version": 118
+ },
+ "791": {
+  "inquire": true,
+  "name": "Set Mechanical Dispenser Interface String",
+  "page": 379,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "792": {
+  "inquire": true,
+  "name": "Set Electronic Dispenser Interface String",
+  "page": 380,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "793": {
+  "inquire": true,
+  "name": "Set Reconciliation Auto Daily Closing Time",
+  "page": 381,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "794": {
+  "inquire": true,
+  "name": "Set Auto Shift Closing Time 1, 2, 3, 4",
+  "page": 382,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "795": {
+  "inquire": true,
+  "name": "Set Periodic Reconciliation Mode",
+  "page": 383,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "796": {
+  "inquire": true,
+  "name": "Set Periodic Reconciliation Report Length",
+  "page": 384,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "797": {
+  "inquire": true,
+  "name": "Set Periodic Reconciliation Alarm Flag",
+  "page": 385,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "798": {
+  "inquire": true,
+  "name": "Set Periodic Reconciliation Alarm Threshold",
+  "page": 386,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "799": {
+  "inquire": true,
+  "name": "Set Periodic Reconciliation Alarm Offset",
+  "page": 387,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79A": {
+  "inquire": true,
+  "name": "Set Remote Printer Reconciliation Report Format",
+  "page": 388,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79B": {
+  "inquire": true,
+  "name": "Set Shift Manual Adjustment Value",
+  "page": 389,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79C": {
+  "inquire": true,
+  "name": "Set Daily Manual Adjustment Value",
+  "page": 390,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79D": {
+  "inquire": true,
+  "name": "Close Current Reconciliation Shift",
+  "page": 391,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79E": {
+  "inquire": false,
+  "name": "Clear Tank Map Table",
+  "page": 392,
+  "section": "7.3.9",
+  "set": true,
+  "version": 106
+ },
+ "79F": {
+  "inquire": true,
+  "name": "Set BIR Temperature Compensation Flag",
+  "page": 393,
+  "section": "7.3.9",
+  "set": true,
+  "version": 108
+ },
+ "7A0": {
+  "inquire": true,
+  "name": "WPLLD Line Leak General Setup",
+  "page": 394,
+  "section": "7.3.10",
+  "set": false,
+  "version": 10
+ },
+ "7A1": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Configuration",
+  "page": 395,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A2": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Label",
+  "page": 396,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A3": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak 0.20 GPH Test Schedule",
+  "page": 397,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A4": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Shutdown Rate",
+  "page": 398,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A5": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Tank Number",
+  "page": 399,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A6": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Dispense Mode",
+  "page": 400,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A7": {
+  "inquire": true,
+  "name": "Set WPLLD Line Disable Alarm Assignments",
+  "page": 401,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A8": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Pipe Type",
+  "page": 402,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7A9": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Pipe Length",
+  "page": 403,
+  "section": "7.3.10",
+  "set": true,
+  "version": 10
+ },
+ "7AA": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak 0.10 GPH Test Schedule",
+  "page": 404,
+  "section": "7.3.10",
+  "set": true,
+  "version": 11
+ },
+ "7AC": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak 0.10 GPH Test Schedule Enable",
+  "page": 405,
+  "section": "7.3.10",
+  "set": true,
+  "version": 17
+ },
+ "7AD": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Secondary Pipe Length",
+  "page": 406,
+  "section": "7.3.10",
+  "set": true,
+  "version": 20
+ },
+ "7AE": {
+  "inquire": true,
+  "name": "WPLLD Continuous Handle Alarm Timeout",
+  "page": 407,
+  "section": "7.3.10",
+  "set": true,
+  "version": 27
+ },
+ "7AF": {
+  "inquire": true,
+  "name": "Set WPLLD Line Leak Altitude Pressure Offset",
+  "page": 408,
+  "section": "7.3.10",
+  "set": true,
+  "version": 19
+ },
+ "7B1": {
+  "inquire": true,
+  "name": "Set BIR Meter/Tank Mapping",
+  "page": 409,
+  "section": "7.3.11",
+  "set": true,
+  "version": 110
+ },
+ "7B2": {
+  "inquire": true,
+  "name": "Set Meter Calibration Offset",
+  "page": 410,
+  "section": "7.3.11",
+  "set": true,
+  "version": 20
+ },
+ "7B4": {
+  "inquire": true,
+  "name": "Set Individual Meter Offset",
+  "page": 411,
+  "section": "7.3.11",
+  "set": true,
+  "version": 29
+ },
+ "7B5": {
+  "inquire": false,
+  "name": "Set Ticketed Delivery",
+  "page": 412,
+  "section": "7.3.11",
+  "set": true,
+  "version": 116
+ },
+ "7B6": {
+  "inquire": false,
+  "name": "Set BOL number",
+  "page": 414,
+  "section": "7.3.11",
+  "set": true,
+  "version": 23
+ },
+ "7BC": {
+  "inquire": true,
+  "name": "Set Line Disable Alarm Assignments II",
+  "page": 416,
+  "section": "7.3.12",
+  "set": true,
+  "version": 19
+ },
+ "7BD": {
+  "inquire": true,
+  "name": "Set Pressure Line Disable Alarm Assignments II",
+  "page": 417,
+  "section": "7.3.12",
+  "set": true,
+  "version": 19
+ },
+ "7BE": {
+  "inquire": true,
+  "name": "Set WPLLD Line Disable Alarm Assignments II",
+  "page": 418,
+  "section": "7.3.12",
+  "set": true,
+  "version": 19
+ },
+ "7C4": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Configuration",
+  "page": 419,
+  "section": "7.3.12",
+  "set": true,
+  "version": 27
+ },
+ "7C5": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Label",
+  "page": 420,
+  "section": "7.3.12",
+  "set": true,
+  "version": 27
+ },
+ "7C6": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Pump Relay",
+  "page": 421,
+  "section": "7.3.12",
+  "set": true,
+  "version": 27
+ },
+ "7C7": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Stuck Relay",
+  "page": 422,
+  "section": "7.3.12",
+  "set": true,
+  "version": 27
+ },
+ "7C8": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Max Run Time",
+  "page": 423,
+  "section": "7.3.12",
+  "set": true,
+  "version": 27
+ },
+ "7C9": {
+  "inquire": true,
+  "name": "Set Pump Relay Monitor Type",
+  "page": 424,
+  "section": "7.3.12",
+  "set": true,
+  "version": 28
+ },
+ "7D7": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pressure Line Leak Alternate Modes"
+ },
+ "7D8": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pressure Line Leak Alternate Mode"
+ },
+ "7D9": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pressure Line Leak Alternate-Height Mode"
+ },
+ "7DA": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pump Sensor Alternate Modes"
+ },
+ "7DB": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pump Sensor Alternate Mode"
+ },
+ "7DC": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set Pump Sensor Alternate-Height Mode"
+ },
+ "801": {
+  "inquire": true,
+  "name": "Set Input Configuration",
+  "page": 425,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "802": {
+  "inquire": true,
+  "name": "Set Input Location Label",
+  "page": 426,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "803": {
+  "inquire": true,
+  "name": "Set Input Type",
+  "page": 427,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "804": {
+  "inquire": true,
+  "name": "Set Input Dispense Mode",
+  "page": 428,
+  "section": "7.3.12",
+  "set": true,
+  "version": 4
+ },
+ "806": {
+  "inquire": true,
+  "name": "Set Relay Configuration",
+  "page": 429,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "807": {
+  "inquire": true,
+  "name": "Set Relay Location Label",
+  "page": 430,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "808": {
+  "inquire": true,
+  "name": "Set Relay Alarm Assignments",
+  "page": 431,
+  "section": "7.3.12",
+  "set": true,
+  "version": 1
+ },
+ "809": {
+  "inquire": true,
+  "name": "Set Relay Orientation",
+  "page": 432,
+  "section": "7.3.12",
+  "set": true,
+  "version": 2
+ },
+ "80A": {
+  "inquire": true,
+  "name": "Set Relay Type",
+  "page": 433,
+  "section": "7.3.12",
+  "set": true,
+  "version": 4
+ },
+ "80B": {
+  "inquire": true,
+  "name": "Set Relay Tank Assignment",
+  "page": 434,
+  "section": "7.3.12",
+  "set": true,
+  "version": 4
+ },
+ "80C": {
+  "inquire": true,
+  "name": "Set External Input Type",
+  "page": 435,
+  "section": "7.3.12",
+  "set": true,
+  "version": 25
+ },
+ "811": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set External Input Alternate Modes"
+ },
+ "812": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set External Input Alternate Mode"
+ },
+ "813": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "Set External Input Alternate-Height Mode"
+ },
+ "851": {
+  "inquire": true,
+  "name": "Restore All Setup Data from EEPROM",
+  "page": 436,
+  "section": "7.3.13",
+  "set": true,
+  "version": 107
+ },
+ "852": {
+  "inquire": true,
+  "name": "Save All Setup Data to EEPROM",
+  "page": 437,
+  "section": "7.3.13",
+  "set": true,
+  "version": 107
+ },
+ "853": {
+  "inquire": true,
+  "name": "Clear All Setup Data from EEPROM",
+  "page": 438,
+  "section": "7.3.13",
+  "set": true,
+  "version": 107
+ },
+ "881": {
+  "inquire": true,
+  "name": "Set Communication Port Data",
+  "page": 439,
+  "section": "7.3.14",
+  "set": true,
+  "version": 9
+ },
+ "882": {
+  "inquire": true,
+  "name": "Initialize Communication Port Data",
+  "page": 440,
+  "section": "7.3.14",
+  "set": true,
+  "version": 9
+ },
+ "885": {
+  "inquire": true,
+  "name": "Set SiteLink Modem Type",
+  "page": 441,
+  "section": "7.3.14",
+  "set": true,
+  "version": 19
+ },
+ "886": {
+  "inquire": true,
+  "name": "Set Modem Setup String",
+  "page": 442,
+  "section": "7.3.14",
+  "set": true,
+  "version": 20
+ },
+ "887": {
+  "inquire": true,
+  "name": "Set Dial Tone Validation Interval",
+  "page": 443,
+  "section": "7.3.14",
+  "set": true,
+  "version": 20
+ },
+ "888": {
+  "inquire": true,
+  "name": "Communication Status Information",
+  "page": 444,
+  "section": "7.3.14",
+  "set": false,
+  "version": 19
+ },
+ "889": {
+  "inquire": true,
+  "name": "DTR Normal State for Serial Satellite Boards",
+  "page": 446,
+  "section": "7.3.14",
+  "set": true,
+  "version": 121
+ },
+ "88D": {
+  "inquire": true,
+  "name": "Communication Diagnostic for SiteLink",
+  "page": 447,
+  "section": "7.3.14",
+  "set": false,
+  "version": 23
+ },
+ "891": {
+  "inquire": true,
+  "name": "Set AccuChart Calibration Restart",
+  "page": 448,
+  "section": "7.3.14",
+  "set": true,
+  "version": 108
+ },
+ "8A2": {
+  "inquire": true,
+  "name": "Service Code List",
+  "page": 449,
+  "section": "7.3.14",
+  "set": false,
+  "version": 27
+ },
+ "8A3": {
+  "inquire": true,
+  "name": "Maintenance Tracker Active Hardware Key List",
+  "page": 450,
+  "section": "7.3.14",
+  "set": false,
+  "version": 27
+ },
+ "8A4": {
+  "inquire": true,
+  "name": "Maintenance Tracker Block Hardware Key",
+  "page": 451,
+  "section": "7.3.14",
+  "set": true,
+  "version": 27
+ },
+ "8BC": {
+  "inquire": true,
+  "name": "Set Relay Alarm Assignments II",
+  "page": 452,
+  "section": "7.3.14",
+  "set": true,
+  "version": 19
+ },
+ "8C1": {
+  "inquire": true,
+  "name": "VMC Edit/Add Serial Number",
+  "page": 453,
+  "section": "7.3.14",
+  "set": true,
+  "version": 28
+ },
+ "8C2": {
+  "inquire": true,
+  "name": "VMC Remove Serial Number",
+  "page": 454,
+  "section": "7.3.14",
+  "set": true,
+  "version": 28
+ },
+ "8C3": {
+  "name": "VMC Edit/Add Fueling Position Number",
+  "version": 31,
+  "set": true,
+  "inquire": true,
+  "page": 458,
+  "section": null
+ },
+ "8C4": {
+  "name": "VMC Communciations Timeout Value",
+  "version": 31,
+  "set": true,
+  "inquire": true,
+  "page": 459,
+  "section": null
+ },
+ "901": {
+  "inquire": true,
+  "name": "Self Test Results Report",
+  "page": 455,
+  "section": "7.4.1",
+  "set": false,
+  "version": 1
+ },
+ "902": {
+  "inquire": true,
+  "name": "System Revision Level Report",
+  "page": 456,
+  "section": "7.4.1",
+  "set": false,
+  "version": 1
+ },
+ "903": {
+  "inquire": true,
+  "name": "PC Diagnostic Report",
+  "page": 457,
+  "section": "7.4.1",
+  "set": false,
+  "version": 106
+ },
+ "905": {
+  "inquire": true,
+  "name": "System Revision Level Report II",
+  "page": 458,
+  "section": "7.4.1",
+  "set": false,
+  "version": 15
+ },
+ "908": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7",
+  "name": "Power Up Time Report"
+ },
+ "@A0": {
+  "name": "Meter Map Diagnostics",
+  "version": null,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "source": "576013-818 chapter 12; absent from every revision of the Serial Interface Manual"
+ },
+ "@A4": {
+  "name": "Basic Reconciliation History",
+  "version": null,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "source": "576013-818 chapter 12; absent from every revision of the Serial Interface Manual"
+ },
+ "@A9": {
+  "name": "ASR Error Event History Buffer",
+  "version": null,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "source": "576013-818 chapter 12; absent from every revision of the Serial Interface Manual"
+ },
+ "@B6": {
+  "name": "AccuChart Diagnostics - Calibration Status",
+  "version": null,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "source": "576013-818 chapter 12; absent from every revision of the Serial Interface Manual"
+ },
+ "@B9": {
+  "name": "Tank Calibration Data",
+  "version": null,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "source": "576013-818 chapter 12; absent from every revision of the Serial Interface Manual"
+ },
+ "A01": {
+  "inquire": true,
+  "name": "Probe Type and Serial Number",
+  "page": 460,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A02": {
+  "inquire": true,
+  "name": "Probe Factory Dry Calibration Values",
+  "page": 461,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A03": {
+  "inquire": true,
+  "name": "Probe Factory Wet Calibration Values",
+  "page": 462,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A04": {
+  "inquire": true,
+  "name": "Probe Updated Dry Calibration Values",
+  "page": 463,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A05": {
+  "inquire": true,
+  "name": "Probe Updated Wet Calibration Values",
+  "page": 464,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A06": {
+  "inquire": true,
+  "name": "Probe Segment Sensitivity Ratios",
+  "page": 465,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A07": {
+  "inquire": true,
+  "name": "Probe Reference Distance Diagnostic",
+  "page": 466,
+  "section": "7.4.2",
+  "set": false,
+  "version": 23
+ },
+ "A10": {
+  "inquire": true,
+  "name": "Probe Last Sample Buffers",
+  "page": 467,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A11": {
+  "inquire": true,
+  "name": "Probe Fast Average Buffers",
+  "page": 468,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A12": {
+  "inquire": true,
+  "name": "Probe Standard Average Buffers",
+  "page": 469,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A13": {
+  "inquire": true,
+  "name": "Probe Long Term Average Buffers",
+  "page": 470,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A14": {
+  "inquire": true,
+  "name": "Mag Probe Option Table",
+  "page": 471,
+  "section": "7.4.2",
+  "set": false,
+  "version": 19
+ },
+ "A15": {
+  "inquire": true,
+  "name": "In-Tank Diagnostic Printout",
+  "page": 472,
+  "section": "7.4.2",
+  "set": false,
+  "version": 24
+ },
+ "A20": {
+  "inquire": true,
+  "name": "Probe Leak Test Flags - Present Test",
+  "page": 474,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A21": {
+  "inquire": true,
+  "name": "Probe Leak Test Flags - Stored Test",
+  "page": 475,
+  "section": "7.4.2",
+  "set": false,
+  "version": 1
+ },
+ "A22": {
+  "inquire": true,
+  "name": "Probe Leak Test Flags - Gross Test",
+  "page": 476,
+  "section": "7.4.2",
+  "set": false,
+  "version": 2
+ },
+ "A23": {
+  "inquire": true,
+  "name": "Tank Leak Test Averaging Buffers",
+  "page": 477,
+  "section": "7.4.2",
+  "set": false,
+  "version": 5
+ },
+ "A51": {
+  "inquire": true,
+  "name": "CSLD Diagnostics: Rate Table",
+  "page": 478,
+  "section": "7.4.2",
+  "set": false,
+  "version": 3
+ },
+ "A52": {
+  "inquire": true,
+  "name": "CSLD Diagnostics: Rate Test",
+  "page": 479,
+  "section": "7.4.2",
+  "set": false,
+  "version": 3
+ },
+ "A53": {
+  "inquire": true,
+  "name": "CSLD Diagnostics: Volume History Table",
+  "page": 480,
+  "section": "7.4.2",
+  "set": false,
+  "version": 3
+ },
+ "A54": {
+  "inquire": true,
+  "name": "CSLD Diagnostics: Moving Average Table",
+  "page": 481,
+  "section": "7.4.2",
+  "set": false,
+  "version": 3
+ },
+ "A55": {
+  "inquire": true,
+  "name": "CSLD Diagnostics: Leak Test Status",
+  "page": 482,
+  "section": "7.4.2",
+  "set": false,
+  "version": 3
+ },
+ "A56": {
+  "inquire": true,
+  "name": "CSLD Monthly Report",
+  "page": 483,
+  "section": "7.4.2",
+  "set": false,
+  "version": 121
+ },
+ "A61": {
+  "inquire": true,
+  "name": "HRM Diagnostic Report",
+  "page": 484,
+  "section": "7.4.2",
+  "set": false,
+  "version": 110
+ },
+ "A62": {
+  "inquire": true,
+  "name": "HRM Daily History",
+  "page": 485,
+  "section": "7.4.2",
+  "set": false,
+  "version": 112
+ },
+ "A63": {
+  "inquire": true,
+  "name": "Extended HRM Diagnostic Report",
+  "page": 486,
+  "section": "7.4.2",
+  "set": false,
+  "version": 26
+ },
+ "A81": {
+  "inquire": true,
+  "name": "Fuel Management Diagnostic Report",
+  "page": 487,
+  "section": "7.4.2",
+  "set": false,
+  "version": 6
+ },
+ "A91": {
+  "inquire": true,
+  "name": "Power Outage Diagnostic Report",
+  "page": 489,
+  "section": "7.4.2",
+  "set": false,
+  "version": 9
+ },
+ "B01": {
+  "inquire": true,
+  "name": "Liquid Sensor Diagnostic Report",
+  "page": 490,
+  "section": "7.4.3",
+  "set": false,
+  "version": 1
+ },
+ "B06": {
+  "inquire": true,
+  "name": "Vapor Sensor Diagnostic Report",
+  "page": 491,
+  "section": "7.4.3",
+  "set": false,
+  "version": 1
+ },
+ "B07": {
+  "inquire": true,
+  "name": "Vapor Sensor Concentration (PPM) Report",
+  "page": 492,
+  "section": "7.4.3",
+  "set": false,
+  "version": 3
+ },
+ "B11": {
+  "inquire": true,
+  "name": "Groundwater Sensor Diagnostic Report",
+  "page": 493,
+  "section": "7.4.3",
+  "set": false,
+  "version": 1
+ },
+ "B21": {
+  "inquire": true,
+  "name": "Ground Temperature Sensor Diagnostic Report",
+  "page": 494,
+  "section": "7.4.3",
+  "set": false,
+  "version": 1
+ },
+ "B33": {
+  "inquire": true,
+  "name": "MAG Sensor Diagnostic Report",
+  "page": 495,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B34": {
+  "inquire": true,
+  "name": "Smart Sensor Last Sample Diagnostic",
+  "page": 496,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B35": {
+  "inquire": true,
+  "name": "Smart Sensor Type and Serial Number",
+  "page": 497,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B36": {
+  "inquire": true,
+  "name": "Smart Sensor Constant Data",
+  "page": 498,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B37": {
+  "inquire": true,
+  "name": "Atmospheric Pressure Sensor Diagnostic Report",
+  "page": 500,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B38": {
+  "inquire": true,
+  "name": "Vacuum Sensor Diagnostic Report",
+  "page": 501,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B39": {
+  "inquire": true,
+  "name": "Vacuum Sensor Evacuation Diagnostic Report",
+  "page": 504,
+  "section": "7.4.3",
+  "set": false,
+  "version": 24
+ },
+ "B41": {
+  "inquire": true,
+  "name": "Type A Sensor (2 Wire CL) Diagnostic Report",
+  "page": 505,
+  "section": "7.4.3",
+  "set": false,
+  "version": 2
+ },
+ "B46": {
+  "inquire": true,
+  "name": "Type B Sensor (3 Wire CL) Diagnostic Report",
+  "page": 506,
+  "section": "7.4.3",
+  "set": false,
+  "version": 2
+ },
+ "B4B": {
+  "inquire": true,
+  "name": "Universal Sensor Diagnostic Report",
+  "page": 507,
+  "section": "7.4.3",
+  "set": false,
+  "version": 4
+ },
+ "B50": {
+  "inquire": true,
+  "name": "Volumetric Line Leak Status",
+  "page": 508,
+  "section": "7.4.4",
+  "set": false,
+  "version": 1
+ },
+ "B51": {
+  "inquire": true,
+  "name": "Volumetric Line Leak Diagnostic Gross Test History",
+  "page": 509,
+  "section": "7.4.4",
+  "set": false,
+  "version": 1
+ },
+ "B52": {
+  "inquire": true,
+  "name": "Volumetric Line Leak 0.10 & 0.20 GPH Diagnostic History",
+  "page": 510,
+  "section": "7.4.4",
+  "set": false,
+  "version": 1
+ },
+ "B61": {
+  "inquire": true,
+  "name": "Vapor Valve Diagnostic",
+  "page": 511,
+  "section": "7.4.4",
+  "set": false,
+  "version": 29
+ },
+ "B62": {
+  "inquire": true,
+  "name": "Sub Alarm History Report",
+  "page": 513,
+  "section": "7.4.4",
+  "set": false,
+  "version": 29
+ },
+ "B71": {
+  "inquire": true,
+  "name": "Pump Sensor Diagnostic",
+  "page": 515,
+  "section": "7.4.4",
+  "set": false,
+  "version": 2
+ },
+ "B72": {
+  "inquire": true,
+  "name": "Pump Relay Monitor Diagnostic",
+  "page": 516,
+  "section": "7.4.4",
+  "set": false,
+  "version": 27
+ },
+ "B7B": {
+  "inquire": true,
+  "name": "Pressure Line Leak Profile Line Test",
+  "page": 517,
+  "section": "7.4.4",
+  "set": false,
+  "version": 23
+ },
+ "B7C": {
+  "inquire": true,
+  "name": "Pressure Line Leak Pressure Offset Test",
+  "page": 519,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B7D": {
+  "inquire": true,
+  "name": "WPPLD Line Leak Pressure Offset Test",
+  "page": 520,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B7E": {
+  "inquire": true,
+  "name": "Pressure Line Leak Pressure Offset Monitor Report",
+  "page": 521,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B7F": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Pressure Offset Monitor Report",
+  "page": 522,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B81": {
+  "inquire": true,
+  "name": "Pressure Line Leak Diagnostic Report",
+  "page": 523,
+  "section": "7.4.4",
+  "set": false,
+  "version": 7
+ },
+ "B82": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Diagnostic Report",
+  "page": 525,
+  "section": "7.4.4",
+  "set": false,
+  "version": 10
+ },
+ "B83": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Communication Diagnostic Report",
+  "page": 526,
+  "section": "7.4.4",
+  "set": false,
+  "version": 10
+ },
+ "B87": {
+  "inquire": true,
+  "name": "Pressure Line Leak 3.00 GPH Test Diagnostic",
+  "page": 527,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B88": {
+  "inquire": true,
+  "name": "Pressure Line Leak Mid-range Test Diagnostic",
+  "page": 528,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B89": {
+  "inquire": true,
+  "name": "Pressure Line Leak 0.20 GPH Test Diagnostic",
+  "page": 529,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B8A": {
+  "inquire": true,
+  "name": "Pressure Line Leak 0.10 GPH Test Diagnostic",
+  "page": 530,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B8B": {
+  "inquire": true,
+  "name": "WPLLD Line Leak 3.00 GPH Test Diagnostic",
+  "page": 531,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B8C": {
+  "inquire": true,
+  "name": "WPLLD Line Leak Mid-range Test Diagnostic",
+  "page": 532,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B8D": {
+  "inquire": true,
+  "name": "WPLLD Line Leak 0.20 GPH Test Diagnostic",
+  "page": 533,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B8E": {
+  "inquire": true,
+  "name": "WPLLD Line Leak 0.10 GPH Test Diagnostic",
+  "page": 534,
+  "section": "7.4.4",
+  "set": false,
+  "version": 19
+ },
+ "B91": {
+  "inquire": true,
+  "name": "AccuChart Diagnostics Report",
+  "page": 535,
+  "section": "7.4.5",
+  "set": false,
+  "version": 108
+ },
+ "B93": {
+  "inquire": true,
+  "name": "AccuChart Status Report",
+  "page": 536,
+  "section": "7.4.5",
+  "set": false,
+  "version": 108
+ },
+ "B94": {
+  "inquire": true,
+  "name": "AccuChart Calibration History Report",
+  "page": 537,
+  "section": "7.4.5",
+  "set": false,
+  "version": 108
+ },
+ "BA0": {
+  "inquire": true,
+  "name": "MDIM Totalizer Report",
+  "page": 538,
+  "section": "7.4.5",
+  "set": false,
+  "version": 110
+ },
+ "BA1": {
+  "name": "DIM Communciation Status and History",
+  "version": 32,
+  "set": false,
+  "inquire": true,
+  "page": 544,
+  "section": null
+ },
+ "BB1": {
+  "inquire": true,
+  "name": "VMC Status Report",
+  "page": 539,
+  "section": "7.4.5",
+  "set": false,
+  "version": 28
+ },
+ "C01": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Daily \"Row\" Report",
+  "page": 540,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C02": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Daily \"Column\" Report",
+  "page": 541,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C03": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Shift \"Row\" Report",
+  "page": 543,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C04": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Shift \"Column\" Report",
+  "page": 544,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C05": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Periodic \"Row\" Report",
+  "page": 546,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C06": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Periodic \"Column\" Report",
+  "page": 548,
+  "section": "7.5",
+  "set": false,
+  "version": 106
+ },
+ "C07": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Periodic \"Row\" Report",
+  "page": 550,
+  "section": "7.5",
+  "set": false,
+  "version": 114
+ },
+ "C08": {
+  "inquire": true,
+  "name": "Basic Inventory Reconciliation Periodic \"Column\" Report",
+  "page": 552,
+  "section": "7.5",
+  "set": false,
+  "version": 114
+ },
+ "C09": {
+  "inquire": true,
+  "name": "Individual Basic Reconciliation Daily History Diagnostic",
+  "page": 554,
+  "section": "7.5",
+  "set": false,
+  "version": 19
+ },
+ "C10": {
+  "inquire": true,
+  "name": "Periodic Book Variance",
+  "page": 555,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C11": {
+  "inquire": true,
+  "name": "Weekly Book Variance",
+  "page": 557,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C12": {
+  "inquire": true,
+  "name": "Daily Book Variance",
+  "page": 559,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C20": {
+  "inquire": true,
+  "name": "Periodic Variance Analysis Report",
+  "page": 560,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C21": {
+  "inquire": true,
+  "name": "Weekly Variance Analysis Report",
+  "page": 562,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C22": {
+  "inquire": true,
+  "name": "Daily Variance Analysis Report",
+  "page": 564,
+  "section": "7.6",
+  "set": false,
+  "version": 116
+ },
+ "C25": {
+  "inquire": true,
+  "name": "Periodic Variance Analysis Daily Report",
+  "page": 566,
+  "section": "7.6",
+  "set": false,
+  "version": 19
+ },
+ "V00": {
+  "inquire": true,
+  "name": "ISD CARB Certified Operating Requirements and Monitoring",
+  "page": 568,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V01": {
+  "inquire": true,
+  "name": "ISD Alarm Status Report",
+  "page": 570,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V02": {
+  "inquire": true,
+  "name": "ISD Monthly Status Report",
+  "page": 573,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V03": {
+  "inquire": true,
+  "name": "ISD Daily Status Report",
+  "page": 577,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V04": {
+  "inquire": true,
+  "name": "ISD Daily Report Details (by month)",
+  "page": 581,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V05": {
+  "inquire": true,
+  "name": "ISD Daily Report Details (by day(s))",
+  "page": 583,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V06": {
+  "inquire": true,
+  "name": "ISD Daily Report Details, 132 columns (by month)",
+  "page": 586,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V07": {
+  "inquire": true,
+  "name": "ISD Daily Report Details (by day(s))",
+  "page": 589,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V08": {
+  "inquire": true,
+  "name": "ISD Daily Report Details (by month)",
+  "page": 592,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V09": {
+  "inquire": true,
+  "name": "ISD Daily Report Details, user input columns (by day(s))",
+  "page": 595,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V0A": {
+  "inquire": true,
+  "name": "ISD Daily Overall Status Report",
+  "page": 598,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V0B": {
+  "inquire": true,
+  "name": "ISD Monthly Overall Status Report",
+  "page": 600,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V10": {
+  "inquire": true,
+  "name": "ISD Version Number",
+  "page": 602,
+  "section": "7.7.1",
+  "set": false,
+  "version": 25
+ },
+ "V12": {
+  "name": "Vapor Collection Test Results",
+  "version": 30,
+  "set": false,
+  "inquire": true,
+  "page": 609,
+  "section": null
+ },
+ "V40": {
+  "inquire": true,
+  "name": "Set Vapor Processor Type",
+  "page": 603,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V41": {
+  "inquire": true,
+  "name": "Set Vapor Processor Control Level",
+  "page": 604,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V42": {
+  "inquire": true,
+  "name": "Set Clear Sensor/AFM/Hose Maps",
+  "page": 605,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V43": {
+  "inquire": true,
+  "name": "Set Sensor Table ISD In Use Flag",
+  "page": 607,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V44": {
+  "inquire": true,
+  "name": "Set Vapor Processor ON/OFF Pressure Thresholds",
+  "page": 608,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V45": {
+  "inquire": true,
+  "name": "Set Vapor Processor Maximum Runtime",
+  "page": 609,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V46": {
+  "inquire": true,
+  "name": "Set Hydrocarbon Alarm Threshold",
+  "page": 610,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V47": {
+  "inquire": true,
+  "name": "Set time of day ISD/PMC tests are started and results posted",
+  "page": 611,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V48": {
+  "inquire": true,
+  "name": "Read Airflow Meter Table",
+  "page": 612,
+  "section": "7.7.2",
+  "set": false,
+  "version": 25
+ },
+ "V49": {
+  "inquire": true,
+  "name": "Set Hose Label Table",
+  "page": 613,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V4A": {
+  "inquire": true,
+  "name": "Read Hose Table Data",
+  "page": 614,
+  "section": "7.7.2",
+  "set": false,
+  "version": 25
+ },
+ "V4B": {
+  "inquire": true,
+  "name": "Read Grade Table",
+  "page": 615,
+  "section": "7.7.2",
+  "set": false,
+  "version": 25
+ },
+ "V4E": {
+  "inquire": true,
+  "name": "Set ISD EVR TYPE",
+  "page": 616,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V4F": {
+  "inquire": true,
+  "name": "Set Nozzle Type",
+  "page": 617,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V50": {
+  "inquire": true,
+  "name": "Set CVLD Minimum Pressure Time Window",
+  "page": 618,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V51": {
+  "inquire": true,
+  "name": "Perform ISD Setup Verification Test",
+  "page": 619,
+  "section": "7.7.2",
+  "set": false,
+  "version": 25
+ },
+ "V52": {
+  "inquire": true,
+  "name": "Accept High ORVR Configuration",
+  "page": 620,
+  "section": "7.7.2",
+  "set": true,
+  "version": 25
+ },
+ "V80": {
+  "inquire": true,
+  "name": "Vapor Processor Report",
+  "page": 621,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "V81": {
+  "inquire": true,
+  "name": "Percent Hydrocarbon Report",
+  "page": 623,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "V82": {
+  "name": "Vapor Processor Status Report",
+  "version": 30,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null
+ },
+ "V83": {
+  "inquire": true,
+  "name": "Read Sensor Calibration History",
+  "page": 624,
+  "section": "7.7.3",
+  "set": false,
+  "version": 25
+ },
+ "V85": {
+  "inquire": true,
+  "name": "ISD Service Report Test Fail Clear",
+  "page": 625,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "V88": {
+  "name": "PMC Daily Vapor Polisher Diagnostic",
+  "version": 30,
+  "set": false,
+  "inquire": true,
+  "page": null,
+  "section": null,
+  "note": "command format misprinted in the manual as IV8500, which is V85's"
+ },
+ "VA1": {
+  "name": "VMC A/L Daily Records Report",
+  "version": 31,
+  "set": false,
+  "inquire": true,
+  "page": 637,
+  "section": null
+ },
+ "VA2": {
+  "name": "VMC A/L Exception Report",
+  "version": 31,
+  "set": false,
+  "inquire": true,
+  "page": 638,
+  "section": null
+ },
+ "VA3": {
+  "name": "VMC A/L Transaction Report",
+  "version": 31,
+  "set": false,
+  "inquire": true,
+  "page": 639,
+  "section": null
+ },
+ "VA4": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7",
+  "name": "Perform APM Setup Verification Test"
+ },
+ "VA5": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7",
+  "name": "VMCI Sub Alarm History Report"
+ },
+ "VA6": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7",
+  "name": "APM Diagnostic Report"
+ },
+ "VA7": {
+  "inquire": true,
+  "set": true,
+  "version": 33,
+  "section": "7",
+  "name": "APM Service Report Test Fail Clear"
+ },
+ "VA8": {
+  "inquire": true,
+  "set": false,
+  "version": 33,
+  "section": "7",
+  "name": "APM Miscellaneous Events Report"
+ },
+ "VC0": {
+  "inquire": true,
+  "name": "Automatic/Manual Vapor Processor Control",
+  "page": 627,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "VC1": {
+  "inquire": true,
+  "name": "Manual Override of Vapor Processor",
+  "page": 628,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "VC5": {
+  "inquire": true,
+  "name": "Acknowledge ISD Alarm to Re-Enable Site",
+  "page": 629,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ },
+ "VC8": {
+  "inquire": true,
+  "name": "Set Manual Override of Veeder-Root Polisher",
+  "page": 630,
+  "section": "7.7.3",
+  "set": true,
+  "version": 29
+ },
+ "XE0": {
+  "inquire": true,
+  "name": "ISD Setup Data Time Stamp EEPROM",
+  "page": 631,
+  "section": "7.7.3",
+  "set": true,
+  "version": 25
+ }
+}

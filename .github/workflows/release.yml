@@ -1,0 +1,94 @@
+# Build the Windows installer and publish it to a GitHub Release.
+#
+# Triggered by pushing a version tag (v0.1.0, v1.2.3). The job builds the
+# PyInstaller app, wraps it with Inno Setup, writes SHA256SUMS.txt, and
+# attaches both to a release named for the tag. The app's own updater reads
+# that release's SHA256SUMS.txt, so the checksum file is a required asset,
+# not an extra.
+#
+# Signing is not wired in here: an Authenticode certificate lives on a
+# hardware token that a hosted runner cannot hold. Until there is one, the
+# installer is unsigned and Windows SmartScreen will warn on first run. When
+# a certificate is available, add a signing step before "Write SHA256SUMS"
+# (build.py --signtool does the signing) so the checksums cover signed bytes.
+
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  # a manual run for testing the build without cutting a release
+  workflow_dispatch:
+
+permissions:
+  contents: write            # needed to create the release and upload assets
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -q
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build installer
+        run: python packaging/build.py
+
+      - name: Show what was built
+        run: Get-ChildItem dist/installer
+
+      - name: Verify the tag matches the package version
+        # a tag of v0.1.0 must correspond to __version__ == 0.1.0, or the
+        # updater would offer a version the installer does not name
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $pkg = python -c "from tls350sim import __version__; print(__version__)"
+          if ($tag -ne $pkg) {
+            Write-Error "tag $tag does not match package version $pkg"
+            exit 1
+          }
+          Write-Host "tag and package version agree: $pkg"
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true            # a human reviews and presses publish
+          name: "Tank Monitor Console Simulator ${{ github.ref_name }}"
+          body: |
+            Windows installer for Tank Monitor Console Simulator ${{ github.ref_name }}.
+
+            The installer is **unsigned**: Windows SmartScreen will warn on
+            first run. Verify the download against `SHA256SUMS.txt` below.
+
+            The in-app updater (Help -> Check for updates) reads this
+            release automatically.
+          files: |
+            dist/installer/*.exe
+            dist/installer/SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        # always keep the build products, even on a workflow_dispatch test run
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer
+          path: |
+            dist/installer/*.exe
+            dist/installer/SHA256SUMS.txt
+          if-no-files-found: error

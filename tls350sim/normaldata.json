@@ -1,0 +1,963 @@
+[
+ {
+  "function": "IN-TANK INVENTORY",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "VOLUME",
+    "live": "volume"
+   },
+   {
+    "text": "HEIGHT",
+    "live": "height"
+   },
+   {
+    "text": "WATER VOL",
+    "live": "water_vol"
+   },
+   {
+    "text": "WATER",
+    "live": "water"
+   },
+   {
+    "text": "TEMPERATURE",
+    "live": "temperature"
+   },
+   {
+    "text": "ULLAGE",
+    "live": "ullage"
+   },
+   {
+    "text": "TC VOLUME",
+    "live": "tc_volume"
+   },
+   {
+    "text": "DENSITY",
+    "live": "density",
+    "when": {
+     "code": "S56000",
+     "is": [
+      "1"
+     ]
+    }
+   },
+   {
+    "text": "MASS",
+    "live": "mass",
+    "when": {
+     "code": "S56000",
+     "is": [
+      "1"
+     ]
+    }
+   },
+   {
+    "text": "DELIVERY",
+    "live": "delivery"
+   },
+   {
+    "text": "NEXT DELIVER DENSITY",
+    "live": "next_density",
+    "when": {
+     "code": "S56000",
+     "is": [
+      "1"
+     ]
+    }
+   },
+   {
+    "text": "LAST DELIVERY DENSITY",
+    "live": "last_density",
+    "when": {
+     "code": "S56000",
+     "is": [
+      "1"
+     ]
+    }
+   }
+  ],
+  "print": "inventory"
+ },
+ {
+  "function": "DELIVERY MAINTENANCE",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "EDIT/VIEW OR INSERT",
+    "live": null,
+    "sel": "dlv_mode",
+    "choices": [
+     "EDIT/VIEW",
+     "INSERT"
+    ]
+   },
+   {
+    "text": "TICKET VOLUME",
+    "live": null,
+    "dlv": "ticket"
+   },
+   {
+    "text": "BOL",
+    "live": null,
+    "dlv": "bol",
+    "print_scope": "device"
+   },
+   {
+    "text": "PRIOR DLVY FOR TANK",
+    "live": null,
+    "dlv": "prior"
+   },
+   {
+    "text": "ENTER DLVY DATE",
+    "live": null,
+    "dlv": "date"
+   },
+   {
+    "text": "ENTER DLVY TIME",
+    "live": null,
+    "dlv": "time"
+   },
+   {
+    "text": "ENTER TICKET VOLUME",
+    "live": null,
+    "dlv": "insert"
+   },
+   {
+    "text": "BOL",
+    "live": null,
+    "dlv": "insertbol"
+   }
+  ],
+  "when": {
+   "software": "bir"
+  },
+  "print": "deliveries"
+ },
+ {
+  "function": "TANKER LOAD REPORT",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "SINGLE TANK",
+    "live": null,
+    "load": "tank",
+    "print_scope": "device"
+   },
+   {
+    "text": "SINGLE TANK AND LOAD NO.",
+    "live": null,
+    "load": "number",
+    "print_scope": "device"
+   }
+  ],
+  "when": {
+   "code": "S51300",
+   "is": [
+    "1"
+   ]
+  },
+  "print": "loads"
+ },
+ {
+  "function": "FUEL MANAGEMENT",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "PRINT SHORT REPORT",
+    "live": null
+   },
+   {
+    "text": "DAYS FUEL REMAINING",
+    "live": "days_fuel",
+    "print_scope": "device"
+   },
+   {
+    "text": "INVENTORY",
+    "live": "volume"
+   },
+   {
+    "text": "95% ULLAGE",
+    "live": "ullage95",
+    "head": "T %d: (PRODUCT LABEL)",
+    "l2": "95% ULLAGE"
+   },
+   {
+    "text": "AVG. DAILY SALES SUN. - SAT.",
+    "live": "avg_sales"
+   }
+  ],
+  "when": {
+   "software": "fuelman"
+  },
+  "print": "fuel"
+ },
+ {
+  "function": "LAST SHIFT INVENTORY",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "BEGINNING INVENTORY",
+    "live": "shift_opening",
+    "print_scope": "device"
+   },
+   {
+    "text": "ENDING INVENTORY",
+    "live": "shift_physical"
+   },
+   {
+    "text": "ADJUSTMENT DELIVERY",
+    "live": "shift_deliveries"
+   },
+   {
+    "text": "GROSS CHANGE",
+    "live": "shift_gross"
+   },
+   {
+    "text": "GROSS CURRENT SHIFT NOW (No/Yes)",
+    "live": null,
+    "action": "close:shift"
+   }
+  ],
+  "when": {
+   "software": "bir"
+  },
+  "print": "shift"
+ },
+ {
+  "function": "IN-TANK TEST RESULTS",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "GROSS",
+    "live": "result_tank_gross",
+    "print_scope": "device"
+   },
+   {
+    "text": "PERIODIC",
+    "live": "result_tank_periodic"
+   },
+   {
+    "text": "ANNUAL",
+    "live": "result_tank_annual"
+   }
+  ],
+  "print": "tank_tests"
+ },
+ {
+  "function": "CSLD TEST RESULTS",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "CSLD CURRENT TST RESULTS",
+    "live": null,
+    "body": "PRESS <ENTER>",
+    "print_scope": "device"
+   },
+   {
+    "text": "CSLD CURRENT RESULT",
+    "live": "csld_current",
+    "head": "device"
+   },
+   {
+    "text": "CSLD FULLEST LAST PASS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "CSLD LAST PASS",
+    "live": "csld_last",
+    "head": "device"
+   }
+  ],
+  "when": {
+   "software": "csld"
+  },
+  "print": "csld"
+ },
+ {
+  "function": "PRESSURE LINE RESULTS",
+  "requires": "plld",
+  "steps": [
+   {
+    "text": "3.0 gph (11.3 lph) TEST",
+    "live": "result_plld_gross",
+    "print_scope": "device",
+    "runtest": "plld:gross",
+    "head": "Q %d: PLLD #%d"
+   },
+   {
+    "text": "0.2 gph (0.76 lph) TEST",
+    "live": "result_plld_periodic",
+    "runtest": "plld:periodic",
+    "head": "Q %d: PLLD #%d"
+   },
+   {
+    "text": "0.1 gph (0.38 lph) TEST",
+    "live": "result_plld_annual",
+    "runtest": "plld:annual",
+    "head": "Q %d: PLLD #%d"
+   },
+   {
+    "text": "PRESS PRINT FOR HISTORY",
+    "live": null,
+    "history": "plld",
+    "print_scope": "device"
+   }
+  ],
+  "print": "plld_tests"
+ },
+ {
+  "function": "START LINE PRESSURE TEST",
+  "requires": "plld",
+  "steps": [
+   {
+    "text": "SELECT LINE",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "SELECT TEST TYPE",
+    "live": null,
+    "sel": "line_rate",
+    "choices": [
+     [
+      "3.0 GPH",
+      "gross"
+     ],
+     [
+      "0.2 GPH",
+      "periodic"
+     ],
+     [
+      "0.1 GPH",
+      "annual"
+     ]
+    ]
+   },
+   {
+    "text": "START LINE TEST",
+    "live": null,
+    "action": "start:plld",
+    "head_scope": "START LINE TEST"
+   }
+  ],
+  "print": "plld_tests",
+  "scope": "plld"
+ },
+ {
+  "function": "STOP PRESSURE TEST",
+  "requires": "plld",
+  "steps": [
+   {
+    "text": "SELECT LINE",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "STOP LINE TEST",
+    "live": null,
+    "action": "stop:plld",
+    "head_scope": "STOP LINE TEST"
+   }
+  ],
+  "print": "plld_tests",
+  "scope": "plld"
+ },
+ {
+  "function": "WPLLD LINE RESULTS",
+  "requires": "wplld",
+  "steps": [
+   {
+    "text": "3.0 gph (11.3 lph) TEST",
+    "live": "result_wplld_gross",
+    "print_scope": "device",
+    "runtest": "wplld:gross",
+    "head": "W %d: WPLLD #%d"
+   },
+   {
+    "text": "0.2 gph (0.76 lph) TEST",
+    "live": "result_wplld_periodic",
+    "runtest": "wplld:periodic",
+    "head": "W %d: WPLLD #%d"
+   },
+   {
+    "text": "0.1 gph (0.38 lph) TEST",
+    "live": "result_wplld_annual",
+    "runtest": "wplld:annual",
+    "head": "W %d: WPLLD #%d"
+   },
+   {
+    "text": "PRESS PRINT FOR HISTORY",
+    "live": null,
+    "history": "wplld",
+    "print_scope": "device"
+   }
+  ],
+  "print": "wplld_tests"
+ },
+ {
+  "function": "START WPLLD LINE TEST",
+  "requires": "wplld",
+  "steps": [
+   {
+    "text": "SELECT LINE",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "SELECT TEST TYPE",
+    "live": null,
+    "sel": "line_rate",
+    "choices": [
+     [
+      "3.0 GPH",
+      "gross"
+     ],
+     [
+      "0.2 GPH",
+      "periodic"
+     ],
+     [
+      "0.1 GPH",
+      "annual"
+     ]
+    ]
+   },
+   {
+    "text": "START LINE TEST",
+    "live": null,
+    "action": "start:wplld",
+    "head_scope": "START LINE TEST"
+   }
+  ],
+  "print": "wplld_tests",
+  "scope": "wplld"
+ },
+ {
+  "function": "STOP WPLLD LINE TEST",
+  "requires": "wplld",
+  "steps": [
+   {
+    "text": "SELECT LINE",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "STOP LINE TEST",
+    "live": null,
+    "action": "stop:wplld",
+    "head_scope": "STOP LINE TEST"
+   }
+  ],
+  "print": "wplld_tests",
+  "scope": "wplld"
+ },
+ {
+  "function": "LINE LEAK DETECT RESULTS",
+  "requires": "vlld",
+  "steps": [
+   {
+    "text": "0.2 gph (0.76 lph) TEST",
+    "live": "result_vlld_periodic",
+    "print_scope": "device",
+    "head": "P %d: LINE LEAK NUMBER %d"
+   },
+   {
+    "text": "0.1 gph (0.38 lph) TEST",
+    "live": "result_vlld_annual",
+    "head": "P %d: LINE LEAK NUMBER %d"
+   }
+  ],
+  "print": "vlld_tests"
+ },
+ {
+  "function": "START LINE LEAK TEST",
+  "requires": "vlld",
+  "steps": [
+   {
+    "text": "START LEAK TEST METHOD",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "TEST RATE",
+    "live": null,
+    "sel": "line_rate",
+    "choices": [
+     [
+      "0.20 GAL/HR",
+      "periodic"
+     ],
+     [
+      "0.10 GAL/HR",
+      "annual"
+     ],
+     [
+      "AIR PURGE PROCEDURE",
+      "purge"
+     ]
+    ],
+    "head_scope": "TEST RATE"
+   },
+   {
+    "text": "START TEST",
+    "live": null,
+    "action": "start:vlld",
+    "head_scope": "START LEAK TEST"
+   }
+  ],
+  "print": "vlld_tests",
+  "scope": "vlld"
+ },
+ {
+  "function": "STOP LINE LEAK TEST",
+  "requires": "vlld",
+  "steps": [
+   {
+    "text": "STOP LEAK TEST METHOD",
+    "live": null,
+    "sel": "line_scope",
+    "choices": [
+     "ALL LINES",
+     "SINGLE LINE"
+    ]
+   },
+   {
+    "text": "STOP LINE LEAK TEST",
+    "live": null,
+    "action": "stop:vlld",
+    "head_scope": "STOP LEAK TEST"
+   }
+  ],
+  "print": "vlld_tests",
+  "scope": "vlld"
+ },
+ {
+  "function": "PUMP RELAY MON STATUS",
+  "requires": "pumpmon",
+  "steps": [
+   {
+    "text": "PUMP RELAY STATUS",
+    "live": "relay_status",
+    "head": "device"
+   }
+  ],
+  "print": "relay_status"
+ },
+ {
+  "function": "LIQUID STATUS",
+  "requires": "liquid",
+  "steps": [
+   {
+    "text": "SENSOR STATUS",
+    "live": "sensor_liquid"
+   }
+  ],
+  "print": "sensors:liquid"
+ },
+ {
+  "function": "VAPOR STATUS",
+  "requires": "vapor",
+  "steps": [
+   {
+    "text": "SENSOR STATUS",
+    "live": "sensor_vapor"
+   }
+  ],
+  "print": "sensors:vapor"
+ },
+ {
+  "function": "GROUNDWATER STATUS",
+  "requires": "gw",
+  "steps": [
+   {
+    "text": "SENSOR STATUS",
+    "live": "sensor_gw"
+   }
+  ],
+  "print": "sensors:gw"
+ },
+ {
+  "function": "2 WIRE CL STATUS",
+  "requires": "2wire",
+  "steps": [
+   {
+    "text": "SENSOR STATUS",
+    "live": "sensor_2wire"
+   }
+  ],
+  "print": "sensors:2wire"
+ },
+ {
+  "function": "3 WIRE CL STATUS",
+  "requires": "3wire",
+  "steps": [
+   {
+    "text": "SENSOR STATUS",
+    "live": "sensor_3wire"
+   }
+  ],
+  "print": "sensors:3wire"
+ },
+ {
+  "function": "START IN-TANK LEAK TEST",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "START LEAK TEST METHOD",
+    "live": null,
+    "sel": "scope",
+    "choices": [
+     "ALL TANKS",
+     "SINGLE TANK"
+    ]
+   },
+   {
+    "text": "TEST",
+    "live": null,
+    "sel": "stop_mode",
+    "choices": [
+     "TIMED DURATION",
+     "MANUAL STOP"
+    ],
+    "head_scope": "TEST CONTROL"
+   },
+   {
+    "text": "SELECT RATE",
+    "live": null,
+    "sel": "rate",
+    "choices": [
+     [
+      "0.20 GAL/HR",
+      "periodic"
+     ],
+     [
+      "0.10 GAL/HR",
+      "annual"
+     ]
+    ],
+    "head_scope": "TEST CONTROL"
+   },
+   {
+    "text": "TEST DURATION",
+    "live": null,
+    "entry": "hours",
+    "min": 2,
+    "max": 24,
+    "head_scope": "TEST DURATION"
+   },
+   {
+    "text": "START LEAK TEST",
+    "live": null,
+    "action": "start:tank",
+    "head_scope": "START LEAK TEST"
+   }
+  ],
+  "print": "tank_tests",
+  "scope": "tank"
+ },
+ {
+  "function": "STOP IN-TANK LEAK TEST",
+  "requires": "probe",
+  "steps": [
+   {
+    "text": "STOP LEAK TEST METHOD",
+    "live": null,
+    "sel": "scope",
+    "choices": [
+     "ALL TANKS",
+     "SINGLE TANK"
+    ]
+   },
+   {
+    "text": "STOP LEAK TEST",
+    "live": null,
+    "action": "stop:tank",
+    "head_scope": "STOP LEAK TEST"
+   }
+  ],
+  "print": "tank_tests",
+  "scope": "tank"
+ },
+ {
+  "function": "TEST OUTPUT RELAYS",
+  "requires": "io",
+  "steps": [
+   {
+    "text": "ENTER RELAY NUMBER",
+    "live": "relay_test"
+   }
+  ],
+  "print": "relay_setup"
+ },
+ {
+  "function": "MAG SUMP LK TEST RESULTS",
+  "requires": "smart",
+  "steps": [
+   {
+    "text": "LAST PASSED TEST",
+    "live": "sump_last_passed",
+    "head": "device",
+    "print_scope": "device"
+   },
+   {
+    "text": "PRESS PRINT FOR HISTORY",
+    "live": null,
+    "head": "device",
+    "history": "sump",
+    "print_scope": "device"
+   }
+  ],
+  "print": "sensors:smart"
+ },
+ {
+  "function": "MAG SUMP LEAK TEST",
+  "requires": "smart",
+  "steps": [
+   {
+    "text": "HEIGHT AND TEMPERATURE",
+    "live": "sump_ht_temp",
+    "head": "device"
+   },
+   {
+    "text": "TEMP RATE",
+    "live": "sump_rates",
+    "head": "device"
+   },
+   {
+    "text": "TEST STATUS",
+    "live": "sump_status",
+    "head": "device"
+   },
+   {
+    "text": "START MAG SUMP LEAK TEST",
+    "live": null,
+    "action": "sump:start"
+   },
+   {
+    "text": "START MEASURING HEIGHT",
+    "live": null,
+    "action": "sump:height"
+   },
+   {
+    "text": "STOP MAG SUMP LEAK TEST",
+    "live": null,
+    "action": "sump:stop"
+   }
+  ]
+ },
+ {
+  "function": "SMART SENSOR STATUS",
+  "requires": "smart",
+  "steps": [
+   {
+    "text": "SS STATUS",
+    "live": "sensor_smart"
+   }
+  ],
+  "print": "sensors:smart"
+ },
+ {
+  "function": "VMC REPORT",
+  "requires": "vmc",
+  "steps": [
+   {
+    "text": "PRESS <ENTER>",
+    "live": null,
+    "vmc": "head",
+    "print_scope": "device"
+   },
+   {
+    "text": "STATUS (Side A)",
+    "live": null,
+    "vmc": "status",
+    "side": "A"
+   },
+   {
+    "text": "RECOVER RATE (Side A)",
+    "live": null,
+    "vmc": "rate",
+    "side": "A"
+   },
+   {
+    "text": "FUEL COUNTER (Side A)",
+    "live": null,
+    "vmc": "fuel",
+    "side": "A"
+   },
+   {
+    "text": "ERROR COUNTER (Side A)",
+    "live": null,
+    "vmc": "error",
+    "side": "A"
+   },
+   {
+    "text": "REMAIN TIME (Side A)",
+    "live": null,
+    "vmc": "remain",
+    "side": "A"
+   },
+   {
+    "text": "STATUS (Side B)",
+    "live": null,
+    "vmc": "status",
+    "side": "B"
+   },
+   {
+    "text": "RECOVER RATE (Side B)",
+    "live": null,
+    "vmc": "rate",
+    "side": "B"
+   },
+   {
+    "text": "FUEL COUNTER (Side B)",
+    "live": null,
+    "vmc": "fuel",
+    "side": "B"
+   },
+   {
+    "text": "ERROR COUNTER (Side B)",
+    "live": null,
+    "vmc": "error",
+    "side": "B"
+   },
+   {
+    "text": "REMAIN TIME (Side B)",
+    "live": null,
+    "vmc": "remain",
+    "side": "B"
+   }
+  ],
+  "print": "vmc"
+ },
+ {
+  "function": "ISD STATUS",
+  "requires": "smart",
+  "when": {
+   "software": "isd"
+  },
+  "print": "isd:status",
+  "steps": [
+   {
+    "text": "CONTAINMENT TEST GROSS",
+    "live": "isd_st_contain",
+    "head": "plain"
+   },
+   {
+    "text": "CONTAINMENT TEST DEGRADE",
+    "live": "isd_st_contain",
+    "head": "plain"
+   },
+   {
+    "text": "CONTAINMENT TEST CVLD",
+    "live": "isd_st_contain",
+    "head": "plain"
+   },
+   {
+    "text": "COLLECTION GROSS TEST",
+    "live": "isd_st_collect",
+    "head": "plain"
+   },
+   {
+    "text": "COLLECTION DEGRADE TEST",
+    "live": "isd_st_collect",
+    "head": "plain"
+   },
+   {
+    "text": "ISD SENSOR SELF TEST",
+    "live": "isd_st_self",
+    "head": "plain"
+   },
+   {
+    "text": "ISD SETUP SELF TEST",
+    "live": "isd_st_self",
+    "head": "plain"
+   },
+   {
+    "text": "STAGE 1 TRANSFER TEST",
+    "live": "isd_st_stage1",
+    "head": "plain"
+   }
+  ]
+ },
+ {
+  "function": "ISD DAILY REPORT",
+  "requires": "smart",
+  "when": {
+   "software": "isd"
+  },
+  "print": "isd:daily",
+  "steps": [
+   {
+    "text": "REPORT DATE",
+    "livehead": "isd_daily_date",
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "CONTAINMENT TESTS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "COLLECTIION TESTS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "PROCESSOR TESTS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   }
+  ]
+ },
+ {
+  "function": "ISD MONTHLY REPORT",
+  "requires": "smart",
+  "when": {
+   "software": "isd"
+  },
+  "print": "isd:monthly",
+  "steps": [
+   {
+    "text": "REPORT DATE",
+    "livehead": "isd_monthly_date",
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "WARNINGS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "FAILURES",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   },
+   {
+    "text": "MISC EVENTS",
+    "live": null,
+    "body": "PRESS <ENTER>"
+   }
+  ]
+ }
+]
