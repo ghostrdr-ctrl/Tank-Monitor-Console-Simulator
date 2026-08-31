@@ -1,10 +1,14 @@
 # Build the Windows installer and publish it to a GitHub Release.
 #
 # Triggered by pushing a version tag (v0.1.0, v1.2.3). The job builds the
-# PyInstaller app, wraps it with Inno Setup, writes SHA256SUMS.txt, and
-# attaches both to a release named for the tag. The app's own updater reads
-# that release's SHA256SUMS.txt, so the checksum file is a required asset,
-# not an extra.
+# PyInstaller app, zips it as a portable download, wraps it with Inno Setup,
+# writes SHA256SUMS.txt, and attaches all three to a release named for the
+# tag. The app's own updater reads that release's SHA256SUMS.txt, so the
+# checksum file is a required asset, not an extra.
+#
+# The portable zip is there for sites whose endpoint policy blocks an .exe
+# download outright. The updater only ever looks for the .exe, so adding the
+# zip does not change what a self-update fetches.
 #
 # Signing is not wired in here: an Authenticode certificate lives on a
 # hardware token that a hosted runner cannot hold. Until there is one, the
@@ -72,15 +76,24 @@ jobs:
           draft: true            # a human reviews and presses publish
           name: "Tank Monitor Console Simulator ${{ github.ref_name }}"
           body: |
-            Windows installer for Tank Monitor Console Simulator ${{ github.ref_name }}.
+            Windows build of Tank Monitor Console Simulator ${{ github.ref_name }}.
 
-            The installer is **unsigned**: Windows SmartScreen will warn on
-            first run. Verify the download against `SHA256SUMS.txt` below.
+            **Two ways to get it, same program either way:**
+
+            - `...-Setup.exe` -- the installer. Per-user, no administrator
+              rights needed. Use this one unless it will not download.
+            - `...-Portable.zip` -- a folder to extract and run, nothing
+              installed. Use this if your workplace blocks the `.exe`
+              download. Read `HOW-TO-RUN.txt` inside it first.
+
+            Both are **unsigned**: Windows SmartScreen will warn on first
+            run. Verify your download against `SHA256SUMS.txt` below.
 
             The in-app updater (Help -> Check for updates) reads this
-            release automatically.
+            release automatically and fetches the installer.
           files: |
             dist/installer/*.exe
+            dist/installer/*.zip
             dist/installer/SHA256SUMS.txt
 
       - name: Upload build artifacts
@@ -90,5 +103,6 @@ jobs:
           name: installer
           path: |
             dist/installer/*.exe
+            dist/installer/*.zip
             dist/installer/SHA256SUMS.txt
           if-no-files-found: error

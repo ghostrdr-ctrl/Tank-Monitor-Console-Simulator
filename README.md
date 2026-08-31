@@ -12,11 +12,20 @@ Built to practise on and to test against, without a console on the bench.
 
 ## Installing it
 
-On Windows, download the installer from the
-[latest release](https://github.com/ghostrdr-ctrl/Tank-Monitor-Console-Simulator/releases)
-and run it. It is currently unsigned, so SmartScreen warns on first run; check
-the download against the release's `SHA256SUMS.txt`. Help then Check for
-updates fetches new versions from the same place.
+On Windows, download from the
+[latest release](https://github.com/ghostrdr-ctrl/Tank-Monitor-Console-Simulator/releases).
+There are two downloads and they are the same program:
+
+- **`...-Setup.exe`** installs it per-user, with no administrator rights and
+  no UAC prompt. Take this one unless it will not download.
+- **`...-Portable.zip`** is a folder to extract and run, with nothing
+  installed and nothing to uninstall. Take this one if your workplace blocks
+  the `.exe` download, which some do without offering a way past it. It
+  carries a `HOW-TO-RUN.txt` that says what to do with it.
+
+Both are currently unsigned, so SmartScreen warns on first run; check your
+download against the release's `SHA256SUMS.txt`. Help then Check for updates
+fetches new versions from the same place, and fetches the installer.
 
 ## Running from source
 
