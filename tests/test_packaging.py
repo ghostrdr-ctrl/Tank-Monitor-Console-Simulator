@@ -242,10 +242,23 @@ class TheInternalDocsStayOutOfTheSnapshot(unittest.TestCase):
     worth pinning.
     """
 
+    # The snapshot builder is itself held back from the snapshot, so a
+    # public clone has nothing here to check and these three errored on it
+    # -- which the release build gates on. Skipped by the file's ABSENCE
+    # rather than by catching the failure, so in this tree, where it is
+    # always present, they always run. See `tests/test_citations.py` for
+    # the same rule about a skip that swallows a crash.
+    BUILDER = os.path.join(ROOT, "packaging", "make_public_snapshot.py")
+
     def snapshot(self):
         import importlib.util
-        path = os.path.join(ROOT, "packaging", "make_public_snapshot.py")
-        spec = importlib.util.spec_from_file_location("_snapshot", path)
+        if not os.path.exists(self.BUILDER):
+            raise unittest.SkipTest(
+                "packaging/make_public_snapshot.py is not in this tree, so "
+                "this is the public snapshot and there is no builder to "
+                "check")
+        spec = importlib.util.spec_from_file_location("_snapshot",
+                                                      self.BUILDER)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module
@@ -295,6 +308,16 @@ class EveryRegisterIdTheSourceCitesResolves(unittest.TestCase):
     """
 
     REGISTERS = ("FIDELITY.md", "CLOSED.md", "BENCH.md", "UNKNOWNS.md")
+
+    def setUp(self):
+        # The registers are internal and the public snapshot ships none of
+        # them, so there is nothing for a citation to resolve AGAINST on a
+        # public clone. By absence, so this always runs in the tree that
+        # has them.
+        if not any(os.path.exists(os.path.join(ROOT, r))
+                   for r in self.REGISTERS):
+            raise unittest.SkipTest(
+                "no register in this tree, so this is the public snapshot")
 
     # `FIDELITY S9`, `CLOSED U13, U14`, `BENCH.md P3`, `UNKNOWNS A17`
     CITE = re.compile(r"(?:FIDELITY|CLOSED|BENCH\.md|UNKNOWNS)\s+"

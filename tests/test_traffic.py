@@ -65,6 +65,33 @@ def a_site(tanks=LABELS, full=12000.0, volume=8000.0, lines=True):
     return c
 
 
+def at_hour(c, hour=8):
+    """Put the console's clock on a fixed hour of its OWN day.
+
+    **A traffic test that leaves this to the wall clock reads it twice
+    over.** The arrival rate is the rate at this hour -- the DAY curve's
+    03:00 weight is 2 against the 17:00 peak's 84 -- so how many cars a run
+    earns depends on the hour it was started at; and a run that crosses
+    midnight meets `_roll_day`, which is meant to reset the day's counters
+    and does, while the tanks keep the level those cars took off them. Four
+    tests here passed in one timezone and failed in CI's, which is the
+    shape NOTES records under "a test that reads the wall clock".
+
+    Eight in the morning, so the sixteen hours before midnight are enough
+    for any run in this file, and every curve is off its floor.
+
+    Call it BEFORE the generator is switched on. The tick that follows a
+    clock jump generates the traffic for the whole jump, so pinning a
+    running site pre-loads its counters with however many hours the jump
+    happened to be.
+    """
+    stamp = c.now()
+    c.clock_offset += (((hour - stamp.tm_hour) % 24) * 3600.0
+                       - stamp.tm_min * 60.0 - stamp.tm_sec)
+    c.tick()
+    return c
+
+
 def run(c, hours, step=30.0):
     """Move the console's own clock, `step` seconds at a time."""
     for _ in range(int(hours * 3600.0 / step)):
@@ -965,16 +992,27 @@ class EachCarIsCountedAgainstItsOwnDay(unittest.TestCase):
     """
 
     def at_eleven(self):
-        """A busy site parked at 23:00 on its own clock."""
-        c = a_site(full=30000.0, volume=28000.0)
-        c.traffic.on = True
+        """A busy site parked at 23:00 with a day's trading behind it.
+
+        The day BEHIND it is the point: `test_today_starts_from_nothing`
+        compares what is on the counter before midnight with what is on it
+        after, and that only means anything if the site has been trading.
+
+        So the clock is pinned to noon with the generator OFF, and jumped
+        to 23:00 with it ON -- the tick after a jump generates the traffic
+        for the whole jump, so those eleven hours are the same eleven every
+        run. It used to be however far the WALL clock happened to be from
+        23:00, between one hour and twenty-four, which is what made this
+        pass here and fail in CI's timezone. See NOTES, "a test that reads
+        the wall clock".
+        """
+        c = at_hour(a_site(full=30000.0, volume=28000.0), 12)
         c.traffic.shape = "FLAT"
         c.traffic.cars_per_day = 1400.0
         c.traffic.auto_deliver = False
         c.traffic.rng.seed(9)
-        stamp = c.now()
-        c.clock_offset += (((23 - stamp.tm_hour) % 24) * 3600.0
-                           - stamp.tm_min * 60.0 - stamp.tm_sec)
+        c.traffic.on = True
+        c.clock_offset += 11 * 3600.0
         c.tick()
         return c
 
@@ -1176,7 +1214,11 @@ class TheTankerKeepsItsOwnPromises(unittest.TestCase):
         on the retail preset at BUSY, both tanks ended at zero against
         3,160 and 5,589 gallons at 60x on the same cars."""
         for step in (30.0, 7 * 3600.0):
-            c = a_site(full=10000.0, volume=6200.0)
+            # from a fixed hour, so the twenty-three hours cover the same
+            # stretch of the curve every run: started in CI's evening the
+            # site met its two busiest stretches back to back and tank 1
+            # ran dry, which is the failure this test exists to report
+            c = at_hour(a_site(full=10000.0, volume=6200.0))
             c.traffic.on = True
             c.traffic.set_level("BUSY")
             c.traffic.rng.seed(4)
@@ -1309,7 +1351,12 @@ class ItDoesNotCountSalesThatCannotHappen(unittest.TestCase):
         """The counters and the tank have to agree: what the header says
         was sold is what left the tanks, give or take the fuel still in
         somebody's hand at the end of the run."""
-        c = a_site()
+        # Six hours, from a fixed hour, because a run that crosses
+        # midnight meets `_roll_day`: the counters reset and the tanks do
+        # not, so the two disagree by a whole evening's fuel. In CI's
+        # timezone this read 4,924 gallons off the tanks against 13.7 on
+        # the counter.
+        c = at_hour(a_site())
         c.traffic.on = True
         c.traffic.set_level("BUSY")
         c.traffic.auto_deliver = False
@@ -1369,7 +1416,10 @@ class EveryExampleSiteCanRunIt(unittest.TestCase):
         with meters and no BIR key counts its cars and shifts nothing,
         which is the failure that looks most like success."""
         for name in presets.PRESETS:
-            c = self.a_preset(name)
+            # from a fixed hour: a six hour run that ends just past
+            # midnight has had its car counter reset by `_roll_day` and
+            # reads zero, which is what CI saw on the truck stop
+            c = at_hour(self.a_preset(name))
             c.traffic.on = True
             c.traffic.set_level("MID")
             c.traffic.auto_deliver = False

@@ -996,9 +996,26 @@ class ATruck(unittest.TestCase):
         return c
 
     def minutes(self, c, n, step=1.0):
-        for _ in range(int(n / step)):
-            c.clock_offset += 60.0 * step
-            c.tick()
+        """Move the console's clock, and ONLY the console's clock.
+
+        `Console.now()` is `time.time()` plus the offset, so the REAL clock
+        keeps running underneath a test that steps the offset -- and a
+        truck pouring at 300 gallons a minute gains five gallons for every
+        real second the test itself spends. The delta below is one gallon,
+        which is a fifth of a second of headroom: it held for months and
+        then one loaded full-suite run spent longer than that between two
+        ticks and the pour came out at 3,505. `tools/allscreens.py` stops
+        the clock for the whole walk for the same reason.
+        """
+        real = time.time
+        frozen = real()
+        time.time = lambda: frozen
+        try:
+            for _ in range(int(n / step)):
+                c.clock_offset += 60.0 * step
+                c.tick()
+        finally:
+            time.time = real
 
     def test_a_truck_pours_at_its_rate_over_console_time(self):
         c = self.a_site()

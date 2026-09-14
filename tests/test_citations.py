@@ -222,7 +222,13 @@ class TheCitationFileItself(unittest.TestCase):
         this repository asserts about itself belongs where it is checked.
         """
         import re
-        with open(os.path.join(HERE, "AUDIT.md"), encoding="utf-8") as fh:
+        audit = os.path.join(HERE, "AUDIT.md")
+        if not os.path.exists(audit):
+            # AUDIT.md is internal and the public snapshot holds it back,
+            # so a public clone has no paragraph to check. By absence, so
+            # this always runs in the tree that has it.
+            raise unittest.SkipTest("AUDIT.md is not in this tree")
+        with open(audit, encoding="utf-8") as fh:
             text = fh.read()
         head = text.split("## Where it stands", 1)[1][:400]
         numbers = [int(n) for n in re.findall(r"\b(\d{2,5})\b", head)]
