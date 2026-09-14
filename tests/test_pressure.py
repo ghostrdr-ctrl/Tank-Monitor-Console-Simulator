@@ -19,6 +19,7 @@ pressure come from the Line Leak Application Guide, 577013-465.
 import os
 import struct
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -85,6 +86,482 @@ class ThePipeDecidesTheArithmetic(unittest.TestCase):
         self.assertGreater(short.psi_per_gallon(), long_.psi_per_gallon())
 
 
+class UserDefinedPipe(unittest.TestCase):
+    """FIDELITY R8: the USER DEFINED pipe type exists so a site can enter its
+    own bulk modulus, and `pipe()` read it out of `78B` -- which is Set
+    Pressure Line Leak 0.10 GPH Test SCHEDULE. The modulus is `779`, which
+    has a field and a setup step that writes it, so the panel stored the
+    number where the manual says it goes and the model looked for it in a
+    schedule. A site that programmed its own pipe got the default pipe's
+    behaviour, silently.
+    """
+
+    def a_user_defined_line(self, modulus):
+        c = a_line(pipe="18")
+        c.values["S77901"] = "01" + struct.pack(">f", modulus).hex().upper()
+        return c.lines.line("plld", 1)
+
+    def test_the_modulus_comes_off_779(self):
+        self.assertEqual(self.a_user_defined_line(3200.0).pipe()[0], 3200.0)
+
+    def test_it_is_not_the_default_pipes(self):
+        """3500.0 is Enviroflex PP1501, the default, and was what every
+        user-defined line silently got."""
+        self.assertNotEqual(self.a_user_defined_line(3200.0).pipe()[0],
+                            pressure.PIPE[pressure.DEFAULT_PIPE][0])
+
+    def test_the_number_reaches_the_arithmetic(self):
+        """A stiffer user-defined pipe answers a leak harder, which is the
+        whole reason the console asks for the modulus."""
+        stiff = self.a_user_defined_line(40000.0)
+        soft = self.a_user_defined_line(2000.0)
+        self.assertGreater(stiff.psi_per_gallon(), soft.psi_per_gallon())
+
+    def test_a_schedule_in_78b_does_not_become_a_modulus(self):
+        """The code this used to read. Programming a 0.10 GPH schedule must
+        not change the pipe."""
+        c = a_line(pipe="18")
+        c.values["S77901"] = "01" + struct.pack(">f", 3200.0).hex().upper()
+        c.values["S78B01"] = "0112609020600"
+        self.assertEqual(c.lines.line("plld", 1).pipe()[0], 3200.0)
+
+
+class TheWaitTimesFollowThePipe(unittest.TestCase):
+    """FIDELITY R8's other half. 577013-344 makes mis-programming the pipe
+    type a troubleshooting procedure precisely because the waits should
+    differ -- "in the case where a stiff line (steel or fiberglass) is
+    programmed as a flex line the wait time will be excessively long ...
+    when a soft flex line is programmed as a steel or fiberglass line the
+    wait times will be too short".
+
+    The precision leg used to return `min(60*scale, 180), min(150*scale,
+    480)`, two invented ceilings that flattened the table: at 1000 feet
+    sixteen of the eighteen pipe types came out identical, and the cap bound
+    HARDER the longer the line got, which is backwards. The budget is the
+    manual's own instead -- "15 minutes to measure LR1 and another 15
+    minutes to measure LR2" -- and the pair is shrunk in proportion only
+    when it will not fit, the same shape the gross leg already used.
+    """
+
+    def spread(self, length):
+        """How many pipe types share the commonest wait pair."""
+        groups = {}
+        for key in sorted(pressure.PIPE):
+            ln = a_line(pipe=key, length=length).lines.line("plld", 1)
+            pair = tuple(round(x, 2) for x in ln.wait_times("periodic"))
+            groups.setdefault(pair, []).append(key)
+        return max(len(v) for v in groups.values())
+
+    def test_a_soft_line_waits_longer_than_a_stiff_one(self):
+        steel = a_line(pipe="02", length=400.0).lines.line("plld", 1)
+        flex = a_line(pipe="06", length=400.0).lines.line("plld", 1)
+        self.assertGreater(sum(flex.wait_times("periodic")),
+                           sum(steel.wait_times("periodic")))
+
+    def test_the_leg_fits_the_cycle_the_manual_gives_it(self):
+        for key in sorted(pressure.PIPE):
+            for length in (100.0, 500.0, 1000.0):
+                ln = a_line(pipe=key, length=length).lines.line("plld", 1)
+                self.assertLessEqual(sum(ln.wait_times("periodic")),
+                                     pressure.CYCLE, f"{key} at {length}")
+
+    # A RATCHET, not a target. The flattening is reduced and not gone: the
+    # truncation still binds above a scale of four, which is over half the
+    # table on a long line. These are the numbers as they stand, and the
+    # figures the old ceilings gave are in the comment beside each -- so
+    # improving the curve shows up here, and regressing it fails.
+    FLATTEST = {100.0: 6,      # was 10 of 18
+                200.0: 7,      # was 10
+                400.0: 10,     # was 13
+                1000.0: 14}    # was 16
+
+    def test_the_table_is_no_flatter_than_it_was(self):
+        for length, most in self.FLATTEST.items():
+            self.assertLessEqual(self.spread(length), most, f"{length} ft")
+
+
+class TheFourFaultsTheQuickHelpStates(unittest.TestCase):
+    """FIDELITY N2. 577013-727 Rev B states a trigger for each of these in
+    one sentence, this console carried the alarm NAMES for all four, and
+    nothing posted any of them. Every state they turn on was already
+    modelled -- Console.latches() even special-cased FUEL OUT to stop it
+    latching, guarding a branch nothing could reach.
+    """
+
+    def live(self, c):
+        return [a for a in c.conditions() if a[:2] in ("21", "26")]
+
+    def test_a_negative_reading_is_an_open_transducer(self):
+        """p.11: "when the pressure transducer is not connected to the PLLD
+        Interface Module the pressure reading is negative"."""
+        c = a_line()
+        c.lines.line("plld", 1).pressure = -3.0
+        self.assertIn("210601", self.live(c))
+
+    def test_a_healthy_line_is_not_open(self):
+        self.assertNotIn("210601", self.live(a_line()))
+
+    def test_pump_on_equal_to_pump_off_in_band_is_a_short(self):
+        """p.12: "when the pump-On and pump-Off pressures are reading the
+        same value and are within the range of 5 to 15 psi"."""
+        c = a_line()
+        c.lines.line("plld", 1).readings["gross"].append(
+            pressure.Reading(0.0, 9.0, 9.0, 9.0, True))
+        self.assertIn("211501", self.live(c))
+
+    def test_the_same_two_readings_outside_the_band_are_not(self):
+        """A line resting at its pump pressure reads the same twice and is
+        working perfectly. The band is what makes it a fault."""
+        c = a_line()
+        c.lines.line("plld", 1).readings["gross"].append(
+            pressure.Reading(0.0, 30.0, 30.0, 30.0, True))
+        self.assertNotIn("211501", self.live(c))
+
+    def a_dry_line(self, volume=50.0, gross_failed=True):
+        c = a_line()
+        c.values["S78501"] = "0101"          # this line feeds tank 1
+        c.lines.line("plld", 1).result["gross"] = not gross_failed
+        c.tank_level[1] = {"volume": volume, "water": 0.0}
+        return c
+
+    def test_fuel_out_wants_both_halves(self):
+        """p.9: "This alarm occurs when the fuel level is below 10 inches
+        AND a gross line test has failed"."""
+        c = self.a_dry_line()
+        self.assertLess(c.height_at(1, 50.0), pressure.FUEL_OUT_INCHES)
+        self.assertIn("211701", self.live(c))
+
+    def test_it_clears_when_the_level_comes_back(self):
+        """"The alarm will clear when the fuel level exceeds 10 inches" --
+        which is why `latches()` exempts it."""
+        c = self.a_dry_line()
+        c.tank_level[1] = {"volume": 5000.0, "water": 0.0}
+        self.assertNotIn("211701", self.live(c))
+        self.assertFalse(c.latches("211701"))
+
+    def test_a_low_tank_alone_is_not_fuel_out(self):
+        c = self.a_dry_line()
+        c.lines.line("plld", 1).result["gross"] = True
+        self.assertNotIn("211701", self.live(c))
+
+    def test_the_tank_number_is_read_past_its_device_prefix(self):
+        """S785 stores `0101`, the prefix and then the tank. `limit()` only
+        strips a prefix on values longer than eight characters, so it read
+        that as one hundred and one and the alarm could never find a tank."""
+        c = self.a_dry_line()
+        self.assertEqual(c.text("785", 1).strip(), "01")
+
+    def test_a_handle_up_for_a_shift_is_a_continuous_handle(self):
+        """p.8: "A continuous pump-in signal will activate ... (Version 19
+        and higher) A Continuous Handle alarm"."""
+        c = a_line()
+        c.lines.handle("plld", 1, True)
+        self.assertNotIn("211601", self.live(c))
+        c.clock_offset += pressure.HANDLE_ALARM_HOURS * 3600.0 + 60.0
+        self.assertIn("211601", self.live(c))
+
+    def test_it_is_sixteen_hours_and_not_the_pre_19_warning_s_eight(self):
+        """577013-344 Rev H p.19 states the v19 alarm's own delay: "A
+        continuous Pump-in signal will activate a Continuous Handle alarm
+        after 16 hours."
+
+        This console counted eight, borrowed from the PRE-19 warning on the
+        reasoning that the v19 alarm had no stated delay -- so it posted an
+        ALARM at the hour a console it cannot be would have posted a
+        WARNING. Eight hours has to be quiet."""
+        self.assertEqual(pressure.HANDLE_ALARM_HOURS, 16.0)
+        c = a_line()
+        c.lines.handle("plld", 1, True)
+        c.clock_offset += 8.0 * 3600.0 + 60.0
+        self.assertNotIn("211601", self.live(c))
+
+    def test_the_timeout_is_programmable_per_line_at_774(self):
+        """"Set Pressure Line Leak Continuous Handle Alarm Timeout", 774:
+        "tt - Continuous Handle Alarm Timeout (Decimal, in hours, 1-16)".
+        The field has been on this console the whole time and the alarm
+        counted a literal instead. Programmed over the wire, because that
+        is the only way a real console is programmed."""
+        c = a_line()
+        h = Handler(c, verbose=False)
+        self.assertNotIn(b"9999", h.handle(SOH + b"S77401" + b"04" + b"\r"))
+        c.lines.handle("plld", 1, True)
+        c.clock_offset += 3.0 * 3600.0 + 60.0
+        self.assertNotIn("211601", self.live(c))
+        c.clock_offset += 3600.0
+        self.assertIn("211601", self.live(c))
+
+    def test_wplld_counts_its_own_7ae(self):
+        """The WPLLD twin, same words and same range. Its field did not
+        exist at all, so the timeout could be sent over the wire and land
+        nowhere."""
+        c = a_line(kind="wplld")
+        h = Handler(c, verbose=False)
+        self.assertNotIn(b"9999", h.handle(SOH + b"S7AE01" + b"02" + b"\r"))
+        c.lines.handle("wplld", 1, True)
+        c.clock_offset += 3600.0 + 60.0
+        self.assertNotIn("261601", self.live(c))
+        c.clock_offset += 3600.0
+        self.assertIn("261601", self.live(c))
+
+    def test_the_two_fields_hold_the_manual_s_range(self):
+        """"1-16", on both codes. The PLLD field said 0 to 99."""
+        from tls350sim.console import FIELDS
+        for key in ("S77401", "S7AE01"):
+            self.assertEqual((FIELDS[key]["min"], FIELDS[key]["max"]),
+                             (1, 16), key)
+
+    def test_putting_the_handle_back_clears_it(self):
+        c = a_line()
+        c.lines.handle("plld", 1, True)
+        c.clock_offset += pressure.HANDLE_ALARM_HOURS * 3600.0 + 60.0
+        c.lines.handle("plld", 1, False)
+        self.assertNotIn("211601", self.live(c))
+        self.assertIsNone(c.lines.line("plld", 1).handle_since)
+
+    def test_the_pre_19_pair_cannot_arise_on_this_console(self):
+        """The manual's other half -- a warning at 8 hours and an alarm at
+        16, "(Pre 19)" -- needs a console older than PLLD itself, which the
+        version tables put at 24. So 21/10 and 26/09 stay unproducible, and
+        the code carries no branch it can never take."""
+        from tls350sim import versions
+        for kind in ("plld", "wplld"):
+            arrives = next(v for v in range(1, 60)
+                           if versions.supports(v, "E7", kind))
+            self.assertGreater(arrives, 19, kind)
+
+    def a_low_pressure_line(self, threshold="15", enabled=True):
+        c = a_line()
+        c.values["S77C01"] = "01" + ("1" if enabled else "0")
+        c.values["S78F01"] = "01" + threshold.rjust(2, "0")
+        return c
+
+    def test_a_dispense_below_the_threshold_is_a_low_pressure_alarm(self):
+        """576013-623 Rev AN p.10-6: "The Low Pressure Alarm Shutoff detects
+        low pressure during a dispense ... When the pressure drops below the
+        entered shutoff value, the pump shuts off"."""
+        c = self.a_low_pressure_line()
+        c.lines.handle("plld", 1, True)
+        self.assertNotIn("211401", self.live(c))
+        c.lines.line("plld", 1).pressure = 9.0
+        self.assertIn("211401", self.live(c))
+
+    def test_it_is_only_measured_during_a_dispense(self):
+        c = self.a_low_pressure_line()
+        c.lines.line("plld", 1).pressure = 9.0
+        self.assertNotIn("211401", self.live(c))
+
+    def test_a_threshold_of_zero_disables_it(self):
+        """"A value of 0 will disable this alarm"."""
+        c = self.a_low_pressure_line(threshold="0")
+        c.lines.handle("plld", 1, True)
+        c.lines.line("plld", 1).pressure = 1.0
+        self.assertNotIn("211401", self.live(c))
+
+    def test_the_flag_gates_the_value(self):
+        """Two screens: `LOW PRESSURE SHUTOFF: NO` and `LOW PRESSURE: 5`.
+        The console had the first and not the second, so the number the
+        alarm is measured against could not be programmed at all."""
+        c = self.a_low_pressure_line(enabled=False)
+        c.lines.handle("plld", 1, True)
+        c.lines.line("plld", 1).pressure = 9.0
+        self.assertNotIn("211401", self.live(c))
+
+    def test_the_value_has_a_panel_screen_now(self):
+        from tls350sim.console import FIELDS, SETUP_MENU
+        self.assertIn("S78F01", FIELDS)
+        drawn = [st for fn in SETUP_MENU for st in fn.get("steps", [])
+                 if st.get("code") == "S78F01"]
+        self.assertEqual(len(drawn), 1)
+        self.assertEqual(drawn[0]["l2"], "LOW PRESSURE:")
+        # "programmable values from 0 - 25 psi"
+        self.assertEqual(FIELDS["S78F01"]["min"], 0)
+        self.assertEqual(FIELDS["S78F01"]["max"], 25)
+
+    def test_wpll_has_no_low_pressure_alarm(self):
+        """Category 26's 14 is High Pressure, and the shutoff's own codes
+        are PLLD's alone."""
+        self.assertNotIn("low", pressure.LINE_ALARMS["wplld"])
+
+    def test_an_unprogrammed_position_raises_nothing(self):
+        """A card in the cage is wires, not lines."""
+        c = a_line()
+        c.values["S78101"] = ""
+        c.values["S78201"] = ""
+        c.lines.line("plld", 1).pressure = -3.0
+        self.assertEqual(self.live(c), [])
+
+
+class TheLineResultsReport(unittest.TestCase):
+    """FIDELITY W14. Function 373 and 576013-610 Rev AC p.11-1 draw the same
+    report and it is a block per RATE, not a table: this console printed
+    function 208's TEST TYPE / RESULT / RATE / HOURS / VOLUME columns, which
+    is the tank report's mistake in a second place.
+    """
+
+    def a_tested_line(self, passes=3):
+        c = a_line()
+        for _ in range(passes):
+            c.clock_offset += 3600.0
+            c.leaks.start("plld", 1, "gross")
+            for _ in range(200):
+                c.clock_offset += 30.0
+                c.leaks.tick()
+        return c
+
+    def lines(self, c):
+        return [str(x) for x in printer.fit(printer.leak_tests(c, "plld", 1))]
+
+    def test_a_block_per_rate_and_not_a_table(self):
+        out = self.lines(self.a_tested_line())
+        self.assertIn(" 3.0 GAL/HR RESULTS:", out)
+        self.assertIn("0.20 GAL/HR RESULTS:", out)
+        self.assertIn("0.10 GAL/HR RESULTS:", out)
+        self.assertFalse([x for x in out if "TEST TYPE" in x], out)
+
+    def test_the_counters_the_manual_asks_for(self):
+        """"the number of 3.0 gph tests run in the previous 24 hours and
+        since midnight of the current day"."""
+        out = self.lines(self.a_tested_line())
+        self.assertIn("LAST TEST:", out)
+        self.assertIn("NUMBER OF TESTS PASSED", out)
+        prev = [x for x in out if x.startswith("PREV 24 HOURS")]
+        since = [x for x in out if x.startswith("SINCE MIDNIGHT")]
+        self.assertTrue(prev and since, out)
+        self.assertGreater(int(prev[0].split(":")[1]), 0)
+
+    def test_the_counters_line_up(self):
+        """The manual sets them one under the other with their numbers in a
+        column: `PREV 24 HOURS :   149` over `SINCE MIDNIGHT :    76`."""
+        out = self.lines(self.a_tested_line())
+        prev = [x for x in out if x.startswith("PREV 24 HOURS")][0]
+        since = [x for x in out if x.startswith("SINCE MIDNIGHT")][0]
+        self.assertEqual(len(prev), len(since))
+
+    def test_a_verdict_reads_the_way_the_report_prints_it(self):
+        """Function 373's sample says PASS where the SCREEN says PASSED."""
+        out = self.lines(self.a_tested_line())
+        self.assertIn("PASS", out)
+        self.assertFalse([x for x in out if x.strip() == "PASSED"], out)
+
+    def test_a_line_with_no_tests_says_so_under_each_rate(self):
+        out = self.lines(a_line())
+        self.assertGreaterEqual(
+            len([x for x in out if x == "NO TEST DATA AVAILABLE"]), 1)
+
+
+class TheLineEquipmentFaultAlarm(unittest.TestCase):
+    """FIDELITY N2a. 577013-727 Rev B Appendix A Table I gives the High
+    Pressure warning and alarm a threshold per software version and ends
+    "19: Not Applicable" -- read off p.15 by word position, because the
+    table sets its version labels above their own limit columns and every
+    text extraction interleaves them:
+
+        version 15        40 psi warning   50 psi alarm & shutdown
+        version 16 A & B  40 psi warning   50 psi alarm & shutdown
+        version 16 C      29 psi warning   30 psi alarm & shutdown
+        version 17 & 18   30 psi warning   40 psi alarm & shutdown
+        version 19        Not Applicable
+
+    From version 19 the Line Equipment Fault alarm replaces the pair, and
+    the manuals' contents page says so in as many words. This console cannot
+    be older than that with a pressurised line on it -- PLLD and WPLLD both
+    arrive at version 24 in the version tables -- so the High Pressure pair
+    is unreachable here for the same reason the pre-19 Continuous Pump On
+    pair is, and the alarm to produce is this one.
+
+    577013-344 Rev H pp.13-14 states it as two monitors, and this console
+    already had both quantities.
+    """
+
+    def a_dispensed_line(self, pd, ref):
+        c = a_line()
+        ln = c.lines.line("plld", 1)
+        ln.pd_ref = ref
+        ln.handle = True
+        ln.handle_since = time.mktime(c.now())
+        ln.pressure = pd
+        c.lines.handle("plld", 1, False)         # the handle goes down
+        return c, ln
+
+    def live(self, c):
+        return [a for a in c.conditions() if a[:2] in ("21", "26")]
+
+    def test_the_dispensing_monitor_wants_five_psi_for_a_month(self):
+        """"If the current Pd value exceeds the Pd_ref value by 5 psi for a
+        continuous period of one month, the Line Equipment Fault alarm will
+        be posted"."""
+        c, ln = self.a_dispensed_line(pd=30.0, ref=20.0)
+        self.assertIsNotNone(ln.pd_high_since)
+        self.assertNotIn("211801", self.live(c))
+        c.clock_offset += 29 * 24 * 3600.0
+        self.assertNotIn("211801", self.live(c))
+        c.clock_offset += 2 * 24 * 3600.0
+        self.assertIn("211801", self.live(c))
+
+    def test_four_psi_over_is_not_five(self):
+        c, ln = self.a_dispensed_line(pd=24.0, ref=20.0)
+        self.assertIsNone(ln.pd_high_since)
+        c.clock_offset += 60 * 24 * 3600.0
+        self.assertNotIn("211801", self.live(c))
+
+    def test_continuous_means_the_clock_starts_again(self):
+        """A dispense that comes back inside the band is not a fault, and
+        the month is not carried over from the last one."""
+        c, ln = self.a_dispensed_line(pd=30.0, ref=20.0)
+        c.clock_offset += 20 * 24 * 3600.0
+        ln.handle, ln.handle_since = True, time.mktime(c.now())
+        ln.pressure = 22.0
+        c.lines.handle("plld", 1, False)
+        self.assertIsNone(ln.pd_high_since)
+        c.clock_offset += 20 * 24 * 3600.0
+        self.assertNotIn("211801", self.live(c))
+
+    def test_the_vent_monitor_wants_both_of_its_numbers(self):
+        """"If Pv > 40 psi and Pd > 50 psi -> Line Equipment Fault alarm is
+        posted", after a PASSING gross test. "The inclusion of the Pd value
+        in the formula prevents the alarm from firing when the reason for
+        the high Pv value is a restricted relief path"."""
+        c = a_line()
+        ln = c.lines.line("plld", 1)
+        ln.pd = 60.0
+        c.lines._finish_gross(ln, time.mktime(c.now()), 45.0, 45.0, True, 60.0)
+        self.assertTrue(ln.vent_fault)
+        self.assertIn("211801", self.live(c))
+
+    def test_a_high_vent_pressure_alone_is_a_restricted_relief_path(self):
+        c = a_line()
+        ln = c.lines.line("plld", 1)
+        ln.pd = 30.0
+        c.lines._finish_gross(ln, time.mktime(c.now()), 45.0, 45.0, True, 60.0)
+        self.assertFalse(ln.vent_fault)
+        self.assertNotIn("211801", self.live(c))
+
+    def test_it_only_runs_after_a_test_that_passed(self):
+        c = a_line()
+        ln = c.lines.line("plld", 1)
+        ln.pd = 60.0
+        c.lines._finish_gross(ln, time.mktime(c.now()), 45.0, 45.0, False,
+                              60.0)
+        self.assertFalse(ln.vent_fault)
+
+    def test_the_offset_reset_starts_both_monitors_again(self):
+        """"A manual reset should be performed after a transducer or pump
+        has been replaced"."""
+        c, ln = self.a_dispensed_line(pd=30.0, ref=20.0)
+        ln.vent_fault = True
+        ln.reset_offset()
+        self.assertIsNone(ln.pd_high_since)
+        self.assertFalse(ln.vent_fault)
+        self.assertNotIn("211801", self.live(c))
+
+    def test_the_wireless_line_has_its_own_number_for_it(self):
+        c = a_line(kind="wplld")
+        ln = c.lines.line("wplld", 1)
+        ln.pd = 60.0
+        c.lines._finish_gross(ln, time.mktime(c.now()), 45.0, 45.0, True, 60.0)
+        self.assertIn("261801", self.live(c))
+
+
 class TheGrossTest(unittest.TestCase):
     """"a pump-Off test that immediately follows the end of dispensing"."""
 
@@ -112,9 +589,33 @@ class TheGrossTest(unittest.TestCase):
             self.assertTrue(24.0 <= psi <= 38.0, psi)
 
     def test_a_programmed_pump_pressure_is_taken_exactly(self):
+        """FIDELITY R17. The code read here was `7B7`, which is not a
+        function code -- no field, no census entry, nowhere in 576013-635 --
+        so nothing could ever store it and this branch was unreachable on
+        every console. The test passed anyway by writing `S7B701` into
+        `values` itself, which is the shape worth remembering: a test that
+        pokes the store proves the READER and says nothing about whether
+        anything can ever fill it."""
         c = a_line(leak=0.0)
-        c.values["S7B701"] = "01" + struct.pack(">f", 41.0).hex().upper()
+        c.values["S77601"] = "01" + struct.pack(">f", 41.0).hex().upper()
         self.assertAlmostEqual(c.lines.pump_psi("plld", 1), 41.0, places=3)
+
+    def test_the_reference_pressure_arrives_over_the_wire(self):
+        """The half the entry above could not reach. 576013-635 Rev AA
+        p.21239 enters 776 as `ppp.pp`, so a Set in display format has to be
+        accepted, stored and read back as the same number."""
+        from tls350sim.wire import Handler
+        c = a_line(leak=0.0)
+        h = Handler(c, verbose=False)
+        reply = h.handle(b"\x01S77601041.00\r")
+        self.assertNotIn(b"9999", reply)
+        self.assertAlmostEqual(c.limit("776", 1), 41.0, places=3)
+        self.assertAlmostEqual(c.lines.pump_psi("plld", 1), 41.0, places=3)
+        # and the offset monitor's Pd Ref is the same quantity, so it reads
+        # the same programmed number rather than generating its own
+        self.assertAlmostEqual(c.lines.nominal_psi("plld", 1), 41.0, places=3)
+        # WPLLD has no profile line test and no code for one
+        self.assertIsNone(c.lines.programmed_psi("wplld", 1))
 
     def test_a_line_below_the_floor_fails(self):
         """"If P2 is less than 12 psi the test fails"."""
@@ -309,6 +810,55 @@ class Dispensing(unittest.TestCase):
 class WhatTheScreensSay(unittest.TestCase):
     """The diagnostic a technician watches while the test runs."""
 
+    def test_a_test_running_on_a_shut_down_line_is_visible(self):
+        """Reported from the bench: "after pressing enter I should see it
+        running the test, not DISABLE ALARM."
+
+        `DISABLE ALARM` is the right word -- 577013-344 Rev H p.22 lists it
+        among the diag screen's statuses, "one of the PLLD pump disable
+        alarms is active", and 576013-635 numbers it `07` in the same
+        enumeration `05` running pump belongs to. What was wrong was that
+        it OUTRANKED the others: `status` asked `disabled` first and
+        returned unconditionally, so no test on a shut-down line could ever
+        be seen.
+
+        And that is the one line a technician has to watch, because running
+        a test on it is the documented way to get it back. 576013-623 Rev
+        AN p.5-10: "This feature lets you choose how to re-enable a line
+        shut down by a failing line leak test. To re-enable a shutdown line
+        only by a passed line test, press STEP."
+        """
+        c = a_line()
+        c.leaks.disabled.add(("plld", 1))
+        ln = c.lines.line("plld", 1)
+        self.assertEqual(ln.screen()[1], "DISABLE ALARM HANDLE OFF")
+        c.lines.start("plld", 1, "gross")
+        self.assertTrue(ln.running())
+        self.assertEqual(ln.screen()[1], "RUNNING PUMP  HANDLE OFF")
+        self.assertTrue(ln.pump)
+        # and when the test is over the shutdown is still standing
+        c.lines.stop("plld", 1)
+        self.assertEqual(ln.screen()[1], "DISABLE ALARM HANDLE OFF")
+
+    def test_a_wplld_line_says_the_word_its_own_figure_lists(self):
+        """Figure 19 is PLLD's list of statuses and Figure 20 is WPLLD's,
+        and they are not the same list: p.26 has no RUNNING PUMP and no
+        PRESSURE CHECK on it. 576013-610 Rev AC draws the two start
+        confirmations differently for the same reason -- `Q #: RUNNING
+        PUMP` on p.11-4 and `W #: TEST PENDING` on p.12-4.
+
+        The engine keeps one vocabulary and the glass translates, so the
+        wire is untouched: `wirelines` maps both PLLD-only words onto
+        WPLLD's `02` with a note that there is no code for them.
+        """
+        c = a_line(kind="wplld")
+        c.leaks.start("wplld", 1, "gross")
+        ln = c.lines.line("wplld", 1)
+        self.assertEqual(ln.state, "RUNNING PUMP")
+        self.assertEqual(ln.status(), "RUNNING PUMP")
+        self.assertEqual(ln.shown_status(), "TEST PENDING")
+        self.assertIn("TEST PENDING", ln.screen()[1])
+
     def test_the_first_screen_is_a_pressure_and_two_switches(self):
         """"Q 1: XX.XXX PSI PUMP OFF" over "TEST COMPLETE HANDLE OFF"."""
         c = a_line(leak=0.02)
@@ -336,12 +886,21 @@ class WhatTheScreensSay(unittest.TestCase):
         c = a_line()
         c.leaks.start("plld", 1, "gross")
         seen = set()
-        for _ in range(9):           # inside the pump stage throughout
+        # The console's clock is `time.time() + clock_offset`, so REAL
+        # elapsed time counts too: nine simulated seconds against a ten
+        # second PUMP_TRAIL left one second of headroom, and on a loaded
+        # machine the loop itself spent it. That is a race, not a reading --
+        # it failed about once in three thousand runs, only ever inside a
+        # full suite. So it samples while the pump is actually on and
+        # requires enough samples to mean something.
+        for _ in range(9):
             c.clock_offset += 1.0
             c.leaks.tick()
             ln = c.lines.line("plld", 1)
-            self.assertTrue(ln.pump, "still meant to be pumping")
+            if not ln.pump:
+                break
             seen.add(round(ln.pressure, 3))
+        self.assertGreaterEqual(len(seen), 5, "the pump stage was not sampled")
         self.assertGreater(len(seen), 1, "the reading should move")
         nominal = max(seen) - min(seen)
         self.assertLess(nominal, 3.0, "but stay recognisably the same pump")

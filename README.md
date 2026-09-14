@@ -38,17 +38,79 @@ python run.py                     console window and bench window, serial on 127
 python run.py --port 10002        somewhere else
 python run.py --seed site.vrset   start out looking like a real site
 python run.py --headless          serial only, no window
-python run.py --xport             also emulate the Lantronix XPort (setup menu, discovery)
+python run.py --xport             emulate the TCP/IP card: setup menu, web manager, discovery
 python -m unittest discover tests
 ```
 
-Point a tool at `127.0.0.1` and the port it prints.
+Without `--xport`, point a tool at `127.0.0.1` and the port it prints.
+
+### The card, and the address it answers at
+
+With `--xport` the console is behind an emulated TCP/IP Interface Module, and
+then **the address programmed into the card is the address to use** -- not
+127.0.0.1. Ping it, point DeviceInstaller at it, open its web pages, pull
+inventory from its tunnel port. Reprogram it and everything moves, because on
+a real site it would: the card reboots and the old address stops answering.
+
+```
+python run.py --xport --card-ip 192.168.1.50   program it before it starts
+python run.py --xport --reset-card             put it back to its defaults
+python run.py --xport --claim-ip               make the address answer ping
+python run.py --xport --xport-web-port 8080    when something else has port 80
+```
+
+The window's title bar and its Network tab show the address and port to
+connect to, and the log says if the card had to fall back.
+
+**`--claim-ip` is the one that needs administrator rights.** Without it the
+card binds the programmed address when this machine already has it, and
+listens on every address when it does not -- connecting, programming and
+reading inventory all work either way. With it, and running elevated, the
+address is added to a network adapter for as long as the simulator runs, so
+it answers ping and other machines on the subnet reach it exactly as they
+would a real card. It is removed again on the way out.
+
+**Reset card** on the Network tab, or `--reset-card`, puts the whole card
+back including its address, which the card's own "7 Defaults" deliberately
+does not. It is there for when a trainee programs an address they cannot then
+reach.
+
+### Commissioning a new card
+
+`--blank-card` gives you a module as it comes out of its box: **no address at
+all**. There is no factory default to fall back on -- Veeder-Root's
+installation guide is explicit that the address is customer-supplied -- so
+the card answers nothing that is addressed by IP. No tunnel, no setup menu,
+no web manager. Only the two things that reach an unaddressed card work:
+
+- **Discovery** on UDP 30718, which is why DeviceInstaller can find a module
+  you cannot ping. It lists by MAC.
+- **The port-1 knock**, which is the manufacturer's own command-prompt
+  procedure:
+
+```
+arp -s 192.168.12.53 00-20-4A-AD-64-70     put the wanted address against the card's MAC
+telnet 192.168.12.53 1                     the card takes that address
+telnet 192.168.12.53 9999                  now program the rest
+```
+
+The card takes the address it was knocked at, saves it, and comes back on it
+with everything answering. That is the first job on a site, and it is the
+exercise this starts from.
+
+A card that already has an address is one somebody has already programmed --
+which is also why an address survives the menu's own "7 Defaults" while
+everything else goes back.
+
+Each example site is programmed with its own card address, as real sites are,
+so loading a different site means going to find the new card.
 
 ## Using it
 
 Because it is a one-to-one copy, operate it the way you operate a real
 console: the same keys, the same MODE and FUNCTION and STEP walk, the same
-setup and diagnostic menus. The manufacturer's manuals are the manual for this
+operating, setup and diagnostic menus -- and reconciliation too, on a console
+with the BIR software key. The manufacturer's manuals are the manual for this
 simulator too. Program it, read it over the serial port, print from it, and it
 answers as the hardware answers.
 
@@ -61,11 +123,37 @@ The console is faithful; the parts around it are what make it a bench.
   drag the water float to set the water under it, and the console gauges what
   you set. Sensors, lines and dispensers are there too, and the alarms follow
   from the physical state against the limits you programmed.
+- **A forecourt that runs itself.** A Traffic view sets the site's own day:
+  how many cars (a closed store, a slow one, a middling one, a busy one, or
+  a number you type) and which hours they come in (day-heavy, night-heavy,
+  flat around the clock, weekend). Cars arrive, lift nozzles, and drive
+  away; the grades come off the tanks' own product labels; the tanks go
+  down; a tanker is called when one gets low and drops down the fill riser
+  so the console infers the delivery rather than being told. Blended grades
+  are there too -- set up regular and E-85 and blend E15 out of them at
+  whatever ratio, and both tanks go down together.
+
+  What it is FOR is the thing a technician cannot practise on a quiet
+  bench: with the forecourt running, a line leak test will not start,
+  because a handle is up. Shut the site down and it starts. Put a leak on
+  the line first and watch the gross test that follows the next dispense
+  fail. That is the job, and until now nothing here could stage it.
+- **Shutdowns that actually shut things down.** A failed test, a line
+  disable alarm the site has programmed, or a relay wired to a tank whose
+  alarm has dropped the contactor -- any of the three takes the pump out,
+  so the handle gets no pressure and no fuel moves. The Traffic view lists
+  what is dead and why.
 - **A probe you can unplug**, at the connector on the tank, which raises the
   Probe Out alarm the way a pulled probe does in the field.
-- **The Lantronix XPort** inside the TCP/IP Interface Module is emulated: the
-  telnet setup menu on port 9999 and Lantronix DeviceInstaller discovery on
-  UDP 30718, alongside the serial tunnel. Off until you start it.
+- **The TCP/IP Interface Module** is emulated from a real one, byte for byte:
+  the telnet setup menu on port 9999, the web manager on port 80, and
+  DeviceInstaller discovery on UDP 30718, alongside the serial tunnel. A card
+  on a bench was captured and the emulator's every screen was diffed against
+  it; `reference/lantronix_xport_capture.md` records what that settled and
+  the ten places the manuals turned out to be wrong. Program it the way you
+  would program a real one -- including the trap where typing `Y` and Enter
+  at the gateway question shifts the address by an octet. Off until you start
+  it.
 - **A self-updater.** Help then Check for updates fetches and verifies new
   releases.
 - **A Windows installer** with a per-user install that needs no administrator

@@ -74,6 +74,37 @@ MAINTENANCE_DATA = {
     "10": "device",
 }
 
+def maintenance_words(entry):
+    """119's six character data field, read the way its type says to.
+
+    One field, six meanings: a filler, a login ID, a device/type/alarm
+    triple, a service code or a device number. The same hazard as 087 and
+    088, in a single field this time. See MAINTENANCE_DATA above.
+
+    It lives here rather than on the wire's Handler because the PAPER needs
+    it too: the white key's Maintenance Report prints the same records the
+    serial port serves, and a console with two renderings of one report is
+    a console whose two halves drift apart -- which is the defect three
+    separate entries in `CLOSED.md` are about. `describe_alarms` is
+    imported inside the call because `console` imports this module.
+    """
+    from .console import describe_alarms
+    how = MAINTENANCE_DATA.get(entry["type"], "filler")
+    data = entry.get("data", "000000")
+    if how == "filler":
+        return ""
+    if how == "login":
+        return data.strip("0") or data
+    if how == "service":
+        return data[-4:]
+    if how == "device":
+        return f"DEVICE {int(data[-2:] or 0)}"
+    described = describe_alarms([data[2:4] + data[4:6] + data[0:2]])
+    if described:
+        return described[0]["description"].upper()
+    return data
+
+
 # The count of records to follow is not written the same way twice in this
 # family: 116 and 11A count in decimal, 11B counts in hex, and 119 counts in
 # five decimal digits. Four neighbouring codes, three conventions.

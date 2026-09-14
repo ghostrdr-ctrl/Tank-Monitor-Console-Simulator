@@ -1,0 +1,80 @@
+{
+ "_why": [
+  "Where a real TLS-350 disagrees with the manual's own Display sample, this",
+  "is what the console printed. Read off tests/console_capture/raw/*.bin --",
+  "the capture tools/capture_console.py takes -- and applied by",
+  "build_wire_titles.py over what it reads off the page, so re-running the",
+  "generator cannot quietly undo a correction somebody measured. It did:",
+  "60C's two-space title was corrected by hand in the generated file, and",
+  "the next run of the tool put the manual's one space back.",
+  "",
+  "Each entry says which capture settles it. Keys are the fields of",
+  "wiretitles.json; a key set to null is REMOVED from the entry."
+ ],
+ "206": {
+  "_from": "I20600.bin",
+  "_note": "TANK ALARM HISTORY runs TWO blank lines below the header block where p.68 draws one. Seven blanks on a console with nothing programmed, against six for every other station-header report captured.",
+  "head_gap": 2
+ },
+ "114": {
+  "_from": "I11400.bin",
+  "_note": "CLEARED ALARMS REPORT's heading is the alarm family's own, four columns wider than p.63 draws it. The captured row settles it from the other side: SYSTEM at 4, BATTERY IS OFF at 35 and CLEAR at 56 are 111's and 112's columns, not this page's. 115 has the same short heading on the page and no capture to check it against.",
+  "heading": "ID  CATEGORY  DESCRIPTION          ALARM TYPE           STATE    DATE    TIME"
+ },
+ "116": {
+  "_from": "I11600.bin",
+  "_note": "CODE starts at column 35 on the console and 36 on p.66.",
+  "heading": "DATE/TIME                  ID      CODE"
+ },
+ "560": {
+  "_from": "I56000.bin",
+  "_note": "MASS/DENSITY leaves a blank line between its title and its value; p.212 runs the two together. 530's shape, one code along.",
+  "gap": 1
+ },
+ "60A": {
+  "_from": "I60A00.bin",
+  "_note": "The rows run straight under the heading. p.253 draws a blank line there, and none of 60A's five siblings on this shelf -- 604, 612, 625, 634, 635 -- has one on the page either.",
+  "rowgap": 0
+ },
+ "612": {
+  "_from": "I61200.bin",
+  "_note": "Both value columns sit two characters right of where p.262 puts them -- NONE at 33 and 59 on the console, 31 and 58 on the page -- and the heading has one space fewer between the two names.",
+  "heading": "TANK   PRODUCT LABEL          SIPHON MANIFOLDED TANKS   LINE MANIFOLDED TANKS",
+  "columns": [
+   {"align": "right", "end": 1, "head": "TANK", "start": 1},
+   {"align": "left", "end": 22, "head": "PRODUCT LABEL", "start": 7},
+   {"align": "right", "end": 36, "head": "SIPHON MANIFOLDED", "start": 36},
+   {"align": "right", "end": 62, "head": "TANKS LINE MANIFOLDED TANKS", "start": 62}
+  ]
+ },
+ "61D": {
+  "_from": "I61200.bin",
+  "_note": "The same table as 612, which 635 Rev AA draws twice -- p.265 and p.275 -- so the console's own geometry for one is the console's for the other. There is no I61D00 capture: the console this was taken from answers both codes with one report and only 612 was asked.",
+  "heading": "TANK   PRODUCT LABEL          SIPHON MANIFOLDED TANKS   LINE MANIFOLDED TANKS",
+  "columns": [
+   {"align": "right", "end": 1, "head": "TANK", "start": 1},
+   {"align": "left", "end": 22, "head": "PRODUCT LABEL", "start": 7},
+   {"align": "right", "end": 36, "head": "SIPHON MANIFOLDED", "start": 36},
+   {"align": "right", "end": 62, "head": "TANKS LINE MANIFOLDED TANKS", "start": 62}
+  ],
+  "sample": [" 2     REGULAR UNLEADED             1                         3"]
+ },
+ "530": {
+  "_from": "I53000.bin",
+  "_note": "The manual prints one line, `BEEPER: ENABLED`. The console prints a title, a blank, and the value under it -- so the title is SYSTEM BEEPER and ENABLED is the body, not part of the title.",
+  "title": "SYSTEM BEEPER",
+  "gap": 1
+ },
+ "888": {
+  "_from": "I88800.bin",
+  "_note": "The port settings run straight on under the stamp. p.474 draws a blank line there, and the console draws none -- the only one of the 541 samples where the page and the hardware disagree about this gap.",
+  "head_gap": 0
+ },
+ "60C": {
+  "_from": "I60C00.bin",
+  "_note": "Two spaces after TANK, and no blank line between the title and the heading. The page has one space and a blank line.",
+  "title": "TANK  STICK HEIGHT OFFSET",
+  "gap": 0,
+  "leads": null
+ }
+}

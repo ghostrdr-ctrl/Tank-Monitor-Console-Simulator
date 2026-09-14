@@ -117,6 +117,47 @@ class ColdBoot(unittest.TestCase):
         self.assertIn("S60201", c.values)
 
 
+class ThePostRebootHold(unittest.TestCase):
+    """"If you are restoring after a reboot (switching the console Off and
+    then back On), the system will wait 5 minutes before processing your
+    request to restore archived setup data. This delay is to allow all
+    hardware to initialize" -- 576013-623 Rev AN, beside the restore.
+    """
+
+    def test_a_console_nobody_has_rebooted_has_no_hold(self):
+        """The note is about restoring "after a reboot"; a console somebody
+        has been standing in front of all morning has had its five minutes."""
+        c = a_programmed_console()
+        self.assertEqual(c.restore_hold(), 0.0)
+
+    def test_switching_it_off_and_back_on_starts_the_five_minutes(self):
+        c = a_programmed_console()
+        c.breaker_off()
+        self.assertEqual(c.breaker_on(), "warm")
+        self.assertGreater(c.restore_hold(), 290.0)
+        self.assertLessEqual(c.restore_hold(), 300.0)
+
+    def test_a_cold_boot_holds_for_the_same_five_minutes(self):
+        """What is initialising is hardware, which does not know whether RAM
+        happened to survive the outage."""
+        c = a_programmed_console()
+        c.breaker_off()
+        c.battery_switch = False
+        c.battery_changed()
+        c.battery_switch = True
+        c.battery_changed()
+        self.assertEqual(c.breaker_on(), "cold")
+        self.assertGreater(c.restore_hold(), 290.0)
+
+    def test_the_hold_runs_out_and_does_not_go_negative(self):
+        import time
+        c = a_programmed_console()
+        c.breaker_off()
+        c.breaker_on()
+        c.reboot_at = time.time() - Console.RESTORE_HOLD_SECONDS - 60.0
+        self.assertEqual(c.restore_hold(), 0.0)
+
+
 class DeadConsole(unittest.TestCase):
     def test_no_power_means_no_serial(self):
         c = a_programmed_console()
@@ -173,10 +214,6 @@ class DipSw2(unittest.TestCase):
         c = a_programmed_console()
         c.display_blanked = True
         self.assertTrue(c.powered)                # the console still runs
-
-if __name__ == "__main__":
-    unittest.main()
-
 
 class SystemAlarms(unittest.TestCase):
     """The system alarms the extraction pinned triggers for, each posting
@@ -249,3 +286,130 @@ class SystemAlarms(unittest.TestCase):
         c.clock_offset += 60
         c.tick()
         self.assertNotIn("011300", c.conditions())  # closed, self-cleared
+
+
+class PowerDiagnostic(unittest.TestCase):
+    """576013-818 Figure 6-26 draws POWER REMOVED against POWER RESTORED as a
+    comparison, and ends on the gross change between them. The three REMOVED
+    value screens carried no reader, so they drew the figure's literal zeros
+    for ever while `power_off_volume`, `power_off_water` and the power-off
+    temperature branch sat in `console.py` referenced by nothing: the console
+    said the tank had gone from nothing to its whole contents and that the
+    gross change was zero. FIDELITY D8."""
+
+    def screens(self, c):
+        from tls350sim.console import DIAG_MENU
+        fn = [f for f in DIAG_MENU
+              if f["function"] == "POWER DIAGNOSTIC"][0]
+        out = []
+        for sc in fn["screens"]:
+            if not c.visible(sc, 1):
+                continue
+            head = c.diag_line(sc["l1"], 1)
+            body = (c.diag_value(sc["live"], 1) if sc.get("live")
+                    else c.diag_line(sc["l2"], 1))
+            out.append((head[:24], body[:24]))
+        return out
+
+    def test_a_quiet_console_reports_no_change_across_the_cut(self):
+        """A console that came up with nothing behind it invents the moment
+        the lights went out -- twelve minutes ago -- and the readings go with
+        the moment. Twelve dark minutes move nothing, so REMOVED and RESTORED
+        read the same and the gross change is zero."""
+        c = a_programmed_console()
+        c.tick()
+        removed = [b for a, b in self.screens(c)
+                   if a == "T 1: POWER REMOVED"]
+        restored = [b for a, b in self.screens(c)
+                    if a == "T 1: POWER RESTORED"]
+        self.assertEqual(removed[1], restored[1])       # VOLUME
+        self.assertEqual(removed[2], restored[2])       # WATER VOL
+        self.assertEqual(removed[3], restored[3])       # TEMP
+        change = [b for a, b in self.screens(c)
+                  if a == "T 1: GROSS VOLUME CHANGE"][0]
+        self.assertEqual(change.split()[0], "0")
+
+    def test_the_removed_screens_read_the_moment_and_not_a_literal(self):
+        """Fill the tank, cut the power, then move it while the console is
+        dark: REMOVED holds what the tank read at the cut and RESTORED holds
+        what it reads now."""
+        c = a_programmed_console()
+        c.tick()
+        c.tank_level[1] = {"volume": 8000.0, "water": 4.0}
+        c.breaker_off()
+        c.tank_level[1] = {"volume": 2000.0, "water": 4.0}
+        c.breaker_on()
+        removed = [b for a, b in self.screens(c)
+                   if a == "T 1: POWER REMOVED"]
+        restored = [b for a, b in self.screens(c)
+                    if a == "T 1: POWER RESTORED"]
+        self.assertEqual(removed[1], "VOLUME = 8000 GALS")
+        self.assertEqual(restored[1], "VOLUME = 2000 GALS")
+
+    def test_the_gross_change_is_restored_less_removed(self):
+        c = a_programmed_console()
+        c.tick()
+        c.tank_level[1] = {"volume": 8000.0, "water": 4.0}
+        c.breaker_off()
+        c.tank_level[1] = {"volume": 2000.0, "water": 4.0}
+        c.breaker_on()
+        change = [b for a, b in self.screens(c)
+                  if a == "T 1: GROSS VOLUME CHANGE"][0]
+        self.assertEqual(change.split()[0], "-6000")
+
+    def test_every_screen_on_the_function_carries_a_reader(self):
+        """All nine of Figure 6-26's screens are readings. None is a
+        literal."""
+        from tls350sim.console import DIAG_MENU
+        fn = [f for f in DIAG_MENU
+              if f["function"] == "POWER DIAGNOSTIC"][0]
+        self.assertEqual(len(fn["screens"]), 9)
+        self.assertTrue(all(sc.get("live") for sc in fn["screens"]))
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class DipSw2Position4(unittest.TestCase):
+    """FIDELITY M13. 576013-635 Rev AA 4.1 p.6 gives position 4 to Fiscal
+    Height Security, and it was not modelled at all -- so I13200 printed the
+    software flag twice under two labels and the two could never disagree."""
+
+    def report(self, switch):
+        from tls350sim.console import Console
+        from tls350sim.wire import Handler
+        c = Console(None)
+        c.fiscal_height_switch = switch
+        return Handler(c, verbose=False).handle(
+            chr(1).encode() + b"I13200").decode("latin-1")
+
+    def rows(self, switch):
+        sep = chr(13) + chr(10)
+        return [r for r in self.report(switch).split(sep) if "FISCAL" in r]
+
+    def test_the_switch_is_its_own_state(self):
+        self.assertIn("SECURITY SWITCH : OFF", self.report(False))
+        self.assertIn("SECURITY SWITCH : ON", self.report(True))
+
+    def test_the_flag_and_the_switch_are_independent(self):
+        """Which is the whole reason a report prints both.
+
+        They were one value under two labels, so the report could never
+        show a console whose software wants fiscal height security and
+        whose DIP switch does not allow it -- the case the two rows exist
+        to tell apart.
+        """
+        off, on = self.rows(False), self.rows(True)
+        self.assertEqual(off[1], on[1])       # the flag row does not move
+        self.assertNotEqual(off[2], on[2])    # the switch row does
+        self.assertIn("DISABLED", off[1])
+
+    def test_the_computer_form_carries_the_switch_as_its_own_digit(self):
+        from tls350sim.console import Console
+        from tls350sim.wire import Handler
+        c = Console(None)
+        c.fiscal_height_switch = True
+        out = Handler(c, verbose=False).handle(
+            chr(1).encode() + b"i13200").decode("latin-1")
+        self.assertTrue(out.split("&&")[0].endswith("001"))

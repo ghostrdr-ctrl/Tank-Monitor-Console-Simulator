@@ -16,11 +16,22 @@ AUDIT.md and needs the PDFs, which are not in this repository; these are the
 part of it that can run.
 """
 import os
+import re
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+try:
+    import tkinter
+    tkinter.Tk().destroy()
+    HAVE_TK = True
+except Exception:                                   # pragma: no cover
+    HAVE_TK = False
+
+from tls350sim import printer                               # noqa: E402
+from tls350sim.clock import clock_date, clock_words          # noqa: E402
 from tls350sim.console import (Console, DIAG_MENU,           # noqa: E402
                                NORMAL_MENU)
 from tls350sim.wire import Handler                          # noqa: E402
@@ -86,22 +97,143 @@ class Diagnostics(unittest.TestCase):
         self.assertIn(("T #: (Product Label)", "CUR CSLD MONTHLY <PRINT>"), got)
         self.assertIn(("T #: (Product Label)", "PRV CSLD MONTHLY <PRINT>"), got)
 
-    def test_the_service_report_asks_for_an_id(self):
-        """Figure 6-3: ENTER SERVICE ID, not ENTER SERVICE CODE."""
+    def test_the_service_report_has_both_of_the_figure_s_branches(self):
+        """Figure 6-3 splits this function in two columns, headed
+        "Maintenance Tracker Enabled" and "Maintenance Tracker Not
+        Enabled". Both ask for a service CODE and its label; only the
+        console WITHOUT a Tracker asks for an ID, because a console with a
+        key reader takes the technician's identity off the key.
+
+        This file used to read the figure as "ENTER SERVICE ID, not ENTER
+        SERVICE CODE" -- one column of a two-column figure. FIDELITY D3.
+        """
         got = [l1 for l1, _l2 in screens("SERVICE REPORT")]
+        for both in ("SERVICE CODE LIST", "ENTER SERVICE CODE",
+                     "ENTER SERVICE CODE LABEL"):
+            self.assertIn(both, got)
         self.assertIn("ENTER SERVICE ID", got)
         self.assertIn("ENTER SERVICE ID LABEL", got)
-        self.assertNotIn("ENTER SERVICE CODE", got)
+
+    def test_the_service_report_asks_who_before_it_asks_what(self):
+        """And the ID pair comes FIRST. Figure 6-3's right-hand column walks
+        SERVICE CODE LIST, ENTER SERVICE ID, ENTER SERVICE ID LABEL, ENTER
+        SERVICE CODE, ENTER SERVICE CODE LABEL -- read off the page by word
+        position, since both columns draw the same five headings and an
+        extraction interleaves them: on p.6-4 the right column's y values run
+        393.3, 445.2, 493.4, 540.5, 591.2 in that order. This console put the
+        CODE pair before the ID pair, so a technician was asked what he did
+        before he was asked who he was. FIDELITY D3."""
+        from tls350sim.console import Console
+
+        def walk(tracker):
+            c = Console()
+            c.set_module("probe", 1)
+            if tracker:
+                c.board = "E6"          # an ECPU2 with an NVMEM203 drives it
+                c.set_module("mt", 1)
+            fn = [f for f in DIAG_MENU
+                  if f["function"] == "SERVICE REPORT"][0]
+            return [sc["l1"] for sc in fn["screens"] if c.visible(sc, 1)]
+
+        self.assertEqual(walk(tracker=False),
+                         ["SERVICE CODE LIST",
+                          "ENTER SERVICE ID", "ENTER SERVICE ID LABEL",
+                          "ENTER SERVICE CODE", "ENTER SERVICE CODE LABEL"])
+        # the Tracker branch takes the identity off the key and asks neither
+        self.assertEqual(walk(tracker=True),
+                         ["SERVICE CODE LIST",
+                          "ENTER SERVICE CODE", "ENTER SERVICE CODE LABEL"])
+
+    def test_every_accuchart_screen_fills_the_display(self):
+        """Fig 6-10 puts every value against the right of the display, and
+        the display is 24 characters. These were hand-padded one at a time:
+        three landed on 24, five stopped at 20, one at 23, one at 19 -- and
+        ACCU DURATION came to 25, a character wider than the screen it draws
+        on. FIDELITY D5.
+        """
+        from tls350sim.console import Console
+        c = Console()
+        c.set_module("probe", 1)
+        for token in ("accu_mode", "accu_status", "accu_updates",
+                      "accu_duration", "accu_diameter", "accu_length",
+                      "accu_offset", "accu_tilt", "accu_shape",
+                      "accu_volume", "accu_fitness", "accu_data",
+                      "accu_warn"):
+            line = str(c.diag_reading(token, 1))
+            self.assertEqual(len(line), 24, f"{token}: {line!r}")
+            self.assertNotEqual(line[-1], " ", f"{token}: {line!r}")
+
+    def test_no_diagnostic_screen_draws_a_blank_second_line(self):
+        """A console never draws a blank line, and now none of them does.
+
+        Five did. GROSS VOLUME CHANGE, which is the whole point of the power
+        diagnostic and drew nothing; ENTER ID TO BLOCK, which asks for an
+        `ID:`; and WORKING, which Fig 6-27 draws over a row of asterisks.
+
+        The last two were called unsettleable and both figures settle them.
+        Fig 6-4, p.6-5 draws `ARE YOU SURE?: YES` over
+        `PRESS <STEP> TO CONTINUE` in BOTH of its columns, matching the
+        `BLOCK: YES` and `ID: XXXXXX` confirmations above it. Fig 6-13,
+        p.6-12 draws `O0 E0 T0 D1` under the second `P 1: (PRODUCT LABEL)`,
+        annotated "In this display you can change the current setting of
+        four of the VLLD Status Indicators". FIDELITY D2.
+        """
+        blank = [(f["function"], sc.get("l1"))
+                 for f in DIAG_MENU for sc in f["screens"]
+                 if not (sc.get("l2") or "").strip() and not sc.get("live")]
+        self.assertEqual(blank, [])
+
+    def test_the_editable_indicators_sit_under_the_four_they_edit(self):
+        """Fig 6-13's two indicator screens are drawn in one box column
+        whose text starts at x=127, and the editable row starts at x=168 --
+        twelve characters in, at the same pitch, which is exactly where `O0`
+        sits in the full row above it. The indent is the figure's way of
+        saying which four of the eight this screen changes."""
+        rows = [l2 for l1, l2 in screens("LINE LEAK DIAG DATA")
+                if "O0" in l2]
+        self.assertEqual(rows, ["I0 P0 F0 S0 O0 E0 T0 D1",
+                                "            O0 E0 T0 D1"])
+        self.assertEqual(rows[0].index("O0"), rows[1].index("O0"))
+        for row in rows:
+            self.assertLessEqual(len(row), 24)
 
     def test_accuchart_has_the_user_status_screen(self):
         """Figure 6-10."""
         self.assertIn("ACCU USR STATUS DISABLED",
-                      [l2 for _l1, l2 in screens("ACCUCHART DIAGNOSTICS")])
+                      [l2 for _l1, l2 in screens("ACCU_CHART DIAGNOSTICS")])
 
-    def test_communication_shows_an_auto_detected_modem(self):
-        """Figure 6-27."""
-        self.assertIn("c1: MODEM AUTO DETECTED",
-                      [l1 for l1, _l2 in screens("COMMUNICATION DIAGNOSTIC")])
+    def test_communication_is_figure_6_27s_own_walk(self):
+        """Figure 6-27, p.6-22, read off the page by WORD POSITION rather
+        than by reading order -- the screen column sits at x=120 and the
+        S/C/E step markers at x=79.
+
+        This figure is the one an extraction got wrong once already, and
+        the wrong reading reached the console: FIDELITY D4 is the only entry
+        whose previous "fix" made the console worse, transposing the first
+        two screens. The figure starts on the board it found the modem on
+        and says what it found second, and it RETURNS to that same screen at
+        the end, annotated "Displayed when modem is configured" -- which is
+        only coherent if that is where the walk starts.
+        """
+        self.assertEqual(screens("COMMUNICATION DIAGNOSTIC"), [
+            ("COMM BOARD: 1 S-LINK", "MODEM: VR TLS GSM MODEM"),
+            ("c1: MODEM AUTO DETECTED", "VR TLS GSM MODEM"),
+            ("COMM BOARD: 1 S-LINK", "RSSI: XX BER: XX"),
+            ("COMM BOARD: 1 S-LINK", "AUTO CONFIG MODEM: NO"),
+            ("COMM BOARD: 1 S-LINK", "AUTO CONFIG MODEM: YES"),
+            ("AUTO CONFIG MODEM: YES", "PRESS <STEP> TO CONTINUE"),
+            ("AUTO CONFIG MODEM: YES", "ARE YOU SURE? : YES"),
+            ("ARE YOU SURE? : YES", "PRESS <STEP> TO CONTINUE"),
+            ("WORKING", "* * * * * * * *"),
+            ("COMM BOARD: 1 S-LINK", "MODEM: VR TLS GSM MODEM"),
+        ])
+
+    def test_the_modem_it_found_is_not_the_first_thing_it_says(self):
+        """The half of D4 that was "fixed" the wrong way round, kept as its
+        own assertion so a future reordering has to argue with the figure."""
+        first, second = screens("COMMUNICATION DIAGNOSTIC")[:2]
+        self.assertEqual(first[0], "COMM BOARD: 1 S-LINK")
+        self.assertEqual(second[0], "c1: MODEM AUTO DETECTED")
 
     def test_the_mag_sensor_branch_is_behind_its_enter(self):
         """Figure 6-28 descends from MAG SENSOR DIAGS into six readings and
@@ -113,6 +245,94 @@ class Diagnostics(unittest.TestCase):
                      "COMM DATA PRESS <PRINT>", "CONSTANTS PRESS <PRINT>",
                      "CHNNL PRESS <PRINT>"):
             self.assertIn(line, got, line)
+
+    def test_the_four_conditions_of_figure_6_2(self):
+        """FIDELITY D10. Chapter 6 opens with the rule -- "your system will
+        display only the diagnostic functions of installed and configured
+        modules and options" -- and Figure 6-2 names three cases this
+        console showed regardless.
+
+        "Appears with ECPU board only. The Peripheral Controller (PC) is the
+        second processor (H8) on the ECPU board"; "this is the software
+        version number of the WPLLD Comm Module" and "error count between
+        console and WPLLD Comm module"; and the DIM block, "DIM software
+        part number and creation date".
+        """
+        from tls350sim.console import DIAG_MENU
+        fn = [f for f in DIAG_MENU
+              if f["function"] == "SYSTEM DIAGNOSTIC"][0]
+
+        def shown(c):
+            return [sc["l1"] for sc in fn["screens"]
+                    if not sc.get("when") or c.visible(sc, 1)]
+
+        c = Console()
+        c.board = "E7"                              # an ECPU2
+        self.assertTrue(c.has_ecpu())
+        self.assertIn("PC DIAGNOSTIC DATA", shown(c))
+        self.assertNotIn("DIM DIAGNOSTIC DATA", shown(c))
+        self.assertNotIn("WPLLD DIAGNOSTIC DATA", shown(c))
+
+        c.board = "C0"                              # a plain CPU
+        self.assertFalse(c.has_ecpu())
+        for line in ("PC DIAGNOSTIC DATA", "PC SWARE# XXXXXX-XXX-X",
+                     "PC ROM CHECKSUM=PASSED", "PC ROM ERRORS = X",
+                     "MC ->PC COMMS =  XXXXX"):
+            self.assertNotIn(line, shown(c))
+
+        c.modules["edim"] = 1
+        c.modules["wplldcom"] = 1
+        self.assertIn("DIM DIAGNOSTIC DATA", shown(c))
+        self.assertIn("WPLLD DIAGNOSTIC DATA", shown(c))
+
+    def test_a_dim_screen_is_headed_by_which_kind_of_dim_it_is(self):
+        """"M for MDIMs and E for all other DIMs", Figure 6-2's own note.
+        Both screens hard-coded `M1:`, so a console with an EDIM in the comm
+        bay headed them with the mechanical letter."""
+        c = Console()
+        c.modules["edim"] = 1
+        self.assertEqual(c.dim_letter(), "E")
+        self.assertTrue(c.diag_reading("dim_software", 1).startswith("E1:"))
+        self.assertTrue(c.diag_reading("dim_errors", 1).startswith("E1:"))
+        c.modules["mdim"] = 1
+        self.assertEqual(c.dim_letter(), "M")
+        self.assertTrue(c.diag_reading("dim_software", 1).startswith("M1:"))
+        self.assertTrue(c.diag_reading("dim_errors", 1).startswith("M1:"))
+
+    def test_enter_descends_into_the_branch_the_panel_is_standing_on(self):
+        """The defect the gates uncovered. `_diag_children` counted over the
+        raw screen list and `_diag_screens` indexed a FILTERED one, so on any
+        console where a screen was hidden the two disagreed -- ENTER
+        descended into a different branch from the one shown, or off the end
+        of the list. Nothing hid a top-level diagnostic screen until D10's
+        gates, which is why it had never shown."""
+        from tls350sim.ui import SimApp, MODES
+        from tls350sim.console import DIAG_MENU
+        c = Console()
+        c.board = "C0"                              # hides the whole PC block
+        c.modules["edim"] = 1
+        app = SimApp(c, 10098)
+        try:
+            app.mode = MODES.index("DIAGNOSTIC")
+            fns = app.functions()
+            fi = [i for i, f in enumerate(fns)
+                  if f["function"] == "SYSTEM DIAGNOSTIC"]
+            self.assertTrue(fi, "no SYSTEM DIAGNOSTIC on this console")
+            app.func, app.sub = fi[0], None
+            offered = app._diag_offered(fns[fi[0]])
+            tops = [i for i, sc in enumerate(offered) if not sc.get("depth")]
+            for step in range(len(tops)):
+                app.sub, app.step = None, step
+                parent = app._diag_children()
+                if parent is None:
+                    continue
+                # the index has to name the screen the panel is standing on
+                self.assertIs(offered[parent], offered[tops[step]])
+                app.sub = parent
+                self.assertTrue(app.steps())          # and not raise
+                app.sub = None
+        finally:
+            app.destroy()
 
     def test_the_atmp_branch_is_behind_its_enter(self):
         """Figure 6-32."""
@@ -130,26 +350,281 @@ class Diagnostics(unittest.TestCase):
                                  f"{fn['function']}: {l1!r}")
 
 
+class EveryLiveTokenAnswers(unittest.TestCase):
+    """FIDELITY D2. A screen carrying a `live` token draws whatever that
+    token answers, so a token no branch answers draws a blank line -- and a
+    console never draws a blank line.
+
+    `line_passive` was the one token with no branch anywhere: WPLLD's
+    `0.10 GPH          ACTIVE` went out empty. 577013-344 Rev H's WPLLD
+    diagram says what it means -- "IDLE or ACTIVE (Active means 0.1 gph test
+    is scheduled)" -- and S7AC is the line's own 0.1 gph scheduling.
+
+    The other two that answered empty do so for a reason: A07's reference
+    distances are a Mag probe's and "probe types 01=CAP0 and 02=CAP1 are not
+    supported by this command". Those two are the panel's fallback case
+    rather than a missing branch, so they are asserted from both sides.
+    """
+
+    def a_fitted_console(self):
+        from tls350sim.console import SOFTWARE_MODULES
+        c = Console(None)
+        for key in list(c.modules):
+            c.modules[key] = 1
+        c.software = {k: True for k, _n, _p in SOFTWARE_MODULES}
+        c.tank_level[1] = {"volume": 2500.0, "water": 0.0}
+        # and a meter that has run, because the three Meter Events screens
+        # are gated on the table having anything in it: their readers answer
+        # nothing on a console with an empty table, which is the state the
+        # figure draws METER EVENTS TABLE EMPTY for. FIDELITY D14.
+        c.modules["edim"] = 1        # metered sales arrive through a DIM
+        c.meters = {1: 1}
+        c.meter_flow = {1: 100.0}
+        c.tick()                     # the first tick only starts the clock
+        c.clock_offset += 60.0
+        c.tick()
+        # and smart sensor 1 is a VACUUM sensor with a finished manual test
+        # on it. Its three result screens read the last test that ran and
+        # answer nothing until one has, which is D2's fallback to the
+        # figure's own line rather than a missing branch -- so the fixture
+        # runs one instead of the list below growing by three.
+        c.values["S72301"] = "0104"
+        c.vac_leak[1] = 0.123
+        c.start_vac_test(1)
+        c.finish_vac_tests()
+        return c
+
+    def tokens(self):
+        return [(f["function"], sc["l1"], sc["live"])
+                for f in DIAG_MENU for sc in f["screens"] if sc.get("live")]
+
+    def test_every_token_but_the_mag_probes_two_answers(self):
+        c = self.a_fitted_console()
+        empty = sorted({(fn, tok) for fn, _l1, tok in self.tokens()
+                        if not str(c.diag_value(tok, 1)).strip()})
+        self.assertEqual(empty, [("IN-TANK DIAGNOSTIC", "probe_ref_curr"),
+                                 ("IN-TANK DIAGNOSTIC", "probe_ref_orig")])
+
+    def test_and_those_two_answer_on_a_mag_probe(self):
+        c = self.a_fitted_console()
+        c.values["S62F01"] = "011"
+        for token in ("probe_ref_orig", "probe_ref_curr"):
+            self.assertTrue(str(c.diag_value(token, 1)).strip(), token)
+
+    def test_the_passive_screen_reads_its_own_scheduling(self):
+        """DISABLED and MANUAL are both IDLE; only AUTO schedules one."""
+        c = self.a_fitted_console()
+        self.assertEqual(c.diag_value("line_passive", 1),
+                         "0.10 GPH            IDLE")
+        c.values["S7AC01"] = "012"
+        self.assertEqual(c.diag_value("line_passive", 1),
+                         "0.10 GPH          ACTIVE")
+        c.values["S7AC01"] = "013"
+        self.assertEqual(c.diag_value("line_passive", 1),
+                         "0.10 GPH            IDLE")
+
+    def test_the_line_it_draws_is_the_width_of_the_display(self):
+        c = self.a_fitted_console()
+        c.values["S7AC01"] = "012"
+        self.assertEqual(len(c.diag_value("line_passive", 1)), 24)
+
+
+class TheDayOfTheMonthIsSpacePadded(unittest.TestCase):
+    """FIDELITY W27. The console space padded the HOUR and zero padded the
+    DAY, and the manuals write both the same way: `JAN  6, 1995  8:02 AM`.
+
+    Counted across the whole reference shelf by word position -- the text
+    extractions collapse runs of spaces, so a grep says the opposite -- a
+    single-digit day is written with a space 694 times against 61. The count
+    is not what settles it. 576013-635 Rev AA p.100 sets six consecutive
+    rows of one monospace sample, and `OCT 10,` begins one character to the
+    LEFT of `OCT 9,` with the comma and the year in the same columns in
+    both: the day is right aligned in two columns, which is a space.
+    """
+
+    def a_console_on_the_sixth(self):
+        c = Console(None)
+        want = time.strptime("1996-01-06 15:06", "%Y-%m-%d %H:%M")
+        c.clock_offset = time.mktime(want) - time.time()
+        return c
+
+    def test_the_date_and_the_hour_are_written_the_same_way(self):
+        when = time.strptime("1996-01-06 15:06", "%Y-%m-%d %H:%M")
+        self.assertEqual(clock_date(when), "JAN  6, 1996")
+        self.assertEqual(clock_date(when, year=False), "JAN  6")
+        self.assertEqual(clock_words(when), "JAN  6, 1996  3:06 PM")
+
+    def test_a_two_digit_day_is_not_padded_at_all(self):
+        when = time.strptime("1996-01-22 15:06", "%Y-%m-%d %H:%M")
+        self.assertEqual(clock_words(when), "JAN 22, 1996  3:06 PM")
+
+    def test_the_status_line_and_the_paper_carry_it(self):
+        c = self.a_console_on_the_sixth()
+        self.assertTrue(c.clock_text().startswith("JAN  6, 1996"),
+                        c.clock_text())
+        printed = [str(line) for line in printer.status(c)]
+        self.assertTrue(any(line.startswith("JAN  6, 1996")
+                            for line in printed), printed[:6])
+
+    def test_nothing_the_console_can_print_zero_pads_a_day(self):
+        """The whole point of one helper: the fix has to reach the reports
+        and the wire, not just the status line."""
+        c = self.a_console_on_the_sixth()
+        h = Handler(c, verbose=False)
+        text = chr(10).join(str(line) for report in
+                            (printer.status(c), printer.inventory(c),
+                             printer.setup(c))
+                            for line in report)
+        for code in ("I11100", "I11200", "I20100", "I50100"):
+            reply = h.handle((chr(1) + code + chr(13)).encode("latin-1"))
+            text += reply.decode("latin-1")
+        self.assertEqual(re.findall(r"[A-Z]{3} 0\d", text), [])
+        self.assertIn("JAN  6", text)
+
+
 class Operating(unittest.TestCase):
     """Operator's Manual 576013-610, chapter 2 and chapter 8."""
 
+    def test_in_tank_inventory_walks_chapter_fours_order(self):
+        """Chapter 4 walks the function section by section, each headed
+        "press STEP until you see the message": VOLUME p.4-1, HEIGHT 4-2,
+        WATER VOL 4-2, WATER 4-3, TEMP 4-3, ULLAGE 4-3, TC VOLUME 4-4,
+        **Delivery Increase Amount** 4-4, and then DENSITY, MASS, NEXT
+        DELIVERY and LAST DELIVERY on 4-5 under "Density (Optional
+        Feature)". This console stepped DENSITY and MASS before DELIVERY.
+        A chapter's section order is the STEP order. FIDELITY O10.
+        """
+        got = steps("IN-TANK INVENTORY")
+        self.assertEqual(got[:10],
+                         ["VOLUME", "HEIGHT", "WATER VOL", "WATER", "TEMP",
+                          "ULLAGE", "TC VOLUME", "DELIVERY", "DENSITY",
+                          "MASS"])
+
+    def test_delivery_adjustment_wants_ticketed_delivery_off(self):
+        """p.8-2: "For consoles with Ticketed Delivery, this feature is
+        available only if ticketed delivery is disabled in the Setup Mode."
+        The step carried no condition at all. FIDELITY O12."""
+        c = Console(None)
+        c.modules["probe"] = 1
+        fn = [f for f in NORMAL_MENU
+              if f["function"] == "LAST-SHIFT INVENTORY"][0]
+        names = [st["text"] for st in c.visible_steps(fn, 1)]
+        self.assertIn("DELIVERY ADJUSTMENT", names)
+        c.values["S51C00"] = "1"
+        names = [st["text"] for st in c.visible_steps(fn, 1)]
+        self.assertNotIn("DELIVERY ADJUSTMENT", names)
+        self.assertIn("GROSS CHANGE", names)
+
     def test_last_shift_inventory_is_chapter_eights_five_screens(self):
         """METERED SALES and VARIANCE are Reconciliation Mode's, not this
-        function's, chapter 8 has begin, end, adjustment, gross, close."""
-        self.assertEqual(steps("LAST SHIFT INVENTORY"),
+        function's, chapter 8 has begin, end, adjustment, gross, close.
+
+        The names are chapter 8's own. It heads itself "Last-Shift
+        Inventory" with the hyphen; its third screen is Delivery
+        Adjustment, drawn `DLVY ADJUSTMENT: XXXXXX`, where this had the two
+        words the other way round; and the last is `CLOSE CURRENT SHIFT`
+        over `CLOSE NOW: NO`, where GROSS was contamination from the GROSS
+        CHANGE step above it and "(No/Yes)" a flow-chart note. FIDELITY O2.
+        """
+        self.assertEqual(steps("LAST-SHIFT INVENTORY"),
                          ["BEGINNING INVENTORY", "ENDING INVENTORY",
-                          "ADJUSTMENT DELIVERY", "GROSS CHANGE",
-                          "GROSS CURRENT SHIFT NOW (No/Yes)"])
+                          "DELIVERY ADJUSTMENT", "GROSS CHANGE",
+                          "CLOSE CURRENT SHIFT"])
+
+    @unittest.skipUnless(HAVE_TK, "no display")
+    def test_the_delivery_screens_say_what_they_are_asking_for(self):
+        """576013-610 Rev AC p.5-1 draws `SELECT: EDIT/VIEW` under EDIT/VIEW
+        OR INSERT, and p.5-3 draws the inserted delivery's Bill of Lading
+        screen as `BOL:`. This drew the bare choice on the first and the
+        TICKET VOLUME line belonging to the screen BEFORE it on the second,
+        so the panel showed a volume where a number was being typed.
+        FIDELITY O7.
+        """
+        from tls350sim.ui import SimApp, MODES
+        from tests.test_panel import a_console
+        try:
+            app = SimApp(a_console(), 10087)
+        except tkinter.TclError as exc:              # pragma: no cover
+            # This machine's Tcl loses init.tcl every few dozen runs --
+            # "couldn't read file ... init.tcl: No error" -- which is the
+            # same condition the module probe above and test_panel's own
+            # HAVE_TK catch, arriving late. It is the display, not the
+            # console, so it skips rather than fails.
+            self.skipTest(f"no display: {exc}")
+        try:
+            app._entered = True
+            app.mode = MODES.index("NORMAL")
+            for i in range(60):
+                app.func = i
+                fn = app.cur_function()
+                if fn and fn["function"] == "DELIVERY MAINTENANCE":
+                    break
+            else:
+                self.fail("no DELIVERY MAINTENANCE on this console")
+            def walk():
+                seen, step = [], 0
+                app.step = 0
+                for _ in range(len(fn["steps"])):
+                    app._sync_device()
+                    seen.append(tuple(str(x)[:24] for x in app._lines()))
+                    app.k_step()
+                    if app.step == 0:            # back at the selection
+                        break
+                return seen
+
+            drawn = walk()
+            app.sel["dlv_mode"] = "INSERT"
+            inserting = walk()
+        finally:
+            app.destroy()
+        self.assertEqual(drawn[0],
+                         ("EDIT/VIEW OR INSERT", "SELECT: EDIT/VIEW"))
+        # p.5-3's inserted-delivery Bill of Lading screen, which is the last
+        # of the INSERT chain rather than the last of a flat list of eight
+        self.assertEqual(inserting[0],
+                         ("EDIT/VIEW OR INSERT", "SELECT: INSERT"))
+        self.assertEqual(inserting[-1][0], "BOL")
+        self.assertTrue(inserting[-1][1].startswith("BOL:"), inserting[-1])
+
+        # FIDELITY O7. "Press CHANGE to choose INSERT, then press ENTER for
+        # your change to be accepted", and each answer has its own chain
+        # after it: editing walks the delivery that is there, inserting
+        # builds one that is not. This console offered one list of eight
+        # steps and walked all of them whichever was selected, so choosing
+        # INSERT and pressing STEP landed on the EDIT chain's TICKET VOLUME.
+        first = [line for pair in drawn for line in pair]
+        second = [line for pair in inserting for line in pair]
+        self.assertIn("PRIOR DLVY FOR TANK", first)
+        self.assertNotIn("PRIOR DLVY FOR TANK", second)
+        self.assertIn("ENTER DELIVERY DATE", second)
+        self.assertIn("ENTER DELIVERY TIME", second)
+        self.assertNotIn("ENTER DELIVERY DATE", first)
+        self.assertNotIn("ENTER TICKET VOLUME", first)
+
+    def test_the_relay_test_has_chapter_twenty_two_s_three_screens(self):
+        """576013-610 Rev AC p.22-1 draws three and this console drew one,
+        with its two lines the wrong way round and an `R 1:` prefix on the
+        entry screen, which names no relay yet:
+
+            TEST OUTPUT RELAYS / ENTER RELAY NUMBER #
+            R 1: OVERFILL ALARM / PUSH ALARM/TEST KEY
+            R 1: (Device Name)  / ON - PRESS ANY KEY
+
+        The two screens the function exists for were the missing ones.
+        FIDELITY O6.
+        """
+        got = steps("TEST OUTPUT RELAYS")
+        self.assertEqual(got, ["ENTER RELAY NUMBER #",
+                               "PUSH ALARM/TEST KEY",
+                               "ON - PRESS ANY KEY"])
 
     def test_an_inserted_delivery_can_be_given_a_bol(self):
-        """p2-2: INSERT DLVY BY TANK, DATE, TIME, TICKET VOLUME, BOL."""
+        """p2-2: INSERT DLVY BY TANK, DATE, TIME, TICKET VOLUME, BOL, and
+        p.5-2 draws the two entry screens with the word spelled out --
+        "ENTER DELIVERY DATE" over "DATE: XX/XX/XXXX". FIDELITY O7."""
         got = steps("DELIVERY MAINTENANCE")
-        self.assertEqual(got[-3:], ["ENTER DLVY TIME", "ENTER TICKET VOLUME",
-                                    "BOL"])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertEqual(got[-3:], ["ENTER DELIVERY TIME",
+                                    "ENTER TICKET VOLUME", "BOL"])
 
 
 class ARealToolCanBackItUpAndPutItBack(unittest.TestCase):
@@ -172,7 +647,7 @@ class ARealToolCanBackItUpAndPutItBack(unittest.TestCase):
 
     def data_of(self, reply, code):
         """The data field, the way a tool takes it: past the code and stamp."""
-        body = reply.strip(chr(1) + chr(3)).replace("\r\n", "\n")
+        body = reply.strip(chr(1) + chr(3) + chr(13) + chr(10)).replace("\r\n", "\n")
         parts = [p for p in body.split("\n") if p]
         self.assertTrue(parts and parts[0] == code, reply)
         return parts[-1] if len(parts) > 1 else ""
@@ -254,9 +729,32 @@ class InTankDiagnostics(unittest.TestCase):
         return handler.handle(
             (chr(1) + command + chr(13)).encode()).decode("latin-1")
 
+    def test_the_reference_distance_screens_carry_a_distance(self):
+        """576013-818 Fig 6-6 draws ORIG REF DISTANCE and CURR REF DISTANCE
+        as `MM/DD/YY            XX.XX` -- "Original reference distance
+        reading (in inches or mm) recorded at date/time or serial number
+        change". The panel drew the date alone while the same pair went out
+        over A07, and comparing the two distances is how a probe swap or a
+        shifted riser gets caught. FIDELITY D7.
+        """
+        c, _h = self.a_site()
+        pair = c.probe_reference_distance(1)
+        self.assertIsNotNone(pair)
+        for token, (born, inches) in (("probe_ref_orig", pair[0]),
+                                      ("probe_ref_curr", pair[1])):
+            line = c.diag_reading(token, 1)
+            self.assertEqual(len(line), 24, repr(line))
+            self.assertTrue(line.startswith(
+                f"{born[2:4]}/{born[4:6]}/{born[0:2]}"), repr(line))
+            self.assertTrue(line.rstrip().endswith(f"{inches:.2f}"),
+                            repr(line))
+        # the two differ, which is the whole point of showing both
+        self.assertNotEqual(c.diag_reading("probe_ref_orig", 1),
+                            c.diag_reading("probe_ref_curr", 1))
+
     def records(self, reply):
         """The repeated 27 character block, past the code and the stamp."""
-        body = reply.strip(chr(1) + chr(3)).split("&&")[0]
+        body = reply.strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0]
         body = body[len("iA0100") + len("YYMMDDHHmm"):]
         self.assertEqual(len(body) % 27, 0, body)
         return [body[i:i + 27] for i in range(0, len(body), 27)]
@@ -331,7 +829,7 @@ class TheProbeCalibrationReports(unittest.TestCase):
     def fields(self, reply, code):
         """TT p PP NN and the floats, the way a tool takes them apart."""
         from tls350sim import packed
-        body = reply.strip(chr(1) + chr(3)).split("&&")[0][len(code) + 10:]
+        body = reply.strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0][len(code) + 10:]
         count = int(body[5:7], 16)
         return (body[0:2], body[2], body[3:5],
                 [packed.unhexfloat(body[7 + i * 8:15 + i * 8])
@@ -411,7 +909,7 @@ class TheProbeCalibrationReports(unittest.TestCase):
         from tls350sim import packed
         c, h = self.a_site()
         code = "iA0701"
-        body = self.send(h, code).strip(chr(1) + chr(3)).split("&&")[0]
+        body = self.send(h, code).strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0]
         body = body[len(code) + 10:]
         self.assertEqual(body[0:2], "01")
         self.assertEqual(body[3:5], "03")
@@ -521,7 +1019,7 @@ class TheProbeSampleBuffers(unittest.TestCase):
     def fields(self, reply, code):
         """TT p PP SSSS NN and the floats."""
         from tls350sim import packed
-        body = reply.strip(chr(1) + chr(3)).split("&&")[0][len(code) + 10:]
+        body = reply.strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0][len(code) + 10:]
         window = int(body[5:9], 16)
         count = int(body[9:11], 16)
         return window, [packed.unhexfloat(body[11 + i * 8:19 + i * 8])
@@ -622,7 +1120,7 @@ class TheRestOfTheProbeBlock(unittest.TestCase):
             (chr(1) + command + chr(13)).encode()).decode("latin-1")
 
     def body(self, reply, code):
-        return reply.strip(chr(1) + chr(3)).split("&&")[0][len(code) + 10:]
+        return reply.strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0][len(code) + 10:]
 
     # ---- A14 ----------------------------------------------------------------
     def test_a14_is_one_flag_wide(self):
@@ -712,10 +1210,14 @@ class TheRestOfTheProbeBlock(unittest.TestCase):
                    if l.startswith("GRADIENT=")][0]
         self.assertAlmostEqual(float(printed.split("=")[1]),
                                c.probe_gradient(1), delta=0.5)      # A02
-        self.assertIn(f"NUM SAMPLES= {c.probe_window(1, 'standard')}", shown)
+        # the four counters are held right against their columns, which is
+        # what 576013-635 Rev AA p.505 draws -- `NUM SAMPLES=  20`, two
+        # spaces. See FIDELITY S5.
+        self.assertIn(f"NUM SAMPLES={c.probe_window(1, 'standard'):4d}",
+                      shown)
         for line in ("IN-TANK DIAGNOSTIC", "PROBE DIAGNOSTICS",
                      "TEMP SENSOR DATA", "REF DISTANCE",
-                     "SAMPLES READ=", "LAST ERROR ="):
+                     "SAMPLES READ=", "LAST ERROR  ="):
             self.assertIn(line, shown)
 
     def test_a15_prints_all_nineteen_channels_and_six_temperatures(self):
@@ -749,3 +1251,250 @@ class TheRestOfTheProbeBlock(unittest.TestCase):
         c.modules["probe"] = 0
         for code in ("A14", "A15", "A20", "A21", "A22", "A23"):
             self.assertIn("9999", self.send(h, f"i{code}01"), code)
+
+
+class TheDeliveryReportsOwnColumns(unittest.TestCase):
+    """576013-635 Rev AA prints these three with a sample apiece, in Courier
+    at six points a character, so the columns can be counted off the rendered
+    page rather than guessed. I202 (p.63) and I215 (p.83) do NOT share them,
+    which is the trap this family sets twice.
+
+    I202 ran its whole header onto the end of the `T n:` line and dropped
+    `INCREASE   DATE / TIME` altogether -- so the headings rode on a
+    variable-length product label and moved from tank to tank. I221 printed
+    four columns of its own with all three temperatures missing and a BOL
+    column that belongs to 222 in their place. FIDELITY S3 and S4.
+    """
+
+    def a_delivery(self):
+        from tls350sim import presets
+        c = Console(None)
+        presets.load(c, "Two-tank retail site")
+        c.modules["rs232"] = 1
+        c.values["S61001"] = "0101"
+        c.tick()
+        c.tank_level[1]["volume"] += 3000.0
+        c.tick()
+        c.clock_offset += 6 * 60.0
+        c.tick()
+        return c
+
+    def rows(self, c, code):
+        out = Handler(c, verbose=False).handle(chr(1).encode()
+                                                  + code).decode("latin-1")
+        return out.replace(chr(13) + chr(10), chr(10)).split(chr(10))
+
+    def test_i202_heads_its_own_line_in_the_sample_s_columns(self):
+        c = self.a_delivery()
+        rows = self.rows(c, b"I20201")
+        head = [r for r in rows if r.startswith("INCREASE")][0]
+        # the T n: line carries the label and nothing else
+        tank = [r for r in rows if r.startswith("T 1:")][0]
+        self.assertEqual(tank, "T 1:REGULAR UNLEADED")
+        for word, col in (("INCREASE", 0), ("DATE", 11), ("TIME", 18),
+                          ("GALLONS", 35), ("WATER", 54), ("HEIGHT", 73)):
+            self.assertEqual(head.index(word), col, word)
+        self.assertEqual(head.index("TC GALLONS"), 43)
+
+    def test_and_its_rows_land_under_them(self):
+        """The label right-aligns to 9 and the stamp starts at 11, on every
+        row -- END:, START: and AMOUNT: all end in the same column."""
+        c = self.a_delivery()
+        rows = self.rows(c, b"I20201")
+        for label in ("END:", "START:", "AMOUNT:"):
+            row = [r for r in rows if r.strip().startswith(label)][0]
+            self.assertEqual(row.index(label) + len(label), 10, label)
+        end = [r for r in rows if r.strip().startswith("END:")][0]
+        self.assertEqual(end.index("SEP"), 11)
+
+    def test_i215_keeps_its_own_columns_and_they_are_not_i202_s(self):
+        c = self.a_delivery()
+        head = [r for r in self.rows(c, b"I21501")
+                if r.startswith("INCREASE")][0]
+        for word, col in (("GALLONS", 33), ("MASS", 45), ("DENSITY", 52),
+                          ("WATER", 60), ("TEMP", 68), ("HEIGHT", 74)):
+            self.assertEqual(head.index(word), col, word)
+
+    def test_i221_prints_all_six_of_the_manual_s_columns(self):
+        c = self.a_delivery()
+        c.deliveries.last(1).ticket = 3010.0
+        rows = self.rows(c, b"I22101")
+        # not "TICKET": the report's own title contains the word
+        first = [r for r in rows if "EST DLVY" in r][0]
+        second = rows[rows.index(first) + 1]
+        for word, col in (("TICKET", 24), ("GAUGE", 33), ("DLVY", 45),
+                          ("BEFORE", 52), ("AFTER", 60), ("EST DLVY", 67)):
+            self.assertEqual(first.index(word), col, word)
+        self.assertEqual(second.index("DELIVERY END DATE"), 0)
+        self.assertEqual([i for i in range(len(second))
+                          if second.startswith("TMP", i)], [53, 61, 69])
+
+    def test_and_i221_has_no_bol_column(self):
+        """It belongs to 222, whose Function Type is Bill of Lading Report
+        and whose sample heads a NUMBER column under BOL."""
+        c = self.a_delivery()
+        c.deliveries.last(1).bol = "EXX23223"
+        rows = self.rows(c, b"I22101")
+        self.assertNotIn("BOL", chr(10).join(rows))
+
+    def test_the_delivered_temperature_is_the_mixing_arithmetic(self):
+        """EST DLVY TMP: the tank held `before` gallons at the before
+        temperature and holds `after` at the after temperature, so the
+        difference came in at whatever makes those two balance. The manual's
+        three rows reproduce under it with opening volumes of 3445, 3374 and
+        4299 gallons on a tank taking five and six thousand at a time."""
+        c = self.a_delivery()
+        record = c.deliveries.last(1)
+        record.start["temp"], record.end["temp"] = 44.8, 42.4
+        record.start["volume"] = 3444.6
+        record.end["volume"] = 3444.6 + record.amount
+        got = c.deliveries.delivered_temperature(record)
+        want = ((record.end["volume"] * 42.4 - 3444.6 * 44.8)
+                / record.amount)
+        self.assertAlmostEqual(got, want, places=6)
+
+
+class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
+    """576013-635 draws a blank line between a display reply's header block
+    -- the echoed code, the stamp, and the four station header lines where a
+    report carries them -- and the body underneath.
+
+    **How MANY is a property of the code, not a constant.** This class read
+    "of 321 samples ... 304 leave a full line's gap and nine do not", and
+    asserted the gap on every report anyway. Re-measured off the word boxes
+    rather than the text, over every sample rather than the ones with a
+    header: 512 of 541 leave one and **29 leave none** -- 613, 614, 902, 903,
+    905, 881 and the whole AccuChart `A` family among them. A real console
+    agrees with the page on every one of those that was captured, and this
+    console left a blank line on all of them.
+
+    So the number comes from `wiretitles.json`'s `head_gap` now, measured by
+    `tools/build_wire_titles.py`, and this asserts the console draws what the
+    page draws rather than that it always draws one.
+
+    It looked as though the blank was already there, which is why it took a
+    measurement to see. A site with three programmed station header lines
+    sends an EMPTY fourth, and an empty fourth reads exactly like the missing
+    blank; programme all four and the body ran straight onto the header.
+    FIDELITY S6.
+    """
+
+    STAMP = re.compile(r"^[A-Z]{3} +\d{1,2}, \d{4} +\d{1,2}:\d\d [AP]M$")
+
+    @staticmethod
+    def head_gap(tok):
+        """What the manual's own sample leaves under the frame, or one."""
+        from tls350sim.wire import WIRE_TITLES
+        from tls350sim import wiretables
+        entry = WIRE_TITLES.get(wiretables.SHOWN_AS.get(tok, tok)) or {}
+        return 1 if entry.get("head_gap") is None else int(entry["head_gap"])
+
+    def a_console(self):
+        from tls350sim.console import SOFTWARE_MODULES
+        from tls350sim import presets
+        c = Console(None)
+        presets.load(c, "Truck stop, four tanks and BIR")
+        c.software = {k: True for k, _n, _p in SOFTWARE_MODULES}
+        for key in list(c.modules):
+            c.modules[key] = 1
+        c.modules["rs232"] = 1
+        # all four station headers programmed, which is the state that shows
+        # the defect: three of four hides it behind the empty one
+        for n in range(1, 5):
+            c.values[f"S503{n:02d}"] = f"STATION HEADER {n}"
+        c.tick()
+        return c
+
+    def reply(self, h, code):
+        out = h.handle(chr(1).encode() + code.encode()).decode("latin-1")
+        return out.strip(chr(1) + chr(3) + chr(13) + chr(10)).replace(
+            chr(13) + chr(10), chr(10)).split(chr(10))
+
+    def test_every_report_this_console_answers_leaves_it(self):
+        """The blank line sits after the HEADER BLOCK, and the block is not
+        always five lines.
+
+        This walked to `head + 5` -- the stamp plus four station header
+        lines -- on every code, which was right only while every report drew
+        a station header. Most do not: 576013-635's own samples give one to
+        117 codes and none to 338, and this console now follows them
+        (FIDELITY L5). The rule under test never was about the station
+        header, as the test below it says in so many words, so it finds the
+        end of the block rather than assuming its length.
+        """
+        from tls350sim.wire import REPORTS
+        c = self.a_console()
+        h = Handler(c, verbose=False)
+        # and one blank line ABOVE the block, in all 128 samples that draw a
+        # header at all -- which this console did not send. FIDELITY S6.
+        station = [""] + [f"STATION HEADER {n}" for n in range(1, 5)]
+        without, partial = [], []
+        answered = 0
+        for tok in sorted(REPORTS):
+            lines = self.reply(h, "I" + tok + "00")
+            if any("9999" in l for l in lines):
+                continue
+            head = next((i for i, l in enumerate(lines)
+                         if self.STAMP.match(l.strip())), None)
+            if head is None:
+                continue
+            block = head + 1
+            if lines[block:block + 5] == station:
+                block += 5
+            elif lines[block:block + 2] == station[:2]:
+                # all four or none of them: a site with one programmed line
+                # still sends four blanks. See FIDELITY W5.
+                partial.append(tok)
+            if block + 1 >= len(lines):
+                continue
+            answered += 1
+            want = self.head_gap(tok)
+            got = 0
+            while block + got < len(lines) and not lines[block + got].strip():
+                got += 1
+            if got != want:
+                without.append(f"{tok}: {got} blank lines, page draws {want}")
+        self.assertEqual(partial, [], "a station header block short of four")
+        self.assertGreater(answered, 100)
+        self.assertEqual(without, [])
+
+    def test_the_station_header_is_the_manuals_own_answer_per_code(self):
+        """FIDELITY L5. It used to be "is the code in `REPORTS`", which gave
+        one to 67 codes whose sample draws none and withheld it from 50 whose
+        sample draws one."""
+        from tls350sim.wire import Handler as H
+        # a diagnostic the manual draws bare, and a status report it does not
+        self.assertIs(H._draws_station("B01"), False)
+        self.assertIs(H._draws_station("217"), False)
+        self.assertIs(H._draws_station("888"), False)
+        self.assertIs(H._draws_station("101"), True)
+        self.assertIs(H._draws_station("301"), True)
+        # and the five diagnostics that DO draw one, which is why the
+        # section number is not the rule
+        for tok in ("A15", "A81", "A91", "B62", "BB1"):
+            self.assertIs(H._draws_station(tok), True, tok)
+        c = self.a_console()
+        h = Handler(c, verbose=False)
+        self.assertNotIn("STATION HEADER 1", self.reply(h, "IB0100"))
+        self.assertIn("STATION HEADER 1", self.reply(h, "I10100"))
+
+    def test_a_setup_value_leaves_it_too(self):
+        """The rule is not about the station header block: a reply with no
+        header block still leaves the line. "FISCALLY SEALED : NO" and
+        "TANK STICK HEIGHT" are two of the manual's own."""
+        c = self.a_console()
+        lines = self.reply(Handler(c, verbose=False), "I62101")
+        self.assertTrue(self.STAMP.match(lines[1].strip()), lines[1])
+        self.assertEqual(lines[2], "")
+        self.assertEqual(lines[3], "TANK LOW PRODUCT LIMIT")
+
+    def test_an_acknowledgement_with_no_body_leaves_nothing(self):
+        """A Set that answers with the stamp and nothing else does not get a
+        blank line to be nothing under."""
+        c = self.a_console()
+        lines = self.reply(Handler(c, verbose=False), "S50100" + "0301291105")
+        self.assertEqual([l for l in lines if l.strip()][2:], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

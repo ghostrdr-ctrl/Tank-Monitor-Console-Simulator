@@ -59,6 +59,9 @@ the part a tool has to match.
 
 import time
 
+from . import isd, wiretables
+from .clock import clock_words
+
 SEP = "\r\n"
 
 # ---------------------------------------------------------------------------
@@ -87,6 +90,79 @@ VP_STATUS_FIELDS = ["VP overpress test", "Emission test", "Maximum runtime",
 VP_FLOAT_FIELDS = ["Ullage pressure 95th percentile", "Emission LB/1KG",
                    "Duty Cycle %", "Runtime hours", "Daily Throughput",
                    "Average HC %"]
+
+# Those eleven names are the COMPUTER format's notes, and they are not what
+# the paper says. The display format prints its own report, and the two do
+# not correspond line for line: three of the five verdicts, the ullage
+# pressure and the duty cycle figure are in the packed record and on no
+# printout at all. See FIDELITY I6.
+#
+# 576013-635 Rev AA's own V82 sample, which is the layout followed here:
+#
+#     VAPOR PROCESSOR STATUS REPORT
+#     PMC VERSION: 01.03
+#     VAPOR PROCESSSOR TYPE: VST ECS PROCESSOR
+#     PMC MONITORING TEST PASS/FAIL THRESHOLDS
+#                                                    PERIOD    BELOW  ABOVE
+#     VAPOR PROCESSOR DUTY CYCLE FAIL                1DAYS     ----  75.00 %
+#     VAPOR PROCESSOR MASS EMISSION FAIL             1DAYS     ----   0.64 LBS/1KG
+#     VP DUTY CYCLE TEST     : NOTEST
+#     VP INPUT STATUS        : NOTEST
+#     EFFLUENT EMISSIONS TEST: PASS     (0.00 LBS/1KG)
+#     AVG HC PERCENT  :    0.00 %
+#     DAILY THROUGHPUT:      -1 GALS
+#     RUN TIME HOURS  :    -1.0
+#
+# "PROCESSSOR" is the manual's own typo and it is reproduced deliberately.
+#
+# 577013-937 Rev J Figure 39 prints the same report for a Veeder-Root
+# Polisher and it is not identical: it carries an `ASSESSMENT TIME` line,
+# spells `VAPOR PROCESSOR TYPE` correctly, lists only the mass emission
+# threshold, and prints neither the duty cycle nor the input status nor the
+# HC and run time lines. WHICH lines a given processor drops is not stated
+# for V82 anywhere on this shelf -- 937's "Does not appear for Hirt VCS 100"
+# callouts (p.12-38 and p.12-39) are on the ISD Status and ISD Daily
+# reports, not on Figure 39 -- so this prints 635's full set, which is V82's
+# own page, and takes only the assessment line from Figure 39.
+
+# The PASS/FAIL THRESHOLDS table. 635 puts `PERIOD` at column 47 and right
+# justifies the ABOVE figure at column 68; 937's Figure 39 sets the identical
+# row one column further right. 635 is the manual this module implements.
+VP_THRESHOLD_HEAD = " " * 47 + "PERIOD    BELOW  ABOVE"
+
+
+def _threshold_row(label, above, unit):
+    """One PASS/FAIL THRESHOLDS row, spaced as 576013-635 Rev AA sets it.
+
+    Both rows on both manuals' samples read `1DAYS` for the period and
+    `----` for the BELOW column: these two limits are ceilings, and the
+    manual writes an absent bound as dashes rather than as a number.
+    """
+    return f"{label:<47s}{'1DAYS':<10s}{'----':>4s}{above:>7.2f} {unit}"
+
+
+def _vp_duty_word(console, status):
+    """What `VP DUTY CYCLE TEST` reports.
+
+    This is NOT the unsettled mapping FIDELITY I2a records. Nothing says
+    which of the five packed statuses this line is; what says what the line
+    MEANS is the threshold row printed three lines above it, `VAPOR
+    PROCESSOR DUTY CYCLE FAIL 1DAYS ---- 75.00 %`, and the console already
+    measures its own Duty Cycle % against that same 75% -- 577013-819 Rev F
+    p.31, "A failure occurs when the duty cycle exceeds 18 hours (75%)" --
+    as the `vp_duty` daily test. So the line is that test's verdict, decided
+    by the figure against the limit beside it, and no packed field is
+    claimed for it.
+
+    A processor nobody has run reads NOTEST, the same rule the five packed
+    verdicts keep: the daily assessment compares figures whether or not
+    anything ran, and a verdict on a processor that never started is a
+    verdict the console never made.
+    """
+    if not status["codes"]["Vapor processor"]:
+        return "NOTEST"
+    return {"warn": "WARN", "fail": "FAIL"}.get(console.isd_state("vp_duty"),
+                                                "PASS")
 
 # ---------------------------------------------------------------------------
 # V88 and V12 share this four-state verdict, and it is the SAME table on both,
@@ -237,15 +313,21 @@ def _set(handler, tok, dev, code, body):
         c.save()
         return handler._frame(code), f"{APM_TESTS[which].lower()} cleared"
 
-    # 8C4, "S8C400hh" -- a hex timeout and nothing else. The manual's own
-    # sample response for this code is 8C3's, so there is no authentic display
-    # line to copy; this prints the setting plainly.
-    if len(body) != 2 or not all(ch in "0123456789ABCDEFabcdef"
-                                 for ch in body):
-        return handler._nine(code), "REJECTED: wants two hex digits"
-    c.values["S8C400"] = body.upper()
+    # 8C4, "S8C400hh". Revision Y prints 8C3's response on this code's page,
+    # which is what the note at the top of this module records and why this
+    # was written to guess: two hex digits, printed as seconds.
+    #
+    # **Revision AA has the real page**, and it was invisible for a different
+    # reason -- p.486 echoes the block `S8C4xx`, a SET, and the title
+    # generator keyed on `I`. It says: "hh - Timeout value in HOURS
+    # (Decimal, 00-99, 99=Alarm Disabled)", under `VMC COMMUNICATIONS
+    # TIMEOUT` and `TIMEOUT VALUE: 0 HOURS`. So the field is decimal, the
+    # unit is hours, and the report is two lines. All three were wrong.
+    if len(body) != 2 or not body.isdigit():
+        return handler._nine(code), "REJECTED: wants two decimal digits"
+    c.values["S8C400"] = body
     c.save()
-    return handler._frame(code), f"VMC comm timeout {int(body, 16)}s"
+    return handler._frame(code), f"VMC comm timeout {int(body)}h"
 
 
 # ---------------------------------------------------------------------------
@@ -277,10 +359,16 @@ def _inquire(handler, tok, dev, code, body):
         return handler._frame(code, out), "VMC fueling positions"
 
     if tok == "8C4":
-        held = (c.values.get("S8C400") or "1E")[:2]
+        # p.486: `VMC COMMUNICATIONS TIMEOUT` over `TIMEOUT VALUE: 0 HOURS`,
+        # and the hours are decimal. An unprogrammed console prints the
+        # sample's own zero -- the manual states no default for this one, and
+        # 99 rather than 0 is what disables the alarm.
+        held = (c.values.get("S8C400") or "00")[:2]
+        hours = int(held) if held.isdigit() else 0
         if display:
-            return (handler._frame(
-                code, f"VMC COMM TIMEOUT: {int(held, 16)} SEC"), "comm timeout")
+            return (handler._frame(code, SEP.join(
+                ["VMC COMMUNICATIONS TIMEOUT",
+                 f"TIMEOUT VALUE: {hours} HOURS"])), "comm timeout")
         return handler._frame(code, held), "comm timeout"
 
     if tok == "908":
@@ -321,7 +409,7 @@ def _generator_report(handler, dev, code, display):
     """
     c = handler.c
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
-             else sorted(c.tank_level) or [1])
+             else sorted(c.programmed_tanks()))
     if display:
         rows = ["INPUT GENERATOR REPORT",
                 "     START               END          DURATION  CONSUMPTION"]
@@ -332,8 +420,8 @@ def _generator_report(handler, dev, code, display):
                 rows.append(
                     f"{_when(run['start'])}  {_when(run['end'])}  "
                     f"{run['hours']:7.2f}  {run['used']:9.1f}")
-        if not any_run:
-            rows.append("NO GENERATOR RECORDS")
+        # An empty report is its heading and nothing under it, and
+        # `NO GENERATOR RECORDS` was this project's phrase. See FIDELITY U5.
         return handler._frame(code, SEP.join(rows)), "generator report"
     out = ""
     for tank in tanks:
@@ -371,8 +459,7 @@ def _dim_report(handler, code, display):
                          else "ACTIVE         ")
                 rows.append(f"{_when(fault['post'])}  {clear}  "
                             f"{fault['hours']:8.2f}")
-            if not port["faults"]:
-                rows.append("NO FAULT HISTORY")
+            # no faults, no rows: see FIDELITY U5
         return handler._frame(code, SEP.join(rows)), "DIM comm status"
     out = ""
     for port in ports:
@@ -388,17 +475,66 @@ def _dim_report(handler, code, display):
 
 # ---------------------------------------------------------------------------
 def _vp_status(handler, code, display):
-    """V82: the vapour processor's five verdicts and six figures."""
+    """V82: the vapour processor's five verdicts and six figures.
+
+    The two formats carry different reports out of the same measurement.
+    The computer format is the packed record its notes describe, five
+    statuses and six floats; the display format is the printout both manuals
+    sample, and it names a thing the console states nowhere else -- the
+    limits its own daily tests are measured against.
+    """
     c = handler.c
     st = c.vapor_processor_status()
     if display:
+        figures = st["figures"]
         rows = ["VAPOR PROCESSOR STATUS REPORT",
-                f"PMC VERSION: {st['version']}",
-                f"VAPOR PROCESSSOR TYPE: {st['type']}"]
-        for name in VP_STATUS_FIELDS:
-            rows.append(f"{name.upper():<38s}{st['status'][name]}")
-        for name in VP_FLOAT_FIELDS:
-            rows.append(f"{name.upper():<38s}{st['figures'][name]:.2f}")
+                f"PMC VERSION: {st['version']}"]
+        # 937 Rev J Figure 39 heads its report `DEC  8, 2010  4:29 AM` and
+        # then says `ASSESSMENT TIME: DEC  7, 2010 11:59 PM`, so the line
+        # names the daily assessment the figures came out of and not the
+        # moment somebody asked for the report. A console that has run no
+        # assessment has none to name, and prints what 635's sample prints:
+        # no such line, every verdict NOTEST.
+        started = c.isd_assessment_started()
+        if started:
+            rows.append(f"ASSESSMENT TIME: {clock_words(started)}")
+        rows.append(f"VAPOR PROCESSSOR TYPE: {st['type']}")
+        # The one place the console ever states these two limits. The
+        # numbers are the console's own, `isd.DUTY_CYCLE_PERCENT` and
+        # `isd.MASS_EMISSION_LB_PER_1KG`, because they are what the daily
+        # tests are actually measured against -- printing a threshold the
+        # console does not use is how the report came to contradict itself
+        # before I2. The manuals disagree on the emission figure: 635's V82
+        # sample says 0.64 LBS/1KG and 937 Rev J prints 0.32 in two separate
+        # figures, and 0.32 is the number this console holds.
+        rows.append("PMC MONITORING TEST PASS/FAIL THRESHOLDS")
+        rows.append(VP_THRESHOLD_HEAD)
+        rows.append(_threshold_row("VAPOR PROCESSOR DUTY CYCLE FAIL",
+                                   isd.DUTY_CYCLE_PERCENT, "%"))
+        rows.append(_threshold_row("VAPOR PROCESSOR MASS EMISSION FAIL",
+                                   isd.MASS_EMISSION_LB_PER_1KG, "LBS/1KG"))
+        # 635 pads every label on these three to 23 columns and puts the
+        # colon at 24.
+        rows.append(f"{'VP DUTY CYCLE TEST':<23s}: {_vp_duty_word(c, st)}")
+        # `VP INPUT STATUS` is the one line with no source. 577013-819 Rev F
+        # p.28 has a MISSING VP INPUT warning -- "An external input for the
+        # OPW and ARID vapor processor cannot be found" -- and this console
+        # models no external input to be missing, so there is nothing to
+        # report and NOTEST is the manual's own word for that. It is left
+        # unmapped to any of the five packed statuses on purpose: FIDELITY
+        # I2a records that mapping as unsettled and this does not settle it.
+        rows.append(f"{'VP INPUT STATUS':<23s}: NOTEST")
+        rows.append(f"{'EFFLUENT EMISSIONS TEST':<23s}: "
+                    f"{st['status']['Emission test']:<9s}"
+                    f"({figures['Emission LB/1KG']:.2f} LBS/1KG)")
+        # And the last three pad to 16 with the figure right justified in
+        # eight: a percentage, whole gallons, and hours to one decimal.
+        rows.append(f"{'AVG HC PERCENT':<16s}:"
+                    f"{figures['Average HC %']:>8.2f} %")
+        rows.append(f"{'DAILY THROUGHPUT':<16s}:"
+                    f"{figures['Daily Throughput']:>8.0f} GALS")
+        rows.append(f"{'RUN TIME HOURS':<16s}:"
+                    f"{figures['Runtime hours']:>8.1f}")
         return handler._frame(code, SEP.join(rows)), "vapor processor status"
     out = _stamp_seconds(st["tested"])
     out += f"{len(VP_STATUS_FIELDS):02X}"
@@ -487,8 +623,7 @@ def _al_report(handler, tok, dev, code, display, body):
         for r in rows_data:
             rows.append(f"{_when(r['at'])} {r['al']:8.1f} {r['count']:6d}"
                         f"  {r['status']}")
-        if not rows_data:
-            rows.append("NO RECORDS")
+        # no records, no rows: see FIDELITY U5
         return handler._frame(code, SEP.join(rows)), heading.lower()
     out = f"{position:02d}{len(rows_data):02X}"
     for r in rows_data:
@@ -535,12 +670,15 @@ def _grouped_inventory(handler, tok, dev, code, display):
     if not c.has("probe"):
         return handler._nine(code), "no probe module fitted"
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
-             else sorted(c.tank_level) or [1])
+             else sorted(c.programmed_tanks()))
     groups = _groups(c, tok, tanks)
     title = ("PRODUCT INVENTORY REPORT" if tok == "237"
              else "SIPHON MANIFOLDED INVENTORY REPORT")
     if display:
-        rows = [title, "TANK PRODUCT LABEL           VOLUME   TC VOLUME"]
+        # p.97's columns: the tank right against 2, the label at 5, and the
+        # two volumes held right against 36 and 50 -- which the subtotal line
+        # shares, because a TOTAL is one of the column's own numbers
+        rows = [title, wiretables.heading(tok)]
         for group in groups:
             sub_v = sub_tc = 0.0
             for tank in group:
@@ -549,8 +687,9 @@ def _grouped_inventory(handler, tok, dev, code, display):
                 sub_v += volume
                 sub_tc += tc
                 label = c.text("602", tank) or ("TANK %d" % tank)
-                rows.append("%-5d%-22s%9.0f%12.0f" % (tank, label, volume, tc))
-            rows.append("%27s%9.0f%12.0f" % ("TOTAL:", sub_v, sub_tc))
+                rows.append("%3d  %-26.26s%6.0f%14.0f"
+                            % (tank, label, volume, tc))
+            rows.append("%27s%10.0f%14.0f" % ("TOTAL:", sub_v, sub_tc))
         return handler._frame(code, SEP.join(rows)), title.lower()
     body = "%02X" % len(tanks)
     for group in groups:
@@ -574,17 +713,20 @@ def _manifold_delivery(handler, tok, dev, code, display):
     if not c.has("probe"):
         return handler._nine(code), "no probe module fitted"
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
-             else sorted(c.tank_level) or [1])
+             else sorted(c.programmed_tanks()))
     stamps = MANIFOLD_DELIVERY[tok]
     groups = _groups(c, "238", tanks)
     if display:
-        head = ("START DATE / TIME    END DATE / TIME      GALLONS TC GALLONS"
-                if stamps == 2 else
-                "DATE / TIME                               GALLONS TC GALLONS")
-        rows = ["MANIFOLDED DELIVERY REPORT", "TANK PRODUCT LABEL"]
+        # pp.99 and 100. The two reports share a title and a tank block and
+        # part company at the delivery heading, which is the only place 23A's
+        # second stamp shows.
+        head = ("START DATE / TIME       END DATE / TIME         "
+                "GALLONS TC GALLONS" if stamps == 2 else
+                "DATE / TIME             GALLONS TC GALLONS")
+        rows = ["MANIFOLDED DELIVERY REPORT", wiretables.heading(tok)]
         for group in groups:
             for tank in group:
-                rows.append("%-5d%s" % (tank, c.text("602", tank) or ""))
+                rows.append("%3d    %s" % (tank, c.text("602", tank) or ""))
             rows.append(head)
             for drop in c.manifold_deliveries(group):
                 when = _when(drop["start"])
@@ -650,8 +792,7 @@ def _apm_report(handler, tok, code, display, body):
                 out.append("X%2d: %-18s x%2d: %-13s %-6s %s"
                            % (r["sensor"], r["alarm"], r["sub"], r["alarm"],
                               r["state"], _when(r["at"])))
-            if not rows:
-                out.append("NO SUB ALARM HISTORY")
+            # no sub alarms, no rows: see FIDELITY U5
             return handler._frame(code, SEP.join(out)), "VMCI sub alarms"
         packed_body = "%02X" % len(rows)
         for r in rows:

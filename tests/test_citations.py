@@ -65,9 +65,21 @@ def drawn_lines():
 class EveryLineIsAccountedFor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        """Skip where there is no display; FAIL where the walk is broken.
+
+        This caught every exception and skipped, so a change that made
+        `enumerate_screens` raise turned the whole citation audit off and
+        said "no usable Tk" about it. That happened: gating a diagnostic
+        screen left `_diag_children` returning an index into a list it was
+        no longer built from, the walk raised IndexError, and five tests
+        quietly stopped running. **A skip that swallows a crash is a test
+        that disarms itself**, which is the shape `test_coverage` already
+        names. Only Tk's own failure is a skip now. See FIDELITY D10.
+        """
+        import tkinter
         try:
             cls.lines = drawn_lines()
-        except Exception as exc:                    # pragma: no cover
+        except tkinter.TclError as exc:             # pragma: no cover
             raise unittest.SkipTest(f"no usable Tk: {exc}")
 
     def test_every_drawn_line_is_cited_or_recorded_as_uncited(self):
@@ -106,8 +118,20 @@ class EveryLineIsAccountedFor(unittest.TestCase):
             + ["run tools/build_citations.py"]))
 
     def test_every_citation_names_a_manual_and_a_page(self):
+        """Or, for the handful the hardware settled, a photograph.
+
+        `how == "photographed"` is a line a real TLS-350 was seen drawing
+        where the manuals say something else or say nothing -- the function
+        names on the line-test walk are the first two. It carries a date
+        instead of a page number, and it is a short named table in
+        `tools/build_citations.py` rather than an escape hatch, because a
+        line gets into it only with a picture behind it.
+        """
         for line, where in CITATIONS["cited"].items():
             self.assertTrue(where.get("manual"), line)
+            if where.get("how") == "photographed":
+                self.assertEqual(where.get("page"), "a real TLS-350", line)
+                continue
             self.assertIsInstance(where.get("page"), int, line)
             self.assertGreater(where["page"], 0, line)
 
@@ -187,3 +211,21 @@ class TheCitationFileItself(unittest.TestCase):
         is 24 columns."""
         for line in list(CITATIONS["cited"]) + list(CITATIONS["uncited"]):
             self.assertLessEqual(len(line), 24, repr(line))
+
+    def test_audit_md_quotes_the_numbers_this_file_holds(self):
+        """"A count in prose is a count nobody re-runs."
+
+        AUDIT.md's own note says these three had drifted before -- it led
+        with 888, 462 and 880 for several passes after the walk was widened
+        -- and the fix for that is not to be more careful when retyping
+        them. FIDELITY F12 is the same lesson from the other end: anything
+        this repository asserts about itself belongs where it is checked.
+        """
+        import re
+        with open(os.path.join(HERE, "AUDIT.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        head = text.split("## Where it stands", 1)[1][:400]
+        numbers = [int(n) for n in re.findall(r"\b(\d{2,5})\b", head)]
+        self.assertIn(CITATIONS["lines"], numbers, "template count")
+        self.assertIn(CITATIONS["screens"], numbers, "screen count")
+        self.assertIn(CITATIONS["options"], numbers, "option count")

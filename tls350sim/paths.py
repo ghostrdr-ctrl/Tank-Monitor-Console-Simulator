@@ -37,6 +37,20 @@ def program_dir():
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+def asset(name):
+    """A file shipped ALONGSIDE the program: the window icon, so far.
+
+    Not `program_dir()`, which answers a different question. PyInstaller
+    unpacks its data files to `sys._MEIPASS` -- the `_internal` folder --
+    where the executable sits one level up, so an icon looked for beside
+    the .exe is not there. From a source tree both answers are the same
+    directory, which is why a mistake here only shows on an installed copy.
+    """
+    base = getattr(sys, "_MEIPASS", None) or os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, "assets", name)
+
+
 def user_data_dir():
     """Per-user, always writable, and it survives an uninstall.
 

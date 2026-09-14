@@ -48,7 +48,8 @@
      "DAILY": "SELECT DAY",
      "PERIODIC": "SELECT PERIOD"
     },
-    "print_scope": "device"
+    "print_scope": "device",
+    "typed_day": true
    },
    {
     "text": "CUR SHFT OPEN",
@@ -149,7 +150,16 @@
      "DAILY",
      "WEEKLY",
      "PERIODIC"
-    ]
+    ],
+    "choices_when": {
+     "code": "S53400",
+     "default": "000",
+     "flags": [
+      "PERIODIC",
+      "WEEKLY",
+      "DAILY"
+     ]
+    }
    },
    {
     "text": "PROD",
@@ -235,7 +245,16 @@
      "DAILY",
      "WEEKLY",
      "PERIODIC"
-    ]
+    ],
+    "choices_when": {
+     "code": "S53300",
+     "default": "000",
+     "flags": [
+      "PERIODIC",
+      "WEEKLY",
+      "DAILY"
+     ]
+    }
    },
    {
     "text": "PROD",
@@ -346,7 +365,16 @@
      "DAILY",
      "WEEKLY",
      "PERIODIC"
-    ]
+    ],
+    "choices_when": {
+     "code": "S53200",
+     "default": "000",
+     "flags": [
+      "PERIODIC",
+      "WEEKLY",
+      "DAILY"
+     ]
+    }
    },
    {
     "text": "PROD",

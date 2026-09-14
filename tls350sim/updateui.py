@@ -36,7 +36,16 @@ def check_for_updates(parent, silent=False):
             err = None
         except update.UpdateError as e:
             rel, err = None, e
-        parent.after(0, lambda: _report(parent, rel, err, silent))
+        try:
+            parent.after(0, lambda: _report(parent, rel, err, silent))
+        except (tk.TclError, RuntimeError):
+            # The window went away while we were waiting on the network.
+            # `after` needs a live interpreter with a running loop, there is
+            # neither, and there is nobody left to report to either --
+            # closing the app during a check is not an error. Without this
+            # the worker dies with "main thread is not in main loop", which
+            # on a packaged build is a silent crash in a daemon thread.
+            return
 
     threading.Thread(target=work, daemon=True).start()
 

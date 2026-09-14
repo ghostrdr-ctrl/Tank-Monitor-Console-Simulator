@@ -33,9 +33,16 @@ def a_site():
     c = Console()
     presets.load(c, "Truck stop, four tanks and BIR")
     c.set_board("E6")
-    for card in ("smart", "vmc", "mt", "modem", "universal", "probe",
+    for card in ("smart", "universal", "probe",
                  "plld", "wplld", "vlld", "dim"):
         c.modules[card] = 4
+    # The comm bay is FOUR slots, three of them single-port, so a console
+    # cannot carry a modem, a VMCI, an EDIM, an RS-232 port and a
+    # Maintenance Tracker port as five separate cards. The dual-port MT
+    # module 330586-017 is what a real site does about that: it takes slot 4
+    # and answers on two positions, a general serial port on 5 and the
+    # Maintenance Tracker on 6. See FIDELITY M7.
+    c.modules.update({"rs232": 0, "modem": 1, "vmc": 1, "edim": 1, "mt4": 1})
     c.software.update({"bir": True, "fuelman": True, "csld": True,
                        "isd": True, "pmc": True})
     return c, Handler(c, verbose=False)
@@ -46,7 +53,7 @@ def send(h, cmd):
 
 
 def body(h, cmd):
-    return send(h, cmd).strip(chr(1) + chr(3))
+    return send(h, cmd).strip(chr(1) + chr(3) + chr(13) + chr(10))
 
 
 def refused(h, cmd):
@@ -174,12 +181,23 @@ class TheIndexWasWrongAboutFive(unittest.TestCase):
         self.assertEqual(c.vmc_fuel_pos[1], {"A": 1, "B": 2})
         self.assertIn("SIDE A", send(h, "I8C301"))
 
-    def test_8c4_is_a_timeout_and_wants_two_hex_digits(self):
+    def test_8c4_is_a_timeout_in_decimal_hours(self):
+        """Rev AA p.486: "hh - Timeout value in hours (Decimal, 00-99,
+        99=Alarm Disabled)", under `VMC COMMUNICATIONS TIMEOUT` and
+        `TIMEOUT VALUE: 0 HOURS`.
+
+        That page was invisible to `build_wire_titles.py` because it echoes
+        `S8C4xx` where every other Display block echoes an `I`, and Rev Y
+        prints 8C3's response on this code's page -- so the console read the
+        two characters as HEX and printed them as SECONDS under a title of
+        its own devising. See FIDELITY S17."""
         _c, h = a_site()
-        self.assertFalse(refused(h, "S8C400" + "1E"))
-        self.assertIn("30 SEC", send(h, "I8C400"))
+        self.assertFalse(refused(h, "S8C400" + "30"))
+        self.assertIn("VMC COMMUNICATIONS TIMEOUT", send(h, "I8C400"))
+        self.assertIn("TIMEOUT VALUE: 30 HOURS", send(h, "I8C400"))
+        self.assertTrue(refused(h, "S8C400" + "1E"))
         self.assertTrue(refused(h, "S8C400" + "ZZ"))
-        self.assertTrue(refused(h, "S8C400" + "1E0"))
+        self.assertTrue(refused(h, "S8C400" + "100"))
 
     def test_ba1_is_dim_comms_not_a_vapour_processor(self):
         _c, h = a_site()
@@ -188,7 +206,10 @@ class TheIndexWasWrongAboutFive(unittest.TestCase):
     def test_a_console_with_no_dim_reports_no_ports(self):
         """An absent card is not a card in fault."""
         c, h = a_site()
-        c.modules["dim"] = 0
+        # the preset carries an EDIM as well as the bare key, and a DIM of
+        # either kind is a DIM with ports
+        for card in ("dim", "edim", "mdim"):
+            c.modules[card] = 0
         self.assertEqual(c.dim_ports(), [])
 
 
@@ -239,12 +260,18 @@ class RevisionAAsOtherTwentyFive(unittest.TestCase):
             self.assertIn(code, KNOWN, code)
             self.assertIn(code, DOCUMENTED, code)
 
-    def test_the_units_configuration_has_a_hole_at_two(self):
-        """1, 3, 4, 5 and no 2 -- the same shape as 52A's missing report 04.
-        Accepting 2 accepts a configuration the console has no meaning for."""
+    def test_the_units_configuration_has_five_choices_and_no_hole(self):
+        """This used to assert a hole at 2 -- "1, 3, 4, 5 and no 2, the same
+        shape as 52A's missing report 04" -- and there is no hole. 550's own
+        notes read "C - Inventory Alarms Units Configuration ... 5=Custom
+        4=All Height 3=All Volume 2=% Full 1=Standard", and 576013-623 Rev
+        AN's Table 5-2 heads five columns: Standard, All %Full, All Volume,
+        All Height, Custom. FIDELITY F5.
+        """
         _c, h = a_site()
-        self.assertFalse(refused(h, "S55000" + "3"))
-        self.assertTrue(refused(h, "S55000" + "2"))
+        for choice in "12345":
+            self.assertFalse(refused(h, "S55000" + choice), choice)
+        self.assertTrue(refused(h, "S55000" + "6"))
 
     def test_the_alarm_thresholds_round_trip_as_floats(self):
         import struct
@@ -315,7 +342,8 @@ class TheyAreReportsNotSettings(unittest.TestCase):
         _c, h = a_site()
         self.assertFalse(refused(h, "S54E00" + "0"))
         self.assertFalse(refused(h, "S8C301" + "0102"))
-        self.assertFalse(refused(h, "S8C400" + "1E"))
+        # decimal hours, not hex -- see `test_8c4_is_a_timeout_in_decimal_hours`
+        self.assertFalse(refused(h, "S8C400" + "12"))
 
 
 class WhatTheseNeedFitted(unittest.TestCase):

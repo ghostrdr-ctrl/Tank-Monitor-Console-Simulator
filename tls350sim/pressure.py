@@ -65,7 +65,14 @@ type in the Line Leak Detection Systems Application Guide, 577013-465, and
 `PIPE` below is that table.
 
 What is NOT published anywhere in these manuals is the actual length of T1
-and T2. 577013-344 says only what they depend on and in which direction:
+and T2 -- and function code 092 suggests no manual could publish them, because
+the console derives them. Its test status enumeration runs "03 = PRESSURE 1
+WAIT (PUMP OFF)", which is T1, then "05 = CALC WAIT TIME", which is the
+console working a wait out; and 094 is "Recalculate Pressure Line Leak Profile
+Bulk Modulus". The waits come from a measured bulk modulus, not from a table.
+The third-party evaluations do bound the total: a 3.0 gph test is certified at
+28.8 seconds on rigid pipe and one to six minutes on flexible. See UNKNOWNS
+A13 for what that says about the caps below. 577013-344 says only what they depend on and in which direction:
 
     The wait times (T1 and T2) are based upon the line type and line length.
     ... In the case where a stiff line (steel or fiberglass) is programmed as
@@ -120,8 +127,93 @@ CYCLE = 15 * 60.0
 # "When dispensing ends the pump remains On for 10 more seconds."
 PUMP_TRAIL = 10.0
 
+# How long the whole Gross test may take on this bench, pump run included.
+# The third-party evaluations certify a real 3.0 gph test at 28.8 seconds on
+# rigid pipe and one to six minutes on flexible (see UNKNOWNS A13). Six
+# minutes of a barely-moving number is not watchable on a panel somebody is
+# sat in front of, so the long end is truncated here and the short end is
+# not: a steel line runs at its real duration, a flexible one takes visibly
+# longer, and nothing takes more than a minute.
+GROSS_TEST_MAX = 60.0
+
 # The rate each test is looking for, in gallons per hour.
 THRESHOLD = {"gross": 3.0, "periodic": 0.2, "annual": 0.1}
+
+# ---------------------------------------------------------------------------
+# The four alarms 577013-727 Rev B states a trigger for in one sentence each,
+# and this console carried the names for and never posted. See FIDELITY N2.
+
+# p.9: "This alarm occurs when the fuel level is below 10 inches and a gross
+# line test has failed. The alarm will clear when the fuel level exceeds 10
+# inches." Both halves were already modelled -- S785 maps a PLLD line to its
+# tank and the chart gives the level -- and Console.latches() special-cased
+# this alarm to stop it latching, guarding a branch nothing could reach.
+FUEL_OUT_INCHES = 10.0
+
+# p.11: open is "when the pressure transducer is not connected to the PLLD
+# Interface Module the pressure reading is negative".
+SENSOR_OPEN_PSI = 0.0
+
+# p.12: short is "when the pump-On and pump-Off pressures are reading the
+# same value and are within the range of 5 to 15 psi".
+SENSOR_SHORT_BAND = (5.0, 15.0)
+
+# 576013-623 Rev AN p.10-6: "The Low Pressure Alarm Shutoff detects low
+# pressure during a dispense. The Default value is 0 psi (0 kPa), with
+# programmable values from 0 - 25 psi ... When the pressure drops below the
+# entered shutoff value, the pump shuts off. The next handle up will restart
+# the pump. A value of 0 will disable this alarm."
+#
+# The threshold is function code 78F, "PP - Low Pressure, PSI", which had no
+# field and no setup step -- so the console drew the yes/no screen beside it
+# and the number it is measured against could not be programmed at all.
+LOW_PRESSURE_DISABLED = 0.0
+SENSOR_SHORT_PSI = 0.05          # "the same value", to the printed precision
+
+# 577013-727 Rev B p.8: "A continuous pump-in signal will activate: (Pre 19)
+# A Continuous Pump On warning after 8 hours and a Continuous Pump On alarm
+# after 16 hours, or (Version 19 and higher) A Continuous Handle alarm."
+# The single alarm arrives at version 19 and PLLD itself at version 24, so
+# on this console it is always the v19 form -- see `_line_faults`.
+#
+# The v19 form's delay is stated, in the other PLLD document: 577013-344 Rev H
+# p.19, "A continuous Pump-in signal will activate a Continuous Handle alarm
+# after 16 hours." This console counted the PRE-19 WARNING's eight hours
+# instead, on the reasoning that the v19 alarm had no delay of its own -- so
+# it posted an alarm at the hour a version it cannot be would have posted a
+# warning.
+HANDLE_ALARM_HOURS = 16.0
+
+# And the sixteen hours is the default rather than the rule. 774, "Set
+# Pressure Line Leak Continuous Handle Alarm Timeout", and 7AE, its WPLLD
+# twin, are both "tt - Continuous Handle Alarm Timeout (Decimal, in hours,
+# 1-16)", per line. `S77401` has been a field on this console the whole time
+# and nothing read it, which is the shape FIDELITY's table collects: the
+# right thing already present, and the display path spelling a literal.
+HANDLE_TIMEOUT_HOURS = (1.0, 16.0)
+
+# Which function code maps a line of each kind to the tank it feeds, and
+# which alarm numbers that kind uses. VLLD is not here: 577013-727 is the
+# PLLD/WPLLD quick help and says nothing about a volumetric line.
+LINE_ALARMS = {
+    "plld": {"tank_code": "785", "fuel_out": ("21", "17"),
+             "open": ("21", "06"), "short": ("21", "15"),
+             "handle": ("21", "16"), "handle_code": "774",
+             "low": ("21", "14"),
+             "equip": ("21", "18")},
+    "wplld": {"tank_code": "7A5", "fuel_out": ("26", "17"),
+              "open": ("26", "06"), "short": ("26", "15"),
+              "handle": ("26", "16"), "handle_code": "7AE",
+              "equip": ("26", "18"),
+              # "A WPLLD Comm Alarm is posted when the transmission is not
+              # received or when noise interferes with the reception" --
+              # 577013-344 p.15. WPLLD's alone: a PLLD transducer is wired
+              # to its module, a WPLLD's talks over the STP's power line.
+              "comm": ("26", "07")},
+    # WPLLD has no low pressure alarm: category 26's 14 is High Pressure,
+    # and the shutoff's own codes -- S77C and S78F -- are PLLD's alone.
+
+}
 
 # "two sequential leak rate calculations are equal (or within a certain
 # tolerance)". The tolerance is not published; the ratio is printed to two
@@ -151,6 +243,34 @@ SEEP_FRACTION = (0.05, 0.15)
 # a residual and stops there, and the residual is above FLOOR so that a line
 # nobody has touched is still a line the console can test.
 SEEP_RESIDUAL = 0.78
+# "When the line pressure has been measured at pressures less than 5 psi, it
+# is known that pressure transducer has little or no offset", 577013-344
+# Rev H p.17, which is when Pd_ref is allowed to update itself.
+LOW_OFFSET_PSI = 5.0
+
+# ---------------------------------------------------------------------------
+# The Line Equipment Fault alarm, 577013-344 Rev H pp.13-14. From version 19
+# it is what REPLACES the High Pressure Warning and Alarm -- 577013-727 Rev B
+# Appendix A Table I ends "19: Not Applicable" -- and it is not a threshold on
+# the line's pressure at all but two monitors on the measurement system:
+#
+#   "The dispensing pressure monitor compares the dispensing pressure, Pd,
+#    with the previously measured reference dispensing pressure, Pd_ref. If
+#    the current Pd value exceeds the Pd_ref value by 5 psi for a continuous
+#    period of one month, the Line Equipment Fault alarm will be posted."
+#
+#   "The vent pressure monitor identifies gross errors in the pressure
+#    measurement system. This monitor runs after a passing Gross Line Test.
+#    The Gross Test values Pon (pump on) and P2 (pump Off vent pressure - Pv)
+#    are used to determine if there is a fault condition. If Pd is available,
+#    the Pd value will be used in place of the Pon value.
+#    If Pv > 40 psi and Pd > 50 psi -> Line Equipment Fault alarm is posted."
+PD_FAULT_PSI = 5.0
+PD_FAULT_SECONDS = 30 * 24 * 3600.0
+VENT_FAULT_PV = 40.0
+VENT_FAULT_PD = 50.0
+# What the offset diagnostic prints for a Pd_ref nobody has established yet
+PD_REF_UNKNOWN = 99.0
 
 # Nominal submersible pump pressures, System Setup Manual Table 12-1, and the
 # Pon column of every sample printout in 577013-344 sits in the low thirties.
@@ -267,6 +387,11 @@ class Line:
         self.pump = False
         self.isolated = True        # the check valve has shut on the line
         self.handle = False
+        # When the handle went up, so a signal that never goes down can be
+        # timed. "A continuous pump-in signal will activate ... a Continuous
+        # Handle alarm" -- the console recorded the handle and never the
+        # clock, so neither of the two names it carries could ever be posted.
+        self.handle_since = None
         self.state = "TEST COMPLETE"
         self.rate_key = None        # what this run is working towards
         self.leg = None             # which of the three tests is running now
@@ -282,6 +407,14 @@ class Line:
         self.readings = {"gross": [], "mid": []}
         self.cycles = {"periodic": [], "annual": []}
         self.thermal = 0.0          # psi an hour the ground is adding
+        # "open" or "short": the transducer as the bench has wired it.
+        # p.11 open: "the pressure reading is negative"; p.12 short:
+        # "the pump-On and pump-Off pressures are reading the same
+        # value". BENCH.md L10.
+        self.transducer = None
+        # noise on the STP's power line, for a WPLLD: "neon signs, variable
+        # speed motors, and STP contactors". BENCH.md L11.
+        self.noise = False
         self.result = {}            # rate_key -> True/False, the last verdict
         # The transducer's own zero error, which the offset test measures and
         # function codes 089 and 090 reset. It has to be STORED rather than
@@ -289,6 +422,20 @@ class Line:
         # is recomputed on every read cannot be reset, and the panel has had a
         # "P OFFSET RESET <ENTER>" screen doing nothing for want of one.
         self.offset = None
+        # Pd, the dispense pressure, and the reference it is judged against.
+        # 577013-344 Rev H p.17: "At system startup the Pd_ref value is
+        # unknown. When the dispense pressure, Pd, is calculated for the
+        # first time this value is recorded as Pd_ref. Any subsequent growth
+        # in pressure measurement offset can now be identified when the
+        # current Pd value is compared to this reference value." A manual
+        # reset puts Pd_ref back to the unknown state, "value of 99".
+        self.pd = None
+        self.pd_ref = None
+        # When Pd first went more than 5 psi above Pd_ref and stayed there,
+        # and what the vent monitor made of the last passing gross test.
+        # Both belong to the Line Equipment Fault alarm.
+        self.pd_high_since = None
+        self.vent_fault = False
         # what the 0.20 and 0.10 DIAG printouts count up: SEQUENTIAL PASSES,
         # SEQUENTIAL FAILS, TOTAL PASSES, TOTAL FAILS
         self.tally = {k: {"pass": 0, "fail": 0, "run": 0, "runfail": 0}
@@ -306,8 +453,19 @@ class Line:
             key = WPLLD_PIPE.get(key, DEFAULT_PIPE)
         if key == "18":
             # USER DEFINED: the console asks for the modulus itself, and the
-            # setup screen's own default is 0, which is no line at all
-            modulus = c.limit("78B", self.number) or PIPE[DEFAULT_PIPE][0]
+            # setup screen's own default is 0, which is no line at all.
+            #
+            # `779`, Set Pressure Line Leak Primary Pipe Bulk Modulus, is
+            # where that number goes -- it has a field, `S77901`, "PLLD
+            # primary pipe bulk modulus, PSI", and a setup step, "User
+            # Defined Pipe Type - 1st Bulk Modulus", that writes it. This
+            # asked `78B`, which is Set Pressure Line Leak 0.10 GPH Test
+            # SCHEDULE, so the panel stored the modulus where the manual says
+            # it goes and the model looked for it in a schedule: a site that
+            # programmed its own pipe got the default pipe's behaviour,
+            # silently. WPLLD has no bulk modulus code of its own, so both
+            # kinds read this one. See FIDELITY R8.
+            modulus = c.limit("779", self.number) or PIPE[DEFAULT_PIPE][0]
             return float(modulus), PIPE[DEFAULT_PIPE][1]
         return PIPE.get(key, PIPE[DEFAULT_PIPE])
 
@@ -342,21 +500,51 @@ class Line:
         size = self.volume() / REFERENCE_GALLONS
         scale = max(0.5, min(12.0, stiffness * max(0.3, size) ** 0.5))
         if rate_key == "gross":
-            # "3.0 gph - several minutes" is the manual's figure for a console
-            # on a forecourt, and it is unwatchable on a panel somebody is
-            # sitting in front of: ten seconds of pump and then a minute of a
-            # number that barely moves reads as a hang, not as a test. So the
-            # Gross window is about twenty seconds of measuring on a typical
-            # line, which is long enough for T1 and T2 to be different
-            # readings and short enough to watch. The shape is unchanged: it
-            # still runs with stiffness and volume, and the Mid test still
-            # borrows it.
-            return min(10.0 * scale, 10.0), min(20.0 * scale, 20.0)
+            # Calibrated against the certification rather than chosen. A 3.0
+            # gph test on rigid pipe is certified end to end at 28.8 seconds;
+            # take off the ten second pump run and 18.8 seconds of waiting is
+            # left, which is what the reference line gets, split in the same
+            # one-to-two ratio the two waits have always had here. A softer or
+            # longer line scales up from there exactly as the manuals say it
+            # should -- "the wait times are based upon the line type and line
+            # length" -- instead of being flattened by a cap that bound for
+            # every pipe but the stiffest.
+            #
+            # The one departure from the real thing is the ceiling: a real
+            # flexible line runs one to six minutes and this one stops at
+            # GROSS_TEST_MAX including the pump run. The scaling is truncated,
+            # not switched off, so a flex line still visibly outlasts a steel
+            # one. The Mid test borrows this leg.
+            t1, t2 = 6.3 * scale, 12.5 * scale
+            room = max(0.0, GROSS_TEST_MAX - PUMP_TRAIL)
+            if t1 + t2 > room:
+                shrink = room / (t1 + t2)
+                t1, t2 = t1 * shrink, t2 * shrink
+            return t1, t2
         # A precision leg and, on the second one, the Mid test after it both
         # have to fit inside the 15 minutes the cycle is allowed: the manual
         # counts "15 minutes to measure LR1 and another 15 minutes to measure
         # LR2" as the whole of a 30 minute Periodic test.
-        return min(60.0 * scale, 180.0), min(150.0 * scale, 480.0)
+        #
+        # Truncated the same way the gross leg is, rather than capped per
+        # wait. `min(60*scale, 180), min(150*scale, 480)` flattened the table:
+        # on a thousand-foot line sixteen of the eighteen pipe types came out
+        # identical, and the cap bound HARDER the longer the line got, which
+        # is backwards. 577013-344 makes mis-programming the pipe type a
+        # troubleshooting procedure precisely because the waits should differ
+        # -- "in the case where a stiff line (steel or fiberglass) is
+        # programmed as a flex line the wait time will be excessively long" --
+        # and a console that answers sixteen types the same cannot show the
+        # symptom that procedure exists to diagnose. So the pair scales
+        # freely and is shrunk in proportion only when it will not fit,
+        # against the manual's own fifteen minutes rather than against two
+        # invented ceilings. See FIDELITY R8.
+        t1, t2 = 60.0 * scale, 150.0 * scale
+        room = max(0.0, CYCLE - GROSS_TEST_MAX)
+        if t1 + t2 > room:
+            shrink = room / (t1 + t2)
+            t1, t2 = t1 * shrink, t2 * shrink
+        return t1, t2
 
     # ---- the physics --------------------------------------------------------
     def bleed(self, hours):
@@ -429,9 +617,20 @@ class Line:
         return self.offset
 
     def reset_offset(self):
-        """Function codes 089 and 090, and the panel's own reset screen."""
+        """Function codes 089 and 090, and the panel's own reset screen.
+
+        "After a pressure offset reset the Pd_ref value is set to the
+        unknown state (value of 99). It is updated when the next Pd value is
+        calculated."
+        """
         had = self.offset
         self.offset = 0.0
+        self.pd_ref = None
+        # "A manual reset should be performed after a transducer or pump has
+        # been replaced": both monitors start again from what the repaired
+        # equipment reads, not from what the old one did.
+        self.pd_high_since = None
+        self.vent_fault = False
         return had
 
     def seep_drop(self, hours):
@@ -501,8 +700,67 @@ class Line:
     def status_code(self):
         return self.STATUS_CODE.get(self.status(), "00")
 
+    # **Figure 19 is PLLD's list of status words and Figure 20 is WPLLD's,
+    # and they are not the same list.** 577013-344 Rev H p.22 gives PLLD
+    # `RUNNING PUMP: The pump is running at the beginning of a test` and
+    # `PRESSURE CHECK: Checking for high pressure after a 3.0 gph test`;
+    # p.26's WPLLD list has neither, and 576013-610 Rev AC p.12-4 draws the
+    # WPLLD start confirmation as `W #: TEST PENDING` where p.11-4 draws
+    # PLLD's as `Q #: RUNNING PUMP`.
+    #
+    # The engine keeps one vocabulary and the GLASS translates, so the wire
+    # is untouched -- `wirelines.py` already maps both PLLD-only words onto
+    # WPLLD's `02` with a note that there is no code for them, and that
+    # stays true.
+    SHOWN_AS = {"wplld": {"RUNNING PUMP": "TEST PENDING",
+                          # a 3.0 gph test is what is running while the
+                          # pressure is checked, and TEST 3.0 is on
+                          # Figure 20's list where PRESSURE CHECK is not
+                          "PRESSURE CHECK": "TEST 3.0"}}
+
+    def shown_status(self):
+        """The status word this KIND of line puts on the glass."""
+        word = self.status()
+        return self.SHOWN_AS.get(self.kind, {}).get(word, word)
+
+    @property
+    def reading(self):
+        """What the console READS off the transducer, which is the pressure
+        unless the transducer is not there: "when the pressure transducer
+        is not connected to the PLLD Interface Module the pressure reading
+        is negative"."""
+        if self.transducer == "open":
+            return -1.0
+        return self.pressure
+
     def status(self):
-        """Line two of the first PLLD diag screen, in the manual's words."""
+        """Line two of the first PLLD diag screen, in the manual's words.
+
+        **A test that is running outranks the shutdown that is standing.**
+
+        This asked `disabled` first and returned unconditionally, so
+        `RUNNING PUMP`, `TEST 3.0`, `PRESSURE CHECK` and `TEST ABORTED`
+        could never appear on a shut-down line -- and that is exactly the
+        line a technician needs to watch, because running a test on it is
+        the documented way to get it back. 576013-623 Rev AN p.5-10 makes
+        that the console's own default: "This feature lets you choose how
+        to re-enable a line shut down by a failing line leak test. To
+        re-enable a shutdown line **only by a passed line test**, press
+        STEP", over the screen `LINE RE-ENABLE METHOD / PASS LINE TEST`.
+        576013-610 Rev AC p.29-20 says the same for VLLD -- "the pump
+        remains disabled until you reenable it by running a successful Self
+        test."
+
+        So the console would show a technician the one test he has been
+        told to run, and this showed him `DISABLE ALARM` for the whole of
+        it while the pump ran and the pressure climbed. 577013-344 Rev H
+        p.22 lists all thirteen of these words as one set of test statuses,
+        not as an overlay with one of them on top, and 576013-635 numbers
+        them the same way -- `tt - Test status`, of which `07` is disable
+        alarm and `05` is running pump.
+        """
+        if self.running():
+            return self.state
         if self.engine.disabled(self.kind, self.number):
             return "DISABLE ALARM"
         return self.state
@@ -525,11 +783,12 @@ class Line:
         An unprogrammed position keeps the columns and leaves the reading
         blank, because a blank is what the console has to say about it.
         """
-        shown = f"{self.pressure:6.3f}" if self.programmed() else " " * 6
+        shown = f"{self.reading:6.3f}" if self.programmed() else " " * 6
         pump = "PUMP ON" if self.pump else "PUMP OFF"
         handle = "HANDLE ON" if self.handle else "HANDLE OFF"
         left = f"{self.engine.code(self.kind)} {self.number}: {shown} PSI"
-        return self._pad(left, pump), self._pad(self.status(), handle)
+        return self._pad(left, pump), self._pad(self.shown_status(),
+                                                 handle)
 
     @staticmethod
     def _pad(left, right):
@@ -638,8 +897,146 @@ class Lines:
     def leak_rate(self, kind, number):
         return max(0.0, self.c.line_leak.get((kind, number), 0.0))
 
+    def blend_set(self, kind, number):
+        """Every line in this line's blend set, itself included.
+
+        576013-623 p.10-11, and it is the whole of what the manual says
+        about the feature: "When a site has mechanical blenders, the lines
+        can be assigned to a blend set. **This change affects the
+        scheduling of precision line testing, 0.2 and 0.1.**" The screens
+        beneath it are `MECHANICAL BLENDER: YES` and then `Q 1: BLEND
+        PARTNERS / Q#: 02, 03`.
+
+        Both settings were stored by the panel and read by nothing -- they
+        were two of the twelve on FIDELITY F12's list. What they are FOR is
+        the thing a blended nozzle does: it runs the pumps on every line in
+        the set at once, so a precision test on one of them is aborted by a
+        dispense on any of the others. 577013-344 Rev H p.21 is the field
+        symptom, cause 5 of a Periodic or Annual Test Needed warning: "If
+        the site is extremely busy, **especially if blenders are present**,
+        there may not be sufficient idle time to complete a Periodic or
+        Annual test unless the station is shut down."
+
+        PLLD only: the two steps are on PLLD LINE LEAK SETUP and neither
+        the WPLLD nor the VLLD function has them.
+        """
+        if kind != "plld":
+            return []
+        if (self.c.setting("blender", number) or "NO").strip().upper() \
+                != "YES":
+            return []
+        out = {int(number)}
+        raw = str(self.c.setting("blend_partners", number) or "")
+        for part in raw.replace(",", " ").split():
+            if part.isdigit() and int(part):
+                out.add(int(part))
+        return sorted(out)
+
+    def blend_busy(self, kind, number):
+        """Is any OTHER line in this line's blend set dispensing?"""
+        for partner in self.blend_set(kind, number):
+            if partner != number and self.line(kind, partner).handle:
+                return True
+        return False
+
+    def tank_of(self, kind, number):
+        """Which tank this line comes out of, or 0."""
+        code = {"plld": "785", "wplld": "7A5", "vlld": "752"}.get(kind)
+        raw = (self.c.text(code, number) or "").strip() if code else ""
+        return int(raw) if raw.isdigit() else 0
+
+    def shutdown_alarms(self, kind, number):
+        """The programmed disable-alarm assignments that are active NOW.
+
+        787, 7A7 and 75B -- "Set Pressure Line Leak Disable Alarm
+        Assignments" and its two siblings -- are the site saying WHICH
+        alarms take this line out. The console stored them, printed them
+        back and acted on none of them: the list was a list. So a site that
+        had assigned an overfill or a high water alarm to shut a line down
+        kept dispensing through it, and the one setting whose whole purpose
+        is to stop fuel moving stopped nothing.
+
+        **This follows the CONDITION, not the message.** Water in a sump
+        assigned to shut a line down holds the line down until the water is
+        gone -- not until somebody presses ALARM/TEST. The two halves of
+        576013-610 Rev AC p.29-1 are the rule: "Warning and Alarm Messages
+        display until you correct the cause ... you must press the
+        ALARM/TEST button to acknowledge the alarm and clear the display",
+        and, treated separately on the same page, "When you correct the
+        condition, the lights will shut off." A de-energized pump is on the
+        lights' side of that line, not the messages' side.
+
+        This read `displayed()`, which is `_seen | latched`, so a sump that
+        had dried out kept its line shut down until the alarm was
+        acknowledged. `active_alarms()` is the live half.
+
+        The FAILED-TEST route is a different thing and is not this: that
+        one is governed by LINE RE-ENABLE METHOD (S553, `leaks.re_enable`),
+        whose two choices are PASS LINE TEST and ACKNOWLEDGE ALARM, and
+        576013-623 Rev AN p.5-10 scopes it to "a line shut down by a
+        failing line leak test" in as many words.
+
+        One scan stale at most, because the look is where this is asked
+        from.
+        """
+        rows = self.c.line_disable_alarms.get((kind, number)) or []
+        if not rows:
+            return []
+        shown = self.c.active_alarms()
+        out = []
+        for aa, nn, tt in rows:
+            for record in shown:
+                if record[:2] != aa or record[2:4] != nn:
+                    continue
+                # "TT - Tank/Sensor Number (Decimal, 00=all)"
+                if tt in ("00", "0") or record[4:6] == tt:
+                    out.append((aa, nn, tt))
+                    break
+        return out
+
     def disabled(self, kind, number):
-        return (kind, number) in self.c.leaks.disabled
+        """Is this line's pump de-energized -- however it got that way?
+
+        Three routes, and a technician has to tell them apart. A failed
+        test is the one the console shuts down itself and the one a Self
+        test clears. An assigned alarm is the site's own programming, and
+        it goes when the alarm goes. A relay wired to the tank is the
+        shutdown that is not in this module at all -- it is in the
+        contactor -- and it is why a line with no line leak alarm on it can
+        still be dead.
+        """
+        if (kind, number) in self.c.leaks.disabled:
+            return True
+        if self.shutdown_alarms(kind, number):
+            return True
+        tank = self.tank_of(kind, number)
+        return bool(tank and self.c.outputs.pump_cut(tank))
+
+    def programmed_psi(self, kind, number):
+        """776, the Profile Line Test Reference Pressure, or None.
+
+        576013-635 Rev AA p.21239, `Set Pressure Line Leak Profile Line Test
+        Reference Pressure 776`, Version 23, entered as `ppp.pp`. It is
+        PLLD's alone: the WPLLD family has no profile line test -- B7B is
+        PLLD-only and there is no `7Ax` twin for this -- so a WPLLD line
+        never has one programmed and always gets its own generated figure.
+
+        This used to ask for `7B7`, which is not a function code: it is in
+        no field, in no census entry and nowhere in 576013-635, so nothing
+        could ever store it and the branch below was unreachable on every
+        console. See FIDELITY R17.
+        """
+        psi = self.c.limit("776", number) if kind == "plld" else None
+        return float(psi) if psi else None
+
+    def nominal_psi(self, kind, number):
+        """Where this line's reference pressure sits, before it moves.
+
+        The one place the generated band is spelled, because the offset
+        monitor report reads the same quantity and the two must not drift.
+        """
+        return self.programmed_psi(kind, number) or readings.fixed(
+            PUMP_PSI - 4.0, PUMP_PSI + 6.5, "pump", kind, number)
 
     def pump_psi(self, kind, number):
         """What the pump pushes the line to.
@@ -654,11 +1051,10 @@ class Lines:
         line has its OWN nominal pressure, and it moves a little run to run.
         A programmed value is taken exactly, because somebody measured it.
         """
-        psi = self.c.limit("7B7", number) if kind == "plld" else None
+        psi = self.programmed_psi(kind, number)
         if psi:
-            return float(psi)
-        nominal = readings.fixed(PUMP_PSI - 4.0, PUMP_PSI + 6.5,
-                                 "pump", kind, number)
+            return psi
+        nominal = self.nominal_psi(kind, number)
         # A submersible pushing fuel into a line does not sit on one figure:
         # the head moves with what the impeller is doing and with what else is
         # on the manifold, which is why a technician watches Pon for a moment
@@ -701,8 +1097,17 @@ class Lines:
 
     @staticmethod
     def code(kind):
-        """"Q" for a PLLD line, "W" for a WPLLD one, as the screens head them."""
-        return "Q" if kind == "plld" else "W"
+        """The letter the screens head this family's lines with.
+
+        "Q" for a PLLD line, "W" for a WPLLD one, "P" for a VLLD one --
+        576013-610 Rev AC ch.13 heads every VLLD screen `P #:`, and
+        `printer.py` has carried the same three-way table in three places
+        all along. This named two families and fell through to the WPLLD
+        letter for the third, so the one screen that reached it with a VLLD
+        line answered `W 1:` -- the wrong card's letter, on the function a
+        technician starts a volumetric test from. See CLOSED U34.
+        """
+        return {"plld": "Q", "vlld": "P"}.get(kind, "W")
 
     def thermals(self, kind, number, psi_per_hour):
         """Put a thermal slope on a line, which is what lengthens a test.
@@ -725,12 +1130,60 @@ class Lines:
         ln = self.line(kind, number)
         was, ln.handle = ln.handle, bool(up)
         now = self._last = time.mktime(self.c.now())
+        ln.handle_since = now if up and not was else (
+            ln.handle_since if up else None)
         if up and not was:
             if ln.running():
                 self._abort(ln)
+            if self.disabled(kind, number):
+                # **A handle is a request to the pump, and a shut-down pump
+                # does not answer it.** The console has de-energized the STP
+                # for this line -- that is what a shutdown IS -- so lifting a
+                # handle gets no pump and no pressure, and the line stays
+                # where the shutdown left it until it is re-enabled.
+                #
+                # This console had the shutdown driving every REPORT of
+                # itself -- the 21/08 alarm, function 381's DISPENSING
+                # column and its bit 1, the DISABLE ALARM diagnostic, the
+                # bench card -- and nothing physical, so the next handle up
+                # ran the pump straight through it and the pressure came
+                # back. A technician practising the one recovery a line leak
+                # shutdown needs was taught that there is nothing to recover
+                # from.
+                #
+                # 576013-610 Rev AC makes "the next handle up will restart
+                # the pump" a property of the LOW PRESSURE ALARM row of
+                # Table 29-11 and of no other row on that page. For a
+                # shutdown, p.29-20: "the pump remains disabled until you
+                # reenable it by running a successful Self test." And a
+                # handle lifted during the recovery is an ABORT rather than
+                # a start -- p.29-21, "Prevent the dispenser handles from
+                # being lifted. If someone lifts a handle, the system alarms
+                # and you will have to begin the procedure again."
+                #
+                # See FIDELITY U4.
+                ln.state = "DISPENSING DISABLED"
+                return
             ln.state = "DISPENSING"
             ln.run_pump()
         elif was and not up:
+            # the dispense pressure, measured while the line was flowing
+            ln.pd = ln.pressure
+            if ln.pd_ref is None or ln.pressure < LOW_OFFSET_PSI:
+                # "When the line pressure has been measured at pressures
+                # less than 5 psi, it is known that pressure transducer has
+                # little or no offset. At this time Pd_ref will be updated
+                # to the current Pd value."
+                ln.pd_ref = ln.pd
+            # THE DISPENSING PRESSURE MONITOR: "if the current Pd value
+            # exceeds the Pd_ref value by 5 psi for a continuous period of
+            # one month". Continuous is the word that makes this a clock
+            # rather than a comparison, so what is kept is when it started.
+            if ln.pd > ln.pd_ref + PD_FAULT_PSI:
+                if ln.pd_high_since is None:
+                    ln.pd_high_since = now
+            else:
+                ln.pd_high_since = None
             ln.begin("gross", now, stage="trail")
             ln.state = "DISPENSING"
 
@@ -749,6 +1202,13 @@ class Lines:
         """
         ln = self.line(kind, number)
         if ln.handle:
+            return "DISPENSING"
+        # A precision test on a blend set needs the SET quiet, not just this
+        # line: the blended nozzle on the next island runs this pump too.
+        # The gross test is not on the list -- p.10-11 names "precision line
+        # testing, 0.2 and 0.1" and nothing else.
+        if rate_key in ("periodic", "annual") \
+                and self.blend_busy(kind, number):
             return "DISPENSING"
         if ln.running():
             return "TEST ALREADY RUNNING"
@@ -791,12 +1251,145 @@ class Lines:
         for ln in list(self.lines.values()):
             self._run(ln, seconds, now)
 
+    # ---- the alarms a line raises by itself ---------------------------------
+    def conditions(self):
+        """[AANNTT] for the four faults 577013-727 Rev B states a trigger for.
+
+        Each is a sentence in the quick help, and every one of the states
+        they turn on was already modelled here. See FIDELITY N2.
+        """
+        out = []
+        now = time.mktime(self.c.now())
+        # Only lines the console admits to having: an unprogrammed position
+        # is a piece of pipe nobody has told the console about, and it
+        # neither tests it nor reports it.
+        for kind, number, _label in self.c.programmed_lines():
+            names = LINE_ALARMS.get(kind)
+            if not names or (kind, number) not in self.lines:
+                continue
+            for aa, nn in self._line_faults(self.lines[(kind, number)],
+                                            names, now):
+                out.append(aa + nn + f"{number:02d}")
+        return out
+
+    def _line_faults(self, ln, names, now):
+        """Which of them this one line is showing."""
+        out = []
+        # "the pressure reading is negative"
+        if ln.reading < SENSOR_OPEN_PSI:
+            out.append(names["open"])
+        if ln.noise and "comm" in names:
+            out.append(names["comm"])
+        # "the pump-On and pump-Off pressures are reading the same value and
+        # are within the range of 5 to 15 psi". The last gross reading holds
+        # both: Pon is measured just before the pump is shut off and P2 is
+        # the last pump-Off pressure of the same test.
+        last = (ln.readings["gross"] or [None])[-1]
+        low, high = SENSOR_SHORT_BAND
+        if ln.transducer == "short":
+            out.append(names["short"])
+        elif last is not None and last.p2 is not None:
+            if (abs(last.pon - last.p2) <= SENSOR_SHORT_PSI
+                    and low <= last.pon <= high and low <= last.p2 <= high):
+                out.append(names["short"])
+        # "the fuel level is below 10 inches and a gross line test has
+        # failed. The alarm will clear when the fuel level exceeds 10
+        # inches" -- so the level is the live condition and the failed test
+        # is the qualifier, which is why this one does not latch.
+        if ln.result.get("gross") is False:
+            # `text()` and not `limit()`: the tank number is stored behind the
+            # device prefix as `0101`, and `limit()` only strips a prefix when
+            # the value is longer than eight characters, so it reads that as
+            # the number one hundred and one.
+            raw = (self.c.text(names["tank_code"], ln.number) or "").strip()
+            tank = int(raw) if raw.isdigit() else 0
+            level = self.c.tank_level.get(tank)
+            if level is not None:
+                height = self.c.height_at(tank, level.get("volume", 0.0))
+                if height < FUEL_OUT_INCHES:
+                    out.append(names["fuel_out"])
+        # "The Low Pressure Alarm Shutoff detects low pressure DURING A
+        # DISPENSE ... When the pressure drops below the entered shutoff
+        # value, the pump shuts off." So it is measured only while the
+        # handle is up, and a threshold of zero disables it.
+        if "low" in names and ln.handle and self._low_pressure_limit(ln):
+            if ln.pressure < self._low_pressure_limit(ln):
+                out.append(names["low"])
+        # "(Pre 19) A Continuous Pump On warning after 8 hours and a
+        # Continuous Pump On alarm after 16 hours, or (Version 19 and higher)
+        # A Continuous Handle alarm."
+        #
+        # Only the second half can happen here, and not by choice: PLLD and
+        # WPLLD both arrive at **version 24** in the version tables, so a
+        # console old enough for the pre-19 pair cannot have a pressurised
+        # line to raise them on. The two names are still in the alarm table
+        # (21/10, 26/09) and stay unproducible for that reason -- which is a
+        # better answer than the code carrying a branch it can never take.
+        #
+        # The v19 form's own delay is sixteen hours -- 577013-344 p.19 --
+        # and it is programmable per line at 774 and 7AE.
+        if ln.handle and ln.handle_since is not None:
+            hours = max(0.0, now - ln.handle_since) / 3600.0
+            if hours >= self._handle_timeout(ln):
+                out.append(names["handle"])
+        # "Two monitors are used to identify a problem with the pressure
+        # measurement equipment", and either one posts the alarm. This is
+        # what a version 19 and higher console has INSTEAD of the High
+        # Pressure Warning and Alarm; see FIDELITY N2a for why the pre-19
+        # pair cannot be reached from here at all.
+        if ln.vent_fault or (ln.pd_high_since is not None
+                             and now - ln.pd_high_since >= PD_FAULT_SECONDS):
+            out.append(names["equip"])
+        return out
+
+    def _handle_timeout(self, ln):
+        """The hours a handle may stay up, from 774 or 7AE.
+
+        "tt - Continuous Handle Alarm Timeout (Decimal, in hours, 1-16)" on
+        both codes, per line. An unprogrammed line gets the sixteen hours
+        577013-344 p.19 states outright, which is also the value the serial
+        manual's own sample response prints. Out-of-range values are held to
+        the manual's pair rather than refused: the panel and the wire both
+        police the field, so a number outside it can only arrive from a
+        store somebody else wrote.
+        """
+        low, high = HANDLE_TIMEOUT_HOURS
+        code = LINE_ALARMS[ln.kind].get("handle_code")
+        hours = self.c.limit(code, ln.number) if code else None
+        if not hours:
+            return high
+        return min(max(hours, low), high)
+
+    def _low_pressure_limit(self, ln):
+        """The psi below which a dispense is a fault, or 0 for disabled.
+
+        Two screens: `LOW PRESSURE SHUTOFF: NO` is the flag at S77C and
+        `LOW PRESSURE: 5` is the number at S78F, "0 - 25 psi". Both have to
+        be set -- "A value of 0 will disable this alarm" -- and the console
+        had the flag alone.
+        """
+        flag = (self.c.values.get(f"S77C{ln.number:02d}") or "").strip()
+        if not flag.endswith("1"):
+            return LOW_PRESSURE_DISABLED
+        raw = (self.c.text("78F", ln.number) or "").strip()
+        try:
+            return float(raw)
+        except ValueError:
+            return LOW_PRESSURE_DISABLED
+
     def _run(self, ln, seconds, now):
         left = seconds
         for _ in range(500):            # every stage either consumes time or ends
-            if ln.handle:
+            if ln.handle and not self.disabled(ln.kind, ln.number):
                 # "the pump is turned On to commence dispensing"
                 ln.pressure = self.pump_psi(ln.kind, ln.number)
+                return
+            if ln.handle:
+                # A handle up on a shut-down line: no pump, so the line
+                # bleeds like any other unpressurised one rather than being
+                # re-pinned to pump pressure every tick. Gating only the
+                # handler above would have left this to undo it. See U2.
+                ln.bleed(left / 3600.0)
                 return
             total = self._stage_seconds(ln)
             due = None if total is None else max(0.0, total - ln.waited)
@@ -917,6 +1510,14 @@ class Lines:
         ln.readings["gross"].append(Reading(now, ln.pon, p1, p2, passed))
         del ln.readings["gross"][:-20]
         ln.result["gross"] = passed
+        if passed:
+            # THE VENT PRESSURE MONITOR, which "runs after a passing Gross
+            # Line Test": P2 is the pump-off vent pressure Pv, and "if Pd is
+            # available, the Pd value will be used in place of the Pon
+            # value". The vent pressure is nominally 22 psi, and the Pd term
+            # is what stops a restricted relief path alone from raising it.
+            against = ln.pd if ln.pd is not None else ln.pon
+            ln.vent_fault = (p2 > VENT_FAULT_PV and against > VENT_FAULT_PD)
         ln.count("gross", passed, ln.started_at)
         self.c.leaks.record_line(ln.kind, ln.number, "gross", passed,
                                  ln.rate_between(p1, p2, t2), ln.started_at)
@@ -928,6 +1529,18 @@ class Lines:
         # "Fifteen minutes after a Gross test has completed the Periodic
         # test starts with the measurement of leak rate LR1": the fifteen
         # minutes and the measurement are the same fifteen minutes.
+        if self.blend_busy(ln.kind, ln.number):
+            # Except on a blend set with a partner still flowing, which is
+            # the scheduling p.10-11 says the setting affects: the precision
+            # leg would be aborted by that partner the moment it began, so
+            # it waits for the next gross test instead. On a busy blender
+            # site it waits all day, which is 577013-344 p.21 cause 5.
+            self._done(ln)
+            # after `_done`, which sets TEST COMPLETE: the precision leg is
+            # not complete, it is waiting. 577013-344 p.22's own word for a
+            # test that is scheduled and has not run.
+            ln.state = "TEST PENDING"
+            return
         ln.leg = "periodic"
         self._begin_cycle(ln, now)
 

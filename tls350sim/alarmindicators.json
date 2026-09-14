@@ -1,0 +1,91 @@
+{
+ "_source": "576013-610 Rev AC chapter 29, the Front Panel Indicator column of Tables 29-2 to 29-23",
+ "_note": "Which lamp a condition lights. It cannot be worked out from the message: HIGH PRODUCT ALARM is a Warning, and LIQUID WARNING is an Alarm on a Type B sensor.",
+ "indicator": {
+  "ANN TST NEEDED ALM": "alarm",
+  "ANN TST NEEDED WRN": "warning",
+  "ANNUAL LINE FAIL": "alarm",
+  "ANNUAL TEST FAIL": "alarm",
+  "AUTODIAL FAILURE": "alarm",
+  "BATTERY IS OFF": "alarm",
+  "COMM ALARM": "alarm",
+  "CSLD INCR RATE WRN": "warning",
+  "DELIVERY NEEDED": "warning",
+  "DELIVY DENSITY WRN": "warning",
+  "DISABLED VMCI ALARM": "alarm",
+  "FP SHUTDWN ALM": "alarm",
+  "FP SHUTDWN WRN": "warning",
+  "FPROM WRITE FAILURE": "alarm",
+  "FUEL ALARM": "alarm",
+  "FUEL OUT": "alarm",
+  "FUEL QUALITY ALARM": "alarm",
+  "FUEL WARNING": "warning",
+  "GROSS FAIL LINE TNK": "alarm",
+  "GROSS LINE FAIL": "alarm",
+  "GROSS TEST FAIL": "alarm",
+  "HIGH LIQUID ALARM": "alarm",
+  "HIGH LIQUID WARNING": "warning",
+  "HIGH PRODUCT ALARM": "warning",
+  "HIGH WATER WARNING": "warning",
+  "INSTALL ALARM": "alarm",
+  "LEAK ALARM": "alarm",
+  "LN EQ FAULT ALM": "alarm",
+  "LOW LIQUID ALARM": "alarm",
+  "LOW LIQUID WARNING": "warning",
+  "LOW PRODUCT ALARM": "alarm",
+  "LOW TEMP WARNING": "warning",
+  "MAX PRODUCT ALARM": "alarm",
+  "METR NC ALM": "alarm",
+  "MISSING TICKET WARN": "warning",
+  "NO CSLD IDLE TIME": "warning",
+  "NO MT COMM": "alarm",
+  "NO NVMEM": "alarm",
+  "NO VACUUM ALARM": "alarm",
+  "OPEN ALARM": "alarm",
+  "OVERFILL ALARM": "alarm",
+  "PAPER OUT": "warning",
+  "PC(H8) REVISION WARN": "warning",
+  "PER TST NEEDED ALM": "alarm",
+  "PER TST NEEDED WRN": "warning",
+  "PERIOD LINE FAIL": "alarm",
+  "PERIODIC TEST FAIL": "alarm",
+  "PRINTER ERROR": "warning",
+  "PROBE OUT": "alarm",
+  "PROTECTIVE COVER ALARM": "alarm",
+  "REMOTE DISPLAY ERROR": "warning",
+  "ROM REVISION WARNING": "warning",
+  "SENSOR FAULT ALARM": "alarm",
+  "SENSOR OUT": "alarm",
+  "SERVICE NOTICE": "warning",
+  "SETUP DATA WARNING": "warning",
+  "SETUP WARN": "warning",
+  "SHORT ALARM": "alarm",
+  "SUDDEN LOSS ALARM": "alarm",
+  "SYS MAINT NVMEM ERR": "alarm",
+  "SYS MT SER CARD ERR": "alarm",
+  "SYSTEM SELF-TEST ALM": "alarm",
+  "TANK SIPHON BREAK": "warning",
+  "TANK TEST ACTIVE": "warning",
+  "TOO MANY TANKS": "warning",
+  "VACUUM WARNING": "warning",
+  "VMC COM TIMEOUT": "alarm",
+  "WATER WARNING": "warning"
+ },
+ "by_category": {
+  "03": {
+   "LIQUID WARNING": "warning"
+  },
+  "04": {
+   "WATER ALARM": "warning"
+  },
+  "08": {
+   "WATER ALARM": "warning"
+  },
+  "12": {
+   "LIQUID WARNING": "alarm"
+  },
+  "28": {
+   "WATER ALARM": "alarm"
+  }
+ }
+}

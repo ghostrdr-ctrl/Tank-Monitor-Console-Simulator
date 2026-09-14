@@ -187,5 +187,202 @@ class TheUpdaterSeeingTheZip(unittest.TestCase):
                              self.EXE_SUM)
 
 
+class ClosingTheAppDuringACheck(unittest.TestCase):
+    """The updater waits on the network on a worker thread and comes back
+    through `after(0, ...)`, which is the only way to touch a widget from
+    anywhere but the main thread. If the window has gone in the meantime --
+    somebody closed the app, or the check was a startup one and the app never
+    got as far as a mainloop -- `after` raises in the worker, which on a
+    packaged build is a silent crash in a daemon thread."""
+
+    def test_the_worker_does_not_raise_when_the_window_has_gone(self):
+        import threading
+        from tls350sim import update, updateui
+
+        class Gone:
+            def after(self, _ms, _fn):
+                raise RuntimeError("main thread is not in main loop")
+
+        blew_up = []
+        real = threading.Thread
+
+        def watched(target=None, **kw):
+            def wrapped():
+                try:
+                    target()
+                except BaseException as exc:        # pragma: no cover
+                    blew_up.append(exc)
+            return real(target=wrapped, **kw)
+
+        with mock.patch.object(update, "check", lambda: None),                 mock.patch.object(threading, "Thread", watched):
+            updateui.check_for_updates(Gone(), silent=True)
+        # the thread is started inside check_for_updates; give it its run
+        for t in threading.enumerate():
+            if t is not threading.current_thread() and t.daemon:
+                t.join(timeout=2)
+        self.assertEqual(blew_up, [])
+
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheInternalDocsStayOutOfTheSnapshot(unittest.TestCase):
+    """The public repository carries one document, and the rule that keeps it
+    that way is "a new .md is private unless it is named".
+
+    That rule is the right way round -- a document added tomorrow is private
+    by default rather than shipping because nobody updated a list -- but
+    nothing asserted it, so the guarantee rested on reading the code. It is
+    the kind of thing that is discovered by a leak.
+
+    `CLOSED.md` is the case that prompted this: FIDELITY.md was split in two
+    on 2026-09-08 and the closed half is as internal as the open one. It
+    needed no change to the snapshot builder, which is exactly the claim
+    worth pinning.
+    """
+
+    def snapshot(self):
+        import importlib.util
+        path = os.path.join(ROOT, "packaging", "make_public_snapshot.py")
+        spec = importlib.util.spec_from_file_location("_snapshot", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_every_internal_document_is_held_back(self):
+        snap = self.snapshot()
+        for name in ("NOTES.md", "UNKNOWNS.md", "AUDIT.md", "FIDELITY.md",
+                     "CLOSED.md", "CHANGELOG.md", "RELEASING.md", "BENCH.md"):
+            self.assertFalse(snap.ships(name), f"{name} would be published")
+
+    def test_the_readme_is_the_one_that_ships(self):
+        """The check on the check: a rule that held everything back would
+        pass the test above and ship nothing."""
+        snap = self.snapshot()
+        self.assertTrue(snap.ships("README.md"))
+        self.assertEqual(snap.SHIPPING_DOCS, {"README.md"})
+
+    def test_no_tracked_markdown_but_the_readme_would_ship(self):
+        """The general form, over the files git actually tracks, so a
+        document added later is covered without naming it here."""
+        snap = self.snapshot()
+        shipped = [rel for rel in snap.tracked_files()
+                   if rel.lower().endswith(".md") and snap.ships(rel)]
+        self.assertEqual(shipped, ["README.md"])
+
+
+class EveryRegisterIdTheSourceCitesResolves(unittest.TestCase):
+    """A citation in a comment outlives the entry it names.
+
+    The code cites `FIDELITY S9`, `CLOSED U13`, `BENCH.md P3` and about two
+    hundred and sixty more, and those citations are how a reader gets from
+    a line of code to the reason it is that way. Two of them -- `D16` and
+    `D18` -- named entries that had never been written: both were added by
+    commits that changed no register file at all, and neither had a heading
+    or a mention in FIDELITY.md, CLOSED.md, BENCH.md or UNKNOWNS.md.
+
+    **An id that resolves to nothing is worse than no id**, because it
+    reads as a promise that the explanation is somewhere. Nothing could
+    catch it by reading the registers, because the registers are where the
+    gap is; only the citations can, and only by grepping the source.
+
+    The check is deliberately loose about WHERE an id is recorded. An entry
+    can be a heading, a row of the `Fixed` list, a bullet in a closed
+    entry's tail, or a row of BENCH.md's table -- W9 is a bullet, T11 is a
+    table row -- and all of those are a reader finding what they came for.
+    What it refuses is an id that appears in no register at all.
+    """
+
+    REGISTERS = ("FIDELITY.md", "CLOSED.md", "BENCH.md", "UNKNOWNS.md")
+
+    # `FIDELITY S9`, `CLOSED U13, U14`, `BENCH.md P3`, `UNKNOWNS A17`
+    CITE = re.compile(r"(?:FIDELITY|CLOSED|BENCH\.md|UNKNOWNS)\s+"
+                      r"((?:[A-Z]{1,2}\d+[a-z]?)"
+                      r"(?:\s*(?:,|and|/|to)\s*[A-Z]{1,2}\d+[a-z]?)*)")
+    ONE = re.compile(r"[A-Z]{1,2}\d+[a-z]?")
+
+    def registers(self):
+        text = ""
+        for name in self.REGISTERS:
+            with open(os.path.join(ROOT, name), encoding="utf-8") as fh:
+                text += fh.read()
+        return text
+
+    def cited(self):
+        """Every id the source cites, with the first place it does."""
+        out = {}
+        for folder in ("tls350sim", "tests", "tools"):
+            here = os.path.join(ROOT, folder)
+            for name in sorted(os.listdir(here)):
+                if not name.endswith(".py"):
+                    continue
+                path = os.path.join(here, name)
+                with open(path, encoding="utf-8") as fh:
+                    for n, line in enumerate(fh, 1):
+                        for hit in self.CITE.finditer(line):
+                            for one in self.ONE.findall(hit.group(1)):
+                                out.setdefault(one, f"{folder}/{name}:{n}")
+        return out
+
+    def test_no_citation_names_an_entry_that_does_not_exist(self):
+        text = self.registers()
+        cited = self.cited()
+        self.assertGreater(len(cited), 200, "the citation scan found nothing")
+        missing = {k: v for k, v in cited.items()
+                   if not re.search(r"(?<![A-Za-z0-9])" + k
+                                    + r"(?![A-Za-z0-9])", text)}
+        self.assertEqual(missing, {},
+                         "cited in the source, in no register: "
+                         + ", ".join(f"{k} ({v})"
+                                     for k, v in sorted(missing.items())))
+
+    def test_the_scan_can_see_an_id_that_is_only_a_bullet(self):
+        """The check on the check. W9 has no heading in either register --
+        it is a bullet in a closed entry's `Fixed` list -- and T11 is a row
+        of BENCH.md's table. If the scan only looked at headings it would
+        fail both, and a stricter check would be a worse one."""
+        text = self.registers()
+        for one in ("W9", "T11"):
+            self.assertIn(one, self.cited(), f"{one} is not cited any more")
+            self.assertRegex(text, r"(?<![A-Za-z0-9])" + one
+                             + r"(?![A-Za-z0-9])")
+
+
+class EveryToolStillParses(unittest.TestCase):
+    """`tools/` is not imported by anything the app runs, so nothing was
+    looking at it.
+
+    Two of the generators -- `build_alarm_labels.py` and
+    `build_field_widths.py` -- raised SyntaxError on import and had for as
+    long as the damage was there: a `\\n` that lost its backslash, so the
+    string terminated at the end of the line and the file stopped being
+    Python. They are the scripts that rebuild `alarmlabels.json` and
+    `fieldwidths.json` from the manuals, and the comment they both carry
+    says what that costs: "a generated file nobody can re-generate cleanly
+    is a generated file people stop re-generating."
+
+    Compiling is a low bar and it is the bar these fell under. It does not
+    run them -- `build_wire_titles.py` reads 570 pages and belongs in a
+    pass of its own -- it only asserts every one of them is still a Python
+    file.
+    """
+
+    def tools(self):
+        here = os.path.join(ROOT, "tools")
+        return sorted(name for name in os.listdir(here)
+                      if name.endswith(".py"))
+
+    def test_every_tool_compiles(self):
+        names = self.tools()
+        self.assertGreater(len(names), 5, "the tools scan found nothing")
+        broken = []
+        for name in names:
+            path = os.path.join(ROOT, "tools", name)
+            with open(path, encoding="utf-8") as fh:
+                source = fh.read()
+            try:
+                compile(source, path, "exec")
+            except SyntaxError as exc:
+                broken.append(f"{name}:{exc.lineno}: {exc.msg}")
+        self.assertEqual(broken, [])

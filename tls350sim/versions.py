@@ -97,6 +97,19 @@ FEATURE_ROW = {
     "ifsf":         "IFSF",
     "remotedisp":   "Remote Display",
     "tanks16":      "Tank 9 - 16",
+    "rprinter":     "Remote Printer",
+    # The probe families are version-gated too, and by the same table. This
+    # matters in one direction people do not expect: the CAP probes were
+    # DISCONTINUED, Cap 1 after version 8 and Cap 0 after version 17, so a
+    # console running the software this simulator ships by default cannot
+    # legitimately have one on it. The Mag rows run the other way, each
+    # arriving and then staying.
+    "cap0":         "Cap 0 Probes",
+    "cap1":         "Cap 1 Probes",
+    "mag012":       "Mag 0, 1, 2 Probes",
+    "mag3":         "Mag 3 Probes",
+    "mag456":       "Mag 4, 5, 6 Probes",
+    "mag712":       "Mag 7 - 12 Probes",
 }
 
 # What each of those is, in the words the bench puts on screen.
@@ -124,6 +137,13 @@ FEATURES = {
     "ifsf":         "IFSF",
     "remotedisp":   "remote display",
     "tanks16":      "tanks 9 to 16",
+    "rprinter":     "remote printer",
+    "cap0":         "CAP 0 capacitance probes",
+    "cap1":         "CAP 1 capacitance probes",
+    "mag012":       "Mag 0, 1 and 2 probes",
+    "mag3":         "Mag 3 probes",
+    "mag456":       "Mag 4, 5 and 6 probes",
+    "mag712":       "Mag 7 to 12 probes",
 }
 
 # Cards the software has to know about. A card not named here is one every
@@ -131,8 +151,72 @@ FEATURES = {
 # modules, external input and relay output, and the RS-232 port.
 MODULE_FEATURE = {
     "modem": "sitefax", "plld": "plld", "wplld": "wplld", "vlld": "vlld",
-    "smart": "smart", "mt": "mt",
+    "smart": "smart", "mt": "mt", "mt4": "mt",
+    # The matrix dashes the Remote Printer at version 1 and gives it a
+    # board from 2 on, and nothing was reading that row: a version 1
+    # console would take the card the manual says it cannot. FIDELITY M14.
+    "rprinter": "rprinter",
+    # The Remote Display is the same row read from the other end. Table 3-4
+    # runs it to version 32 and dashes it at 33, and Table 3-5 -- "Version 34
+    # and Higher" -- has no Remote Display row at all. It was discontinued,
+    # the way Cap 1 and Cap 0 were, so the gate that matters is at the top of
+    # the range rather than the bottom: the console this simulator ships as,
+    # V33 on an E7, is one that cannot take the card.
+    "rdu": "remotedisp",
 }
+
+# A card whose OWN installation manual states a gate that Tables 3-1 to 3-5
+# have no row for. 577013-528 Rev G p.5, of the slot-4 multiport 331944-001:
+# "Multiport modules require that the console be equipped with an ECPU2
+# board, a NVMEM203 memory module and software version 24 or higher." E6 and
+# M6 are the two board codes that are an ECPU2 with an NVMEM203.
+#
+# The Maintenance Tracker's own gate on the same page -- ECPU2, NVMEM203 and
+# "Version 27 or later software" -- is not repeated here, because Table 3-1
+# already carries it as a feature row and the two agree: `mt` reaches E6 at
+# version 27 and nothing earlier.
+ECPU2_NVMEM203 = ("E6", "M6")
+
+# The Pump Relay Monitor's gate is its function codes rather than a sentence.
+# `7C4` to `7C8` are all Version 27 and Tables 3-1 to 3-5 have no row for the
+# card, so an ungated cage let a 1992 console offer a 2007 feature -- five
+# setup steps and a whole FUNCTION on software with no code behind any of it.
+# No board is named because no document names one. See FIDELITY F13.
+#
+# **The VMCI board is NOT here, and F13 said it should be.** That entry read
+# 577013-528 Rev G p.5's "Multiport modules require ... an ECPU2 board, a
+# NVMEM203 memory module and software version 24 or higher" as covering the
+# VMCI. It covers the MULTIPORT modules of that table, which is the RS-485
+# card above; M5 is explicit that the VMCI is a different card, and this
+# console has no part number for it to match a row with. An invented gate is
+# not better than an absent one.
+MODULE_MINIMUM = {"rs485": (24, ECPU2_NVMEM203),
+                  "pumpmon": (27, None)}
+
+
+def as_version(version):
+    """A software version as a number, whatever shape it arrived in.
+
+    It comes off a JSON blob, off the bench, and off a test that swaps the
+    ROM chip by assigning a string. A gate that raises on the shape of its
+    own argument is worse than a gate that is generous, so an unreadable
+    version reads as the newest thing there is.
+    """
+    try:
+        return int(version)
+    except (TypeError, ValueError):
+        return 10 ** 6
+
+
+def module_allowed(version, board, module):
+    """The card's own gate, where its manual states one and no table does."""
+    rule = MODULE_MINIMUM.get(module)
+    if rule is None:
+        return True
+    least, boards = rule
+    return (as_version(version) >= least
+            and (boards is None or board in boards))
+
 
 # S-Module keys, which cannot be cut for software that has no code to unlock.
 SOFTWARE_FEATURE = {
@@ -184,10 +268,66 @@ REVISION_FLAGS = [
 PROFILE_FEATURE = {}
 
 
-def knows_token(token, version):
-    """Is that function code in this console's software yet?"""
+# 0XX and 5XX are the standard CPU; 1XX and 3XX are the enhanced ones, and
+# 3XX is the 16-tank enhanced. A code that wants the enhanced CPU is served
+# by either enhanced board, so the families rank rather than compare as
+# numbers -- 5 is a standard CPU and must not outrank 3.
+# Every function code's arrival version, from the census 576013-635 heads
+# each code with. wire.py reads the same file for what a code IS; this is
+# for when it began to exist.
+try:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           "functiondata.json"), encoding="utf-8") as _fh:
+        FUNCTIONS = json.load(_fh)
+except (OSError, ValueError):        # pragma: no cover - packaging accident
+    FUNCTIONS = {}
+
+PLATFORM_RANK = {"0": 0, "5": 0, "1": 1, "3": 2}
+
+
+def platform_of(board):
+    """The platform rank a board sits on, 0 if it is not one we know."""
+    family = (BOARD.get(board) or {}).get("family")
+    return PLATFORM_RANK.get(FAMILY_PLATFORM.get(family, ""), 0)
+
+
+def token_arrival(token):
+    """(platform rank, version) a function code needs to exist.
+
+    576013-635 heads every code with the software version it arrived in, and
+    the census carries that number for 582 of them. Sixty-seven read above
+    34 on a console whose versions run 1 to 34, and they are not errors:
+    576013-818's "Explanation of Software Version Numbering" makes the
+    leading digit the platform, so `Version 106` is the 1XX line at version
+    06. Compared as a plain integer it would ask `106 > 33` and withdraw the
+    whole enhanced-CPU feature set from every console. See FIDELITY S10a.
+    """
     arrived = TOKEN_VERSION.get(token)
-    return arrived is None or version >= arrived
+    if arrived is None:
+        arrived = (FUNCTIONS.get(token) or {}).get("version")
+    if arrived is None:
+        return 0, 0
+    if arrived > 100:
+        return PLATFORM_RANK.get(str(arrived // 100), 0), arrived % 100
+    return 0, arrived
+
+
+def knows_token(token, version, board=None):
+    """Is that function code in this console's software yet?
+
+    Checked against hardware: a console running software 326.01 -- the 3XX
+    line at version 26 -- was asked every inquiry code, and this gate agrees
+    with it on 266 of the 273 that the census and the capture share. The
+    seven it would allow and the console refuses are the ticketed-delivery
+    and delivery-variance reports, which that console refuses for want of
+    the feature rather than the version. It refuses nothing the console
+    answers, which is the property that matters: the gate can only ever be
+    too generous, never too mean.
+    """
+    need_rank, need_version = token_arrival(token)
+    if as_version(version) < need_version:
+        return False
+    return need_rank == 0 or platform_of(board) >= need_rank
 
 
 def revision_flags(version):
@@ -300,6 +440,30 @@ def arrived_in(feature):
         return OLDEST
     got = [int(v) for v, codes in MATRIX.get(row, {}).items() if codes]
     return min(got) if got else OLDEST
+
+
+def withdrawn_in(feature):
+    """The first version at which a feature it once had is gone, or None.
+
+    Three rows of the tables run out rather than start: Cap 1, Cap 0 and the
+    Remote Display. `arrived_in` cannot describe them -- it answers "version
+    1" for a card that version 33 will not take -- and a bench that says "not
+    until V1" is worse than one that says nothing.
+    """
+    row = FEATURE_ROW.get(feature)
+    if row is None:
+        return None
+    got = sorted((int(v), bool(codes)) for v, codes in MATRIX.get(row, {}).items())
+    seen = False
+    for version, carried in got:
+        if carried:
+            seen = True
+        elif seen:
+            return version
+    # A row that stops early: the later tables do not list it at all.
+    if seen and got and got[-1][0] < NUMBERS[-1]:
+        return got[-1][0] + 1
+    return None
 
 
 def family(board):

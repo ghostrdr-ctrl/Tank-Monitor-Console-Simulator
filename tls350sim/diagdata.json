@@ -52,77 +52,121 @@
    {
     "l1": "PC DIAGNOSTIC DATA",
     "l2": "PRESS <ENTER>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "ecpu": true
+    }
    },
    {
     "l1": "PC SWARE# XXXXXX-XXX-X",
     "l2": "CREATED - YY.MM.DD.HH.MM",
     "depth": 1,
-    "live": "pc_software"
+    "live": "pc_software",
+    "when": {
+     "ecpu": true
+    }
    },
    {
     "l1": "PC ROM CHECKSUM=PASSED",
     "l2": "PC RESET COUNTS = X",
     "depth": 1,
-    "live": "pc_resets"
+    "live": "pc_resets",
+    "when": {
+     "ecpu": true
+    }
    },
    {
     "l1": "PC ROM ERRORS = X",
     "l2": "MC CKSUM ERRS = X",
     "depth": 1,
-    "live": "pc_errors"
+    "live": "pc_errors",
+    "when": {
+     "ecpu": true
+    }
    },
    {
-    "l1": "MC -->PC COMMS = XXXXX",
-    "l2": "MC <--PC COMMS = XXXXX",
+    "l1": "MC ->PC COMMS =  XXXXX",
+    "l2": "MC <-PC COMMS =  XXXXX",
     "depth": 1,
-    "live": "mc_comms"
+    "live": "mc_comms",
+    "when": {
+     "ecpu": true
+    }
    },
    {
     "l1": "DIM DIAGNOSTIC DATA",
     "l2": "PRESS <ENTER>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "module": [
+      "edim",
+      "mdim"
+     ]
+    }
    },
    {
     "l1": "M1: SWARE#XXXXXX-XXX-X",
     "l2": "CREATED - YY-MM-DD-HH-MM",
     "depth": 1,
-    "live": "dim_software"
+    "live": "dim_software",
+    "when": {
+     "module": [
+      "edim",
+      "mdim"
+     ]
+    }
    },
    {
     "l1": "M1: DIM ROM CKSUM = PASS",
     "l2": "DIM COMM ERRORS = X",
     "depth": 1,
-    "live": "dim_errors"
+    "live": "dim_errors",
+    "when": {
+     "module": [
+      "edim",
+      "mdim"
+     ]
+    }
    },
    {
     "l1": "WPLLD DIAGNOSTIC DATA",
     "l2": "PRESS <ENTER>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "module": "wplldcom"
+    }
    },
    {
     "l1": "WPLLD DIAGNOSTIC DATA",
     "l2": "#: XXXXXX-XXX-X",
     "depth": 1,
-    "live": "wplld_software"
+    "live": "wplld_software",
+    "when": {
+     "module": "wplldcom"
+    }
    },
    {
     "l1": "WPLLD DIAGNOSTIC DATA",
     "l2": "XX.XX.XX.XX.XX",
     "depth": 1,
-    "live": "wplld_created"
+    "live": "wplld_created",
+    "when": {
+     "module": "wplldcom"
+    }
    },
    {
     "l1": "WPLLD DIAGNOSTIC DATA",
     "l2": "PC COMM ERRORS = X",
     "depth": 1,
-    "live": "wplld_errors"
+    "live": "wplld_errors",
+    "when": {
+     "module": "wplldcom"
+    }
    }
   ]
  },
  {
   "function": "SERVICE REPORT",
-  "requires": "mt",
   "screens": [
    {
     "l1": "SERVICE CODE LIST",
@@ -132,10 +176,26 @@
    {
     "l1": "ENTER SERVICE ID",
     "l2": "ID:",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "no_module": "mt"
+    }
    },
    {
     "l1": "ENTER SERVICE ID LABEL",
+    "l2": "LBL:",
+    "depth": 0,
+    "when": {
+     "no_module": "mt"
+    }
+   },
+   {
+    "l1": "ENTER SERVICE CODE",
+    "l2": "CODE:",
+    "depth": 0
+   },
+   {
+    "l1": "ENTER SERVICE CODE LABEL",
     "l2": "LBL:",
     "depth": 0
    }
@@ -151,14 +211,10 @@
     "depth": 0
    },
    {
-    "l1": "J SMYTHE A12345",
+    "l1": "(KEY)",
     "l2": "BLOCK: NO",
-    "depth": 0
-   },
-   {
-    "l1": "ENTER ID TO BLOCK",
-    "l2": "",
-    "depth": 1
+    "depth": 1,
+    "expand": "mt_keys"
    },
    {
     "l1": "BLOCK: XXXXXX",
@@ -168,20 +224,33 @@
     "act": "mt_block"
    },
    {
-    "l1": "BLOCK: A54321",
+    "l1": "ARE YOU SURE?: YES",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 1
+   },
+   {
+    "l1": "ENTER ID TO BLOCK",
+    "l2": "PRESS <ENTER>",
+    "depth": 0
+   },
+   {
+    "l1": "ENTER ID TO BLOCK",
+    "l2": "ID:",
+    "depth": 1,
+    "live": "mt_id",
+    "buf": "mt_id"
+   },
+   {
+    "l1": "BLOCK: XXXXXX",
     "l2": "ARE YOU SURE?: NO",
-    "depth": 0,
+    "depth": 1,
+    "live": "mt_block",
     "act": "mt_block"
    },
    {
     "l1": "ARE YOU SURE?: YES",
-    "l2": "",
+    "l2": "PRESS <STEP> TO CONTINUE",
     "depth": 1
-   },
-   {
-    "l1": "J CLARKE",
-    "l2": "BLOCK: NO",
-    "depth": 0
    }
   ]
  },
@@ -192,17 +261,17 @@
    {
     "l1": "SERVICE NOTICE SESSION",
     "l2": "DISABLED",
-    "depth": 0
+    "depth": 0,
+    "live": "service_session",
+    "toggle": "service_session"
    },
    {
     "l1": "SERVICE NOTICE SESSION",
     "l2": "DURATION : 2",
-    "depth": 0
-   },
-   {
-    "l1": "SERVICE NOTICE SESSION",
-    "l2": "ENABLED",
-    "depth": 0
+    "depth": 0,
+    "live": "service_duration",
+    "console": "set.service_duration",
+    "buf": "duration"
    }
   ],
   "when": {
@@ -313,13 +382,13 @@
    },
    {
     "l1": "T 1: ORIG REF DISTANCE",
-    "l2": "MM/DD/YY",
+    "l2": "MM/DD/YY           XX.XX",
     "depth": 0,
     "live": "probe_ref_orig"
    },
    {
     "l1": "T 1: CURR REF DISTANCE",
-    "l2": "MM/DD/YY",
+    "l2": "MM/DD/YY           XX.XX",
     "depth": 0,
     "live": "probe_ref_curr"
    }
@@ -402,21 +471,21 @@
    },
    {
     "l1": "(PRODUCT LABEL)",
-    "l2": "AVG SALES-THU: XXXX GALS",
+    "l2": "AVG SALES-THR: XXXX GALS",
     "depth": 0,
-    "live": "fm_avg_THU"
+    "live": "fm_avg_THR"
    },
    {
     "l1": "(PRODUCT LABEL)",
-    "l2": "LAST SALES-THU: XXXX GALS",
+    "l2": "LAST SALES-THR: XXXX GALS",
     "depth": 0,
-    "live": "fm_last_THU"
+    "live": "fm_last_THR"
    },
    {
     "l1": "(PRODUCT LABEL)",
-    "l2": "PRED SALES-THU: XXXX GALS",
+    "l2": "PRED SALES-THR: XXXX GALS",
     "depth": 0,
-    "live": "fm_pred_THU"
+    "live": "fm_pred_THR"
    },
    {
     "l1": "(PRODUCT LABEL)",
@@ -519,12 +588,14 @@
    {
     "l1": "T 1: (PRODUCT LABEL)",
     "l2": "PRINT 0.20 LEAK REPORT",
-    "depth": 0
+    "depth": 0,
+    "diagprint": "tank_periodic"
    },
    {
     "l1": "T 1: (PRODUCT LABEL)",
     "l2": "PRINT 0.10 LEAK REPORT",
-    "depth": 0
+    "depth": 0,
+    "diagprint": "tank_annual"
    },
    {
     "l1": "T 1: (PRODUCT LABEL)",
@@ -541,12 +612,13 @@
    {
     "l1": "T 1: (PRODUCT LABEL)",
     "l2": "PRINT LEAK HISTORY",
-    "depth": 0
+    "depth": 0,
+    "diagprint": "tank_history"
    }
   ]
  },
  {
-  "function": "ACCUCHART DIAGNOSTICS",
+  "function": "ACCU_CHART DIAGNOSTICS",
   "requires": "probe",
   "screens": [
    {
@@ -848,7 +920,7 @@
    },
    {
     "l1": "P 1: (PRODUCT LABEL)",
-    "l2": "",
+    "l2": "            O0 E0 T0 D1",
     "depth": 0
    }
   ]
@@ -967,12 +1039,12 @@
    },
    {
     "l1": "PRESSURE OFFSET RESET",
-    "l2": "PRESS  <STEP> TO CONTINUE",
+    "l2": "PRESS <STEP> TO CONTINUE",
     "depth": 1
    },
    {
     "l1": "W1: 3.0 GPH",
-    "l2": "PRESS  <ENTER>",
+    "l2": "PRESS <ENTER>",
     "depth": 0
    },
    {
@@ -1001,17 +1073,38 @@
    {
     "l1": "r 1: PUMP (OUT): OFF",
     "l2": "Q 1: RELAY (IN): OFF",
-    "depth": 0
+    "depth": 0,
+    "live": "pumpmon_out",
+    "when": {
+     "relay_assigned": true
+    }
    },
    {
-    "l1": "r 1: STUCK RELAY: 999 SE",
+    "l1": "r 1: STUCK RELAY: 999 SEC",
     "l2": "PUMP RUN TIME: HH:MM",
-    "depth": 0
+    "depth": 0,
+    "live": "pumpmon_stuck",
+    "when": {
+     "relay_assigned": true
+    }
    },
    {
-    "l1": "r 1: <PUMP MONITOR LABEL",
+    "l1": "r 1: <PUMP MONITOR LABEL>",
+    "l2": "PUMP (OUT): OFF",
+    "depth": 0,
+    "live": "pumpmon_label",
+    "when": {
+     "relay_assigned": false
+    }
+   },
+   {
+    "l1": "r 1: <PUMP MONITOR LABEL>",
     "l2": "PUMP RUN TIME: HHH:MM",
-    "depth": 0
+    "depth": 0,
+    "live": "pumpmon_run",
+    "when": {
+     "relay_assigned": false
+    }
    }
   ]
  },
@@ -1082,7 +1175,7 @@
   ]
  },
  {
-  "function": "GROUNDTEMP DIAGNOSTIC",
+  "function": "GROUND TEMP DIAGNOSTIC",
   "requires": "vlld",
   "screens": [
    {
@@ -1138,6 +1231,11 @@
     "depth": 0
    },
    {
+    "l1": "g X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0
+   },
+   {
     "l1": "H X: ALARM HISTORY",
     "l2": "PRESS <PRINT> FOR REPORT",
     "depth": 0
@@ -1173,14 +1271,33 @@
     "depth": 0
    },
    {
-    "l1": "g X: ALARM HISTORY",
+    "l1": "s X: ALARM HISTORY",
     "l2": "PRESS <PRINT> FOR REPORT",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "module": "smart"
+    }
    },
    {
     "l1": "r X: ALARM HISTORY",
     "l2": "PRESS <PRINT> FOR REPORT",
     "depth": 0
+   },
+   {
+    "l1": "X1: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0,
+    "when": {
+     "module": "vmc"
+    }
+   },
+   {
+    "l1": "x X: ALARM HISTORY",
+    "l2": "PRESS <PRINT> FOR REPORT",
+    "depth": 0,
+    "when": {
+     "module": "vmc"
+    }
    }
   ]
  },
@@ -1190,7 +1307,8 @@
    {
     "l1": "RECONCILIATION CLEAR MAP",
     "l2": "CLEAR TANK MAPS: NO",
-    "depth": 0
+    "depth": 0,
+    "act": "recon_clear_map"
    }
   ],
   "when": {
@@ -1208,7 +1326,8 @@
    {
     "l1": "BIR METER MAP",
     "l2": "STATUS: COMPLETE",
-    "depth": 1
+    "depth": 1,
+    "live": "meter_map_status"
    },
    {
     "l1": "METER MAP",
@@ -1219,19 +1338,61 @@
    {
     "l1": "BIR METER EVENTS",
     "l2": "METER EVENTS TABLE EMPTY",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "meter_events": false
+    }
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "PRESS <ENTER>",
+    "depth": 0,
+    "when": {
+     "meter_events": true
+    }
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "MMM DD, YYYY HH:MM:SS xM",
+    "depth": 1,
+    "live": "meter_event_time",
+    "diagprint": "meter_events"
    },
    {
     "l1": "BIR METER EVENTS",
     "l2": "FP: XX M: XX =T X",
     "depth": 1,
-    "live": "meter_events"
+    "live": "meter_events",
+    "when": {
+     "last_event": "end"
+    }
    },
    {
     "l1": "BIR METER EVENTS",
     "l2": "END EVENT: X GALS",
     "depth": 1,
-    "live": "meter_end"
+    "live": "meter_end",
+    "when": {
+     "last_event": "end"
+    }
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "FP: XX",
+    "depth": 1,
+    "live": "meter_events",
+    "when": {
+     "last_event": "start"
+    }
+   },
+   {
+    "l1": "BIR METER EVENTS",
+    "l2": "START EVENT",
+    "depth": 1,
+    "live": "meter_end",
+    "when": {
+     "last_event": "start"
+    }
    }
   ],
   "when": {
@@ -1251,17 +1412,20 @@
    {
     "l1": "T 1: POWER REMOVED",
     "l2": "VOLUME = 0 GALS",
-    "depth": 0
+    "depth": 0,
+    "live": "power_off_volume"
    },
    {
     "l1": "T 1: POWER REMOVED",
     "l2": "WATER VOL = 0 GALS",
-    "depth": 0
+    "depth": 0,
+    "live": "power_off_water"
    },
    {
     "l1": "T 1: POWER REMOVED",
     "l2": "TEMP = 0.0 DEG F",
-    "depth": 0
+    "depth": 0,
+    "live": "power_off_temp"
    },
    {
     "l1": "T 1: POWER RESTORED",
@@ -1289,8 +1453,9 @@
    },
    {
     "l1": "T 1: GROSS VOLUME CHANGE",
-    "l2": "",
-    "depth": 0
+    "l2": "               XXXX  GAL",
+    "depth": 0,
+    "live": "power_change"
    }
   ]
  },
@@ -1304,13 +1469,13 @@
   ],
   "screens": [
    {
-    "l1": "c1: MODEM AUTO DETECTED",
-    "l2": "",
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "MODEM: VR TLS GSM MODEM",
     "depth": 0
    },
    {
-    "l1": "COMM BOARD: 1 S-LINK",
-    "l2": "MODEM: VR TLS GSM MODEM",
+    "l1": "c1: MODEM AUTO DETECTED",
+    "l2": "VR TLS GSM MODEM",
     "depth": 0
    },
    {
@@ -1325,14 +1490,34 @@
     "depth": 0
    },
    {
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "AUTO CONFIG MODEM: YES",
+    "depth": 0
+   },
+   {
+    "l1": "AUTO CONFIG MODEM: YES",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 0
+   },
+   {
     "l1": "AUTO CONFIG MODEM: YES",
     "l2": "ARE YOU SURE? : YES",
     "depth": 0
    },
    {
+    "l1": "ARE YOU SURE? : YES",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 0
+   },
+   {
     "l1": "WORKING",
-    "l2": "",
+    "l2": "* * * * * * * *",
     "depth": 1
+   },
+   {
+    "l1": "COMM BOARD: 1 S-LINK",
+    "l2": "MODEM: VR TLS GSM MODEM",
+    "depth": 0
    }
   ]
  },
@@ -1446,7 +1631,8 @@
    {
     "l1": "START MANUAL TEST: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "vac_test_start"
    },
    {
     "l1": "STOP MANUAL TEST",
@@ -1456,7 +1642,8 @@
    {
     "l1": "STOP MANUAL TEST: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "vac_test_stop"
    },
    {
     "l1": "VAC SENSOR EVAC HOLD",
@@ -1471,7 +1658,8 @@
    {
     "l1": "START EVAC HOLD: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "vac_hold_start"
    },
    {
     "l1": "STOP EVAC HOLD",
@@ -1481,12 +1669,14 @@
    {
     "l1": "STOP EVAC HOLD: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "vac_hold_stop"
    },
    {
     "l1": "s 1: VACUUM OK",
     "l2": "-7.14 PSI VCV: CLOSED",
-    "depth": 0
+    "depth": 0,
+    "live": "vac_state"
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
@@ -1495,18 +1685,21 @@
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
-    "l2": "LEAK RATE:",
-    "depth": 0
+    "l2": "LEAK RATE:    0.123 GPH",
+    "depth": 0,
+    "live": "vac_rate"
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
-    "l2": "NO VAC TIME:",
-    "depth": 0
+    "l2": "NO VAC TIME:      150:20",
+    "depth": 0,
+    "live": "vac_no_vac"
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
-    "l2": "EVAC RATIO: 5.2 @ -4.1 P",
-    "depth": 0
+    "l2": "EVAC RATIO:5.2 @-4.1PSI",
+    "depth": 0,
+    "live": "vac_ratio"
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
@@ -1577,37 +1770,44 @@
    {
     "l1": "CONTAINMENT OVER PRESS",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_01"
    },
    {
     "l1": "VAPOR LEAKAGE TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_02"
    },
    {
     "l1": "VAPOR COLLECTION TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_06"
    },
    {
     "l1": "SENSOR OUT TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_04"
    },
    {
     "l1": "SETUP TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_05"
    },
    {
     "l1": "PROCESSOR STATUS TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_select_03"
    },
    {
     "l1": "CLEAR TEST AND LOG",
     "l2": "ARE YOU SURE?: YES",
-    "depth": 1
+    "depth": 1,
+    "run": "isd_clear"
    },
    {
     "l1": "FP: ff h:HH nnnnnnnnnnn",
@@ -1681,7 +1881,7 @@
   ]
  },
  {
-  "function": "ARCHIVE",
+  "function": "ARCHIVE DIAGNOSTIC",
   "requires": null,
   "screens": [
    {

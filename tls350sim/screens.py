@@ -100,14 +100,33 @@ def device_code(function_name):
     for word, letter in (("COMMUNICATION", "D"), ("LIQUID", "L"),
                          ("EXTERNAL INPUT", "I"),
                          ("VAPOR", "V"),
-                         ("GROUNDWATER", "G"), ("2-WIRE", "C"),
-                         ("3-WIRE", "H"), ("SMART", "s"),
+                         ("GROUNDWATER", "G"),
+                         # Setup spells these with a hyphen and the status
+                         # functions with a space, so matching only the
+                         # hyphen sent every 2-wire and 3-wire STATUS
+                         # screen to the default "T" and labelled a
+                         # sensor as a tank. 576013-610 Table 29-1:
+                         # "C  2-wire C.L. sensor", "H  3-wire C.L.".
+                         ("2-WIRE", "C"), ("2 WIRE", "C"),
+                         ("3-WIRE", "H"), ("3 WIRE", "H"), ("SMART", "s"),
                          # the mag sump functions are a smart sensor's,
                          # and 576013-610 Rev AC p.82 heads them "s 1:"
                          ("MAG SUMP", "s"),
                          ("PUMP RELAY", "r"), ("OUTPUT RELAY", "R"),
+                         # WPLLD before PLLD, because one contains the
+                         # other. 576013-623 Rev AN p.25-1 names all three
+                         # line families in one sentence -- "Whenever the
+                         # prefix 'Q' appears in the display, it stands for
+                         # the selected line in the PLLD system, 'W' stands
+                         # for the selected line in the WPLLD system and 'P'
+                         # stands for the selected line in the VLLD system"
+                         # -- and the two functions that spell themselves
+                         # PLLD and VLLD rather than PRESSURE LINE and LINE
+                         # LEAK DETECT matched none of these words and fell
+                         # through to the tank's letter. See FIDELITY U6.
                          ("WPLLD", "W"), ("PRESSURE LINE", "Q"),
-                         ("LINE LEAK DETECT", "P")):
+                         ("PLLD", "Q"),
+                         ("LINE LEAK DETECT", "P"), ("VLLD", "P")):
         if word in name:
             return letter
     return "T"
@@ -133,14 +152,19 @@ def named_head(console, head, device, letter):
         for placeholder in ("(PRODUCT LABEL)", "(Product Label)",
                             "(LABEL)", "(Label)"):
             head = head.replace(placeholder, label)
-        # 577013-800 Rev P p.1059 draws the air flow meter's screen as
+        # 577013-800 Rev P Figure 7 draws the air flow meter's screen as
         # "LABEL: (AFM label)": the parenthetical is the label the site
-        # programmes, and a console shows it rather than the word.
-        for placeholder, which in (("(AFM label)", "evr_afm_label"),
-                                   ("(PS label)", "evr_ps_label")):
+        # programmes, and a console shows it rather than the word. **It is
+        # the SMART SENSOR's label**, S722, because that is what an air
+        # flow meter and a vapour pressure sensor are -- SMART SENSOR SETUP
+        # names the device and this screen reads the name. Two settings of
+        # their own used to stand in for it, written by nothing and so
+        # empty on every console.
+        for placeholder in ("(AFM label)", "(PS label)"):
             if placeholder in head:
                 head = head.replace(
-                    placeholder, console.setting(which, 0, "")).rstrip()
+                    placeholder,
+                    console.text("722", device) or "").rstrip()
     return head
 
 
@@ -157,6 +181,14 @@ def setup_scope_head(console, step, device):
     if not prefix:
         return None
     which = step.get("scope_setting", "tank_test_method")
+    if which == "dial_method":
+        # 576013-623 Rev AN p.6-11: "If you choose Single Phone, the phrase
+        # 'ALL RCVR' is replaced on each screen by the selected receiver
+        # number (RCVR n)", and the figure draws `ALL RCVRS` against
+        # `SINGLE RCVR: D1`. The setting is 529, which was read by nothing.
+        # See FIDELITY N6a.
+        single = (console.values.get("S52900") or "0").strip()[-1:] == "1"
+        return f"SINGLE RCVR: D{device}" if single else "ALL RCVRS"
     if which == "line_test_method":
         # 576013-623 Rev AN ch.13 is the same function for lines, and says
         # LINE where ch.8 says TANK
@@ -224,7 +256,39 @@ def stored(console, step, device, field=None):
     if raw is None:
         return ""
     f = field if field is not None else field_of(console, step, device)
-    return fieldio.decode(f, code, raw) if f else raw.strip()
+    return fieldio.decode(f, code, raw, console) if f else raw.strip()
+
+
+def screen_word(field, value):
+    """The word the SETUP SCREEN uses, where it is not the wire's word.
+
+    A field can be rendered two ways by one console, and ULLAGE is the
+    clearest case on this shelf: 576013-623 Rev AN p.5-14 draws the setup
+    screen as `ULLAGE` over `90 PERCENT`, and the site's own tape prints
+    `ULLAGE: 90%`. Both are Veeder-Root's, neither is wrong, and they are
+    different surfaces -- so the choice list keeps the wire's and the
+    paper's word and `screen_words` carries the panel's.
+
+    Applied in `setup_lines` and in the panel's CHANGE walk only. The
+    printed report and the serial reply go through the same `shown()` and
+    must not see it.
+    """
+    words = (field or {}).get("screen_words") or {}
+    return words.get(str(value), value)
+
+
+def wire_word(field, value):
+    """`screen_word` the other way: the panel's word back to the field's.
+
+    What a technician typed or walked to is a SCREEN word, and what
+    `fieldio.encode` matches against is the choice list. Without this, ENTER
+    on `95 PERCENT` would be refused by a field whose choices read `95%`.
+    """
+    words = (field or {}).get("screen_words") or {}
+    for wire, screen in words.items():
+        if str(value) == str(screen):
+            return wire
+    return value
 
 
 def shown(console, field, held):
@@ -244,9 +308,26 @@ def shown(console, field, held):
         if f.get("kind") == "date":
             return time.strftime("%m/%d/%Y", t)
         return clock_hhmm(t).strip()
-    if f.get("default") is not None:
-        return str(f["default"])
     kind = f.get("kind")
+    if f.get("default") is not None:
+        want = str(f["default"])
+        if kind == "enum":
+            # a default is stored as the code, and the screen reads the
+            # word: an unset baud rate is "01200" in the field and 1200 on
+            # the display.
+            #
+            # **Off `choices_of`, not off `f["choices"]`.** A field whose
+            # list belongs to the CONSOLE rather than to the field --
+            # `choices_from` -- has no `choices` to walk, so its default
+            # fell through and the raw wire value reached the glass:
+            # `s 1: SELECT PUMP #` drew `0000` where p.26-4 draws `NONE`,
+            # and `0000` is the code for NONE. It is the state every Vac
+            # Sensor starts in, so it is the state a trainee sees first.
+            # See the setup-mode audit, SU27.
+            for choice in fieldio.choices_of(f, console):
+                if isinstance(choice, (list, tuple)) and str(choice[0]) == want:
+                    return str(choice[1])
+        return want
     if kind == "enum" and f.get("choices"):
         first = f["choices"][0]
         return str(first[1] if isinstance(first, (list, tuple)) else first)
@@ -256,7 +337,17 @@ def shown(console, field, held):
         # "SHIFT #1 START TIME / TIME: DISABLED": a time nobody has set
         return "DISABLED"
     if kind in ("int", "float"):
-        # an unprogrammed limit reads zero on a console, not blank
+        # an unprogrammed limit reads zero on a console, not blank.
+        #
+        # A field whose range does not START at zero is a different
+        # question and belongs on the FIELD: `DIAL RETRY NUMBER` is "a
+        # number between 3 and 99" and drew `0`, `DELIVERY DELAY` has a
+        # minimum of 1 and drew `00` where p.7-25 draws `01`, and both
+        # carry a `default` now. Reading the minimum here instead would
+        # have changed five screens nobody has a page for -- TANK TILT
+        # would read `-999.00` out of the box, because its range is
+        # signed and its minimum is not the value a console rests on.
+        # See the setup-mode audit, SU31.
         return "0"
     return v
 
@@ -268,8 +359,21 @@ def masked(field, value):
     `OVERFILL LIMIT: 000%`, not `OVERFILL LIMIT: 0`, and a programmed
     console reads `090%`. Fields carry the mask the manual draws for them;
     a field without one is drawn as it comes.
+
+    `pad_hour` is the same idea for a clock, and it is HERE rather than in
+    `fieldio.decode` because it is a screen's shape and not the value's.
+    576013-623 Rev AN p.5-16 draws both DAYLIGHT SAVINGS times
+    `TIME: 02:00 AM` where p.17-1 of the same manual draws AUTOMATIC DAILY
+    CLOSING `TIME: 2:00 AM` -- and the site's own tape settles the PAPER
+    against both, printing ` 2:00 AM` right aligned in eight. So the zero
+    is one screen's, the paper keeps the tape's, and the two rows that
+    print through a `line` spec never come through this function at all.
+    See UNKNOWNS B15.
     """
-    return masks.apply((field or {}).get("mask"), value)
+    f = field or {}
+    if f.get("pad_hour") and str(value)[1:2] == ":":
+        value = "0" + str(value)
+    return masks.apply(f.get("mask"), value)
 
 
 def console_value(console, step, device):
@@ -332,8 +436,22 @@ def setup_context(console, function, step, device):
         if code[1:3] in ("52", "5B"):
             named = console.text("522", device)
             return f"D{device}: {named}".rstrip(), label or text + ":"
-        return f"COMM BOARD: {device}", label or text + ":"
+        # "COMM BOARD: 1 (Type)" -- 576013-623 Rev AN p.6-2 draws the card
+        # in the slot beside its number, and the tape prints it too. This
+        # drew the number alone, so nothing on the screen or the paper said
+        # which board you were setting up.
+        return (f"COMM BOARD: {device} ({console.comm_board_name(device)})",
+                label or text + ":")
     named = console.text(DEVICE_LABEL_CODE.get(letter, "602"), device)
+    if step.get("bare"):
+        # `Q1: (Pressure Line Label)` over a bare `NONE` -- 576013-623 Rev
+        # AN p.10-7. The value stands on its own under the device's own
+        # head, with no prompt in front of it. `"l2": ""` cannot say that:
+        # an empty prompt falls back to the step's own words, which is
+        # what every other headless screen wants -- `AUTO-DIAL FREQUENCY:`
+        # is drawn by exactly that fallback. See the setup-mode audit,
+        # SU18.
+        return f"{letter}{device}: {named}".rstrip(), ""
     return f"{letter}{device}: {named}".rstrip(), label or text + ":"
 
 
@@ -350,7 +468,7 @@ def setup_lines(console, function, step, device=1, chart_open=True):
 
     if f.get("kind") == "slots":
         # a config screen is per MODULE: which positions are connected
-        wires = f.get("slots") or 4
+        wires = console.positions(f["code"][1:4]) or f.get("slots") or 4
         base = ((device - 1) // wires) * wires
         cells = console.slot_text(f["code"][1:4], wires, base)
         return [module_head(text, base // wires + 1)[:COLS],
@@ -369,6 +487,18 @@ def setup_lines(console, function, step, device=1, chart_open=True):
             # "TANK CHART SECURITY / CODE : 000000"
             head = named_head(console, step.get("head") or text, device,
                               letter)
+        if step.get("smart_kind"):
+            # `SN#: (10 char)       DISABLED`, 577013-800 Rev P Figure 7,
+            # and it is exactly twenty-four columns with a ten character
+            # serial in the middle of it -- the same ten characters V43's
+            # index table answers with. The value is hard against the right
+            # of the glass, which is what the figure's own spacing draws
+            # and what makes the two words line up under each other.
+            from . import wiresensors
+            serial = wiresensors.isd_serial(console, device)
+            line = f"{prompt} {serial}".rstrip()
+            return [head[:COLS],
+                    (line + value.rjust(COLS - len(line)))[:COLS]]
         return [head[:COLS],
                 second(prompt, value,
                        ">" if step.get("align") == "right"
@@ -408,7 +538,8 @@ def setup_lines(console, function, step, device=1, chart_open=True):
     if scoped is not None:
         return [scoped[:COLS],
                 second(step.get("l2", ""),
-                       masked(f, shown(console, f, stored(console, step, device, f))),
+                       screen_word(f, masked(f, shown(
+                           console, f, stored(console, step, device, f)))),
                        step.get("gap", " "))[:COLS]]
 
     head, label = setup_context(console, function, step, device)
@@ -420,8 +551,8 @@ def setup_lines(console, function, step, device=1, chart_open=True):
         return [head[:COLS],
                 second(label, "--", step.get("gap", " "))[:COLS]]
     return [head[:COLS],
-            second(label, masked(f, shown(console, f,
-                                          stored(console, step, device, f))),
+            second(label, screen_word(f, masked(f, shown(
+                console, f, stored(console, step, device, f)))),
                    ">" if step.get("align") == "right"
                    else step.get("gap", " "))[:COLS]]
 
@@ -456,7 +587,7 @@ def threshold_units(console, row):
     return console.setting(f"custom_{row}", 0, "%FULL")
 
 
-def printed_value(field, value):
+def printed_value(field, value, mask=None):
     """A number on paper carries the decimals its screen carries.
 
     The display masks a temperature compensation value to `+060.0` and the
@@ -464,15 +595,131 @@ def printed_value(field, value):
     field's fixed width and go, the decimal place is the console's precision
     and stays. So the mask says how many, which is also why a tank diameter
     prints `96.00` and a full volume prints `9995`.
+
+    A row can print to a different precision from the screen it is set on,
+    and then its spec carries the mask the PAPER uses instead. Two of those
+    are on the tape. 576013-623 Rev AN draws the thermal coefficient screen
+    `THERMAL COEFF: 0.00000` where the report prints `.000690` -- the same
+    number, six places and no leading zero, which is how a seventh digit
+    fits in seven columns -- and the percent limits are masked `000%` on the
+    panel where the paper prints `95.0`. A mask with no digit before its
+    point drops the zero. See FIDELITY T6.
     """
     f = field or {}
-    mask = f.get("mask") or ""
-    if f.get("kind") != "float" or "." not in mask:
+    paper = mask is not None
+    mask = mask or f.get("mask") or ""
+    if "." not in mask or (not paper and f.get("kind") != "float"):
+        # the field's own mask only decides a float; a spec's mask is the
+        # paper saying what it prints, whatever kind holds the value
         return value
     try:
-        return f"{float(value):.{len(mask.split('.')[-1])}f}"
+        out = f"{float(value):.{len(mask.split('.')[-1])}f}"
     except (TypeError, ValueError):
         return value
+    if not mask.split(".")[0].strip() and out.startswith("0."):
+        out = out[1:]
+    return out
+
+
+def panel_value(console, function, step, device):
+    """What the panel puts on its second line, without the panel's label.
+
+    The report row carries its own label in its own column, so what it
+    wants from the screen is the value alone.
+    """
+    drawn = setup_lines(console, function, step, device, chart_open=False)
+    if len(drawn) < 2:
+        return ""
+    line = str(drawn[1]).strip()
+    for label in (step.get("l2") or "", step.get("text", "")):
+        label = (label.split("(")[0].replace("%d", str(device))
+                 .strip().rstrip(":"))
+        if label and line.upper().startswith(label.upper()):
+            line = line[len(label):].lstrip(": ").strip()
+            break
+    return line
+
+
+# MODIFY TANK/METER MAP, 576013-623 Rev AN p.17-5. The heading is 24
+# characters on the nose -- `BUS SLOT FUEL METER TANK` -- and the row under
+# it is too, its five cells at the columns the page draws them at rather
+# than evenly spaced:
+#
+#     BUS SLOT FUEL METER TANK
+#     X    XX   XX    XX    XX
+#
+# (column, width) each, and `X` is the page's own word for a cell nobody has
+# dialled to anything yet.
+MAP_CELLS = ((0, 1), (5, 2), (10, 2), (16, 2), (22, 2))
+MAP_BLANK = " ".join("X" * w for _at, w in MAP_CELLS)
+# "99: Tank with no probe" -- the screen's own word for the tank the
+# command writes as -1.
+MAP_NO_PROBE = 99
+
+
+def map_row_text(cells):
+    """The five cells at the columns p.17-5 draws them at."""
+    row = [" "] * COLS
+    for (at, width), value in zip(MAP_CELLS, cells):
+        row[at:at + width] = str(value).rjust(width)[-width:]
+    return "".join(row)[:COLS]
+
+
+# INDIVIDUAL METER OFFSET, 576013-623 Rev AN p.17-6, drawn the same way:
+#
+#     FUEL METER TANK OFFSET
+#     XX     XX    XX   +X.XX
+#
+# and only the last cell is a value the panel sets -- "press CHANGE. The
+# Offset value flashes '0'." The other three say which meter it belongs to.
+OFFSET_CELLS = ((0, 2), (7, 2), (13, 2), (18, 5))
+OFFSET_BLANK = ["XX", "XX", "XX", "+X.XX"]
+
+
+def offset_row_text(cells):
+    """The four cells at the columns p.17-6 draws them at."""
+    row = [" "] * COLS
+    for (at, width), value in zip(OFFSET_CELLS, cells):
+        row[at:at + width] = str(value).rjust(width)[-width:]
+    # the page's row is 23 columns and the display is 24: the console does
+    # not pad a line out to the glass, and no other screen here does either
+    return "".join(row)[:COLS].rstrip()
+
+
+def offset_cells(console, key):
+    """One meter's row: its position, its meter, its tank, its offset."""
+    if key is None:
+        return list(OFFSET_BLANK)
+    tank = int((console.meter_map.get(key) or {}).get("tank") or 0)
+    if tank < 0:
+        tank = MAP_NO_PROBE
+    pct = console.meter_offsets.get((key.fp, key.meter), {}).get("pct", 0.0)
+    return [f"{key.fp:02d}", f"{key.meter:02d}", f"{tank:02d}",
+            f"{float(pct):+.2f}"]
+
+
+def map_lines(console):
+    """The tank/meter map as the PAPER lays it out.
+
+    The wire's report is 34 columns wide -- `FUELING POSITION - METER -
+    TANK MAP` over ` BUS  SLOT  FUEL_P  METER  TANK` -- and this console's
+    paper is 24, so the wire's rendering wraps into nonsense on it. The
+    tape settles what the paper actually says: the RECONCILIATION SETUP
+    block ends on `BUS SLOT FUEL METER TANK`, the SCREEN's own heading, on
+    a site with nothing mapped. So the rows go under it in the screen's own
+    columns and the screen's own vocabulary, which is where `99` comes from
+    for a tank with no probe. No sample anywhere shows this block WITH rows
+    in it -- see UNKNOWNS.
+    """
+    out = ["BUS SLOT FUEL METER TANK"]
+    for key in sorted(console.meter_map):
+        tank = int(console.meter_map[key].get("tank") or 0)
+        if tank < 0:
+            tank = MAP_NO_PROBE
+        out.append(map_row_text([key.bus, f"{key.slot:02d}",
+                                 f"{key.fp:02d}", f"{key.meter:02d}",
+                                 f"{tank:02d}"]))
+    return out
 
 
 def print_lines(console, function, step, device=1):
@@ -488,8 +735,49 @@ def print_lines(console, function, step, device=1):
     The value is what the console holds, NOT what the display masks it to:
     a printed report has no fixed-width field to fill.
     """
+    if step.get("map"):
+        # The tank/meter map is a screen you dial a row into, and the paper
+        # carries the whole map rather than the row the panel happens to be
+        # showing. The tape ends RECONCILIATION SETUP on this heading.
+        return map_lines(console)
     spec = step.get("print")
+    if spec and spec.get("when") is not None and not console.visible(
+            {"when": spec["when"]}, device):
+        # A gate the REPORT has and the panel walk does not. 576013-623 Rev
+        # AN says to step past the reconciliation alarm threshold and its
+        # offset when the alarm is off -- "To leave the Periodic
+        # Reconciliation Alarm disabled, press STEP until you see the REMOTE
+        # REPORT FORMAT message" -- and the tape's console, which has
+        # `ALARM:          DISABLED`, prints neither row under it. The
+        # screens stay on the panel, because the evidence for their absence
+        # is a printout. See FIDELITY T8.
+        return []
+    if spec and spec.get("off"):
+        # A prompt is a way in, not a value, and some of them carry one
+        # anyway: ENTER RCVR PHONE NO. draws the number under it and RCVR
+        # CONFIG draws how many destinations are configured. Neither is on
+        # the tape's receiver block, which prints the head, the type, the
+        # port, the two retry rows and the confirmation and stops. The
+        # screen stays on the panel. See FIDELITY T4.
+        return []
+    if spec and not (set(spec) - {"section", "gap", "when"}):
+        # a spec that only places the row -- which sub-heading it falls
+        # under, how much blank goes above it -- and says nothing about the
+        # row itself, which is still the screen the console draws
+        spec = None
     if spec is None:
+        if ((FIELDS.get(step.get("field") or step.get("code") or "") or {})
+                .get("kind") == "slots"):
+            # The module's slot map -- "SLOT #: 1 2 3 4" under TANK CONFIG
+            # - MODULE 1 -- is how a technician tells the console which
+            # wires are connected, and no report carries it. The tape's 568
+            # lines hold one `CONFIG` (SYSTEM SETUP's `CONFIG: STANDARD`)
+            # and one `SLOT` (RECONCILIATION's `BUS SLOT FUEL METER TANK`
+            # column head) and no module configuration screen in any of its
+            # seven blocks, for a console with two probes and four sensors.
+            # It is a way in like the `PRESS <ENTER>` screens below, and it
+            # was printing once per DEVICE besides. See FIDELITY T7.
+            return []
         drawn = setup_lines(console, function, step, device, chart_open=False)
         if len(drawn) > 1 and KEYPRESS.match(str(drawn[1]).strip()):
             # a screen that asks for a key is a way in, not a value, and a
@@ -501,24 +789,188 @@ def print_lines(console, function, step, device=1):
         return [x for x in (str(l).rstrip() for l in drawn) if x]
     f = field_of(console, step, device)
     want = spec.get("value") or ""
-    if want == "clock":
+    if want == "secured":
+        # The tape prints TANK CHART SECURITY as an enable flag where the
+        # panel draws the passcode itself. 576013-623 Rev AN says which is
+        # which: the CODE screen "appears if a passcode has not been
+        # entered (default). All zeros disables Tank Chart Security", and
+        # the passcode prompt "appears if Tank Chart Security is enabled --
+        # a passcode other than all zeros has been entered". So the state
+        # is the code, and the report prints the state. See FIDELITY T9.
+        value = "ENABLED" if console.chart_secured() else "DISABLED"
+    elif want == "clock":
         # SET DATE and SET TIME are two screens and one stamp on paper
         value = clock_words(console.now())
     elif want.startswith("threshold:"):
         value = threshold_units(console, want.split(":", 1)[1])
+    elif want == "panel":
+        # TANK PROFILE holds "1" and draws "1PT": the word list is the
+        # value, and the panel already has it
+        value = panel_value(console, function, step, device)
     else:
         value = printed_value(f, shown(console, f,
-                                       stored(console, step, device, f)))
+                                       stored(console, step, device, f)),
+                              spec.get("mask"))
+        if not str(value).strip():
+            # Not every step's value comes out of a field. TANK PROFILE is
+            # rendered from a word list, CAL UPDATE and WATER ALARM FILTER
+            # are console settings, SIPHON MANIFOLDED is a list of tank
+            # numbers. All of them already draw correctly on the panel, so
+            # the panel's second line is the value -- with its own label
+            # taken off, because the printed row supplies its own.
+            value = panel_value(console, function, step, device)
     out = []
     head = spec.get("head")
     if head:
-        out.append(named_head(console, head, device,
-                              device_code((function or {}).get("function",
-                                                               ""))))
-    line = spec.get("line")
-    if line is not None:
-        out.append(line.replace("%d", str(device)).format(value)[:COLS])
+        head = named_head(console, head, device,
+                          device_code((function or {}).get("function", "")))
+        if "{board}" in head:
+            # The comm bay's head names the card in the slot, in a field six
+            # wide: the tape prints `(S-SAT )`, `(RS-485)` and `(MTCOMM)`
+            # and each of them comes to 24 with the label in front. A name
+            # shorter than six is padded, which is where that trailing space
+            # inside the brackets comes from. See FIDELITY T8.
+            head = head.format(board=console.comm_board_name(device).ljust(6))
+        out.append(head[:COLS])
+    # A row can need more than one line and more than one value. The tape
+    # prints a percent limit as its percent AND the gallons that works out
+    # to, under a wrapped label:
+    #
+    #     HIGH PRODUCT
+    #               % MAX :   95.0
+    #           (GALLONS) :   9495
+    #
+    # so a spec carries `lines` where one is not enough, and `{gallons}`
+    # where the value on the paper is not the value in the field. See
+    # FIDELITY T1.
+    lines = spec.get("lines")
+    if lines is None:
+        lines = [spec["line"]] if spec.get("line") is not None else []
+    none = spec.get("none")
+    if none is not None and not any(c in "123456789" for c in str(value)):
+        # 576013-623 Rev AN draws the siphon screen "T#: 00,00,00,00,00,00,00"
+        # and the tape prints "T#: NONE" for the same tank. The panel keeps
+        # the manual's zeros; the paper says what they mean.
+        value = none
+    gallons = ""
+    if any("{gallons" in l for l in lines):
+        code = (step.get("code") or "")[1:4]
+        worked = console.limit_volume(code, device) if code else None
+        gallons = f"{worked:.0f}" if worked is not None else ""
+    other = ""
+    if spec.get("other"):
+        # A row that carries two of the console's values. The panel draws
+        # the leak test frequency as `TEST ALL TANK:` over `CSLD`, and the
+        # tape prints the two the other way round on one line:
+        # `TEST CSLD    : ALL TANK`. So a spec can name a second field and
+        # interpolate it as {other}. See FIDELITY T4.
+        f2 = FIELDS.get(spec["other"])
+        other = str(printed_value(f2, shown(console, f2,
+                                            stored(console,
+                                                   {"code": spec["other"]
+                                                    .split(".")[0],
+                                                    "field": spec["other"]},
+                                                   device, f2))))
+    for line in lines:
+        out.append(line.replace("%d", str(device))
+                   .format(value, gallons=gallons, other=other)[:COLS])
+    if spec.get("after") == "fourpoint":
+        out.extend(four_point_rows(console, device))
+    if spec.get("after") == "rcvralarms":
+        out.extend(receiver_alarm_rows(console, device))
+    if spec.get("after") == "rcvrdial":
+        out.extend(receiver_dial_rows(console, device))
     return [x.rstrip() for x in out if x.rstrip()]
+
+
+def receiver_dial_rows(console, receiver):
+    """When one autodial destination is called, in the paper's shape.
+
+    The tape's only receiver:
+
+        D 8:
+        DIAL WEEKLY
+        THR
+        DIAL TIME :  5:26 PM
+
+    which is 52B's method digit and the field whose width that digit
+    decides. The day is the console's own three letters -- THR, not THU;
+    576013-635 Rev AA heads the fuel management report "SUN MON TUE WED
+    THR FRI SAT" in seven printouts and the tape prints THR here.
+
+    The tape shows the WEEKLY form and no other, so the middle line is
+    rendered from the same words the wire renders for each method and only
+    that one is measured. See FIDELITY T4.
+    """
+    from .wirelists import DIAL_METHOD, DIAL_WIDTH, _clock
+    from .fieldio import DAYS, MONTHS
+    raw = (console.receiver_dial.get(receiver) or "").strip()
+    if not raw:
+        return []
+    method, rest = raw[0], raw[1:1 + DIAL_WIDTH.get(raw[0], 0)]
+    out = [f"DIAL {DIAL_METHOD.get(method, '')}".rstrip()]
+    if method == "1":                       # ON DATE: YYMMDD then HHmm
+        out.append(f"{rest[2:4]}/{rest[4:6]}/{rest[0:2]}")
+    elif method == "2":                     # ANNUALLY: MM W D then HHmm
+        out.append(f"{MONTHS[int(rest[0:2]) - 1]}   WEEK {rest[2]}   "
+                   f"{DAYS[int(rest[3]) - 1]}")
+    elif method == "3":                     # MONTHLY: W D then HHmm
+        out.append(f"WEEK {rest[0]}   {DAYS[int(rest[1]) - 1]}")
+    elif method == "4":                     # WEEKLY: D then HHmm
+        out.append(DAYS[int(rest[0]) - 1])
+    time = _clock(rest[-4:]) if len(rest) >= 4 else ""
+    if time:
+        out.append(f"DIAL TIME :{time:>9}")
+    return out
+
+
+def receiver_alarm_rows(console, receiver):
+    """What one autodial destination is set to be called about.
+
+    The same list 52C renders over the wire, in the paper's form: the
+    console's own words for each alarm, or `- NO ALARM ASSIGNMENTS -` when
+    there are none, which is what the tape's only receiver prints and what
+    576013-635 Rev AA draws for `D 1: HOME OFFICE`. See FIDELITY T4.
+    """
+    out = []
+    for aa, nn, tt in console.receiver_alarms.get(receiver, []):
+        row = console.alarm_name(aa, nn)
+        out.append(f"     {row}" + (f" TANK {int(tt)}" if int(tt) else ""))
+    return out or ["- NO ALARM ASSIGNMENTS -"]
+
+
+def four_point_rows(console, tank):
+    """The three chart rows a 4 PTS tank prints under its full volume.
+
+        FULL VOL :   9995
+      72.0 INCH VOL :   8070
+      48.0 INCH VOL :   5031
+      24.0 INCH VOL :   1983
+
+    576013-635 Rev AA's 605 is "Set Tank 4 Point Full, 3/4, 1/2, 1/4
+    Volumes" and holds all four in one field, and this console has held all
+    four in `S60501` and its three parts all along without ever printing
+    three of them. The heights are three quarters, a half and a quarter of
+    the tank diameter, which is how the tape's 96 inch tank comes to print
+    72.0, 48.0 and 24.0. See FIDELITY T1.
+    """
+    from .console import Console as _C
+    if _C.PROFILE_NAME.get(console.tank_profile(tank)) != "4 PTS":
+        return []
+    diameter = console.limit("607", tank) or 0.0
+    out = []
+    code = f"S605{tank:02d}"
+    raw = console.values.get(code)
+    if not raw:
+        return []
+    for share, part in ((0.75, "p75"), (0.50, "p50"), (0.25, "p25")):
+        f = FIELDS.get(f"S60501.{part}")
+        try:
+            volume = float(fieldio.decode(f, code, raw))
+        except (TypeError, ValueError):
+            continue
+        out.append(f"{diameter * share:>6.1f} INCH VOL :{volume:>7.0f}")
+    return out
 
 
 def module_head(text, module=1):

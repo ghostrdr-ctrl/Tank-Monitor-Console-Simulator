@@ -67,6 +67,10 @@ import time
 
 from . import readings
 
+# The display these screens are drawn on, which is what their values are
+# right-justified to. See FIDELITY D5.
+COLS = 24
+
 # "AccuChart needs 56 days to complete", and the monitor period after it "is
 # also 56 days long".
 CALIBRATION_DAYS = 56.0
@@ -271,12 +275,65 @@ class AccuChart:
             user.capacity * readings.fixed(0.985, 1.02, "accap", tank))
 
     def state(self, tank):
-        """The Tank record, made if this is the first look at it."""
+        """The Tank record, made if this is the first look at it.
+
+        A tank whose calibration had finished before the console lost RAM
+        comes back off the E2 chip instead of starting from the nameplate:
+        "If AccuChart is complete, the final calibration values are
+        automatically stored in the E2 chip and there will be no need to
+        recalibrate the tank."
+        """
         entry = self.tanks.get(tank)
         if entry is None:
             entry = Tank(tank, self._user_profile(tank))
+            self._from_e2(entry)
             self.tanks[tank] = entry
         return entry
+
+    # ---- the E2 chip ---------------------------------------------------------
+    # 576013-623 Rev AN, the Archive Utility chapter: "AccuChart users should
+    # note that you archive system setup data only in the E2 chip. If
+    # AccuChart is complete, the final calibration values are automatically
+    # stored in the E2 chip and there will be no need to recalibrate the
+    # tank." Two things follow from that sentence and both are here.
+    # Automatically: nothing below waits for anybody to run the Archive
+    # Utility, because the console writes these itself. And in the E2 chip:
+    # they are not the RAM the same chapter says holds "Incomplete CSLD data,
+    # AccuChart data, BIR historical data", so a cold boot cannot take them.
+
+    def _to_e2(self, entry):
+        """Write a finished calibration to the chip."""
+        self.c.e2_accuchart[entry.number] = {
+            "chart": entry.chart.as_dict(),
+            "active": entry.active.as_dict(),
+            "updates": entry.updates,
+            "user_status": entry.user_status,
+            "low_height": entry.low_height,
+            "high_height": entry.high_height,
+        }
+
+    def _from_e2(self, entry):
+        """Put a finished calibration back, if the chip is holding one.
+
+        The 56 days do not run again -- "there will be no need to recalibrate
+        the tank" -- so the tank comes back in the mode a console that has
+        finished calibrating is in, monitoring, and its monitor period starts
+        from here because "the ACCUMODE MONITOR period is reset every 56
+        days" and this console has only just come up.
+        """
+        held = self.c.e2_accuchart.get(entry.number)
+        if not held:
+            return
+        now = time.mktime(self.c.now())
+        entry.chart = Profile(**held["chart"])
+        entry.active = Profile(**held["active"])
+        entry.updates = held.get("updates", 1)
+        entry.user_status = bool(held.get("user_status"))
+        entry.low_height = held.get("low_height", 0.0)
+        entry.high_height = held.get("high_height", 0.0)
+        entry.mode = MONITOR
+        entry.started = entry.mode_since = now
+        entry.history.append((now, entry.chart.copy()))
 
     def profile(self, tank):
         """What the ACCU screens print: AccuChart's own idea of the tank."""
@@ -323,8 +380,15 @@ class AccuChart:
         entry.low_height = min(entry.low_height, height)
         entry.high_height = max(entry.high_height, height)
         entry.observations.append({
-            "open": self.c.stick_height(tank) + dropped / max(
-                self.c.full_volume(tank) or 1.0, 1.0),
+            # The two ends of the interval, off the console's own chart at
+            # the two volumes it saw. This was `stick_height + dropped /
+            # full_volume` -- gallons over gallons, a dimensionless number
+            # added to inches -- which on a 10,000 gallon tank made the
+            # opening height 0.002 inches above the closing one where
+            # 576013-818 p.12-30's own rows are 0.190 apart. Every printed
+            # row had an opening height equal to its closing one, and the
+            # column exists to show them differ. See FIDELITY G12.
+            "open": self.c.stick_height(tank, seen),
             "close": self.c.stick_height(tank),
             "tls": dropped, "metered": metered,
             "ratio": dropped / metered if metered else 0.0, "at": now})
@@ -339,6 +403,13 @@ class AccuChart:
             if entry.updates == 0:
                 # "failure to calibrate in 56 days"
                 entry.failed = True
+            else:
+                # And this is AccuChart complete: the 56 days run out with a
+                # calibration to show for them. "If AccuChart is complete,
+                # the final calibration values are automatically stored in
+                # the E2 chip" -- automatically, so the chip is written here
+                # and not by the Archive Utility.
+                self._to_e2(entry)
         elif entry.mode == MONITOR:
             if (now - entry.mode_since) / 86400.0 >= MONITOR_DAYS:
                 # "The ACCUMODE MONITOR period is reset every 56 days."
@@ -366,6 +437,13 @@ class AccuChart:
         entry.history.append((now, entry.chart.copy()))
         del entry.history[:-20]
         self._apply(entry, now, days)
+        if entry.mode == MONITOR and not entry.failed:
+            # A complete AccuChart goes on refining in MONITOR mode, and the
+            # chip follows it. "If AccuChart is complete, the final
+            # calibration values are automatically stored in the E2 chip" is
+            # about a console whose AccuChart IS complete, not about the one
+            # day it finished on.
+            self._to_e2(entry)
 
     @staticmethod
     def _fitness(chart, truth):
@@ -407,7 +485,7 @@ class AccuChart:
 
     # ---- what the console says -----------------------------------------------
     def screen(self, tank, what):
-        """One ACCUCHART DIAGNOSTICS line, in the console's own words."""
+        """One ACCU_CHART DIAGNOSTICS line, in the console's own words."""
         if not self.enabled(tank):
             # Figure 6-10 draws the same fifteen screens either way; a
             # disabled tank simply shows the parameters that ARE in use,
@@ -416,13 +494,14 @@ class AccuChart:
                 return "ACCU DISABLED"
             if what in ("mode", "status", "updates", "duration", "fitness",
                         "data", "warn"):
-                return {"mode": "ACCU MODE CALIBRATE",
-                        "status": "ACCU USR STATUS DISABLED",
-                        "updates": "ACCU UPDATE COUNT 0",
-                        "duration": "ACCU DURATION        0.00",
-                        "fitness": "ACCU FITNESS        0.00",
-                        "data": "ACCU DATA           0.00",
-                        "warn": "ACCU WARN STATE OFF"}[what]
+                row = self._row
+                return {"mode": row("ACCU MODE", "CALIBRATE"),
+                        "status": row("ACCU USR STATUS", "DISABLED"),
+                        "updates": row("ACCU UPDATE COUNT", "0"),
+                        "duration": row("ACCU DURATION", "0.00"),
+                        "fitness": row("ACCU FITNESS", "0.00"),
+                        "data": row("ACCU DATA", "0.00"),
+                        "warn": row("ACCU WARN STATE", "OFF")}[what]
             entry = Tank(tank, self._user_profile(tank))
             chart = entry.chart
             return self._parameter(what, chart)
@@ -432,36 +511,51 @@ class AccuChart:
         if what == "enabled":
             return "ACCU ENABLED"
         if what == "mode":
-            return f"ACCU MODE {entry.mode}"
+            return self._row("ACCU MODE", entry.mode)
         if what == "status":
-            return ("ACCU USR STATUS "
-                    + ("ENABLED" if entry.user_status else "DISABLED"))
+            return self._row("ACCU USR STATUS",
+                             "ENABLED" if entry.user_status else "DISABLED")
         if what == "updates":
-            return f"ACCU UPDATE COUNT {entry.updates}"
+            return self._row("ACCU UPDATE COUNT", entry.updates)
         if what == "duration":
             since = entry.mode_since or now
-            return f"ACCU DURATION      {(now - since) / 86400.0:6.2f}"
+            return self._row("ACCU DURATION",
+                             f"{(now - since) / 86400.0:.2f}")
         parameter = self._parameter(what, chart)
         if parameter:
             return parameter
         if what == "fitness":
-            return f"ACCU FITNESS       {chart.fitness:5.2f}"
+            return self._row("ACCU FITNESS", f"{chart.fitness:.2f}")
         if what == "data":
-            return f"ACCU DATA       {entry.data / 1000.0:8.2f}"
+            return self._row("ACCU DATA", f"{entry.data / 1000.0:.2f}")
         if what == "warn":
-            return "ACCU WARN STATE " + ("ON" if entry.warn else "OFF")
+            return self._row("ACCU WARN STATE",
+                             "ON" if entry.warn else "OFF")
         return ""
 
     @staticmethod
-    def _parameter(what, chart):
+    def _row(label, value):
+        """One AccuChart screen: the label left, the value hard right.
+
+        576013-818 Fig 6-10 draws all fifteen with their values against the
+        right of the display, and the display is 24 characters. These were
+        hand-padded one at a time: three landed on 24, five stopped at 20,
+        one at 23, one at 19 -- and ACCU DURATION came to 25, a character
+        wider than the screen it draws on. See FIDELITY D5.
+        """
+        value = str(value)
+        return f"{label}{value:>{max(1, COLS - len(label))}}"[:COLS]
+
+    @classmethod
+    def _parameter(cls, what, chart):
         """The six tank parameters AccuChart adjusts, one screen each."""
         return {
-            "diameter": f"ACCU DIAMETER {chart.diameter:6.2f}",
-            "length": f"ACCU LENGTH   {chart.length:6.2f}",
-            "offset": f"ACCU PB OFFSET {chart.offset:5.2f}",
-            "tilt": f"ACCU TANK TILT {chart.tilt:5.2f}",
-            "shape": f"ACCU SHAPE F   {chart.shape:5.2f}",
-            "volume": f"ACCU FULL VOLUME {chart.capacity:6.0f}",
+            "diameter": cls._row("ACCU DIAMETER", f"{chart.diameter:.2f}"),
+            "length": cls._row("ACCU LENGTH", f"{chart.length:.2f}"),
+            "offset": cls._row("ACCU PB OFFSET", f"{chart.offset:.2f}"),
+            "tilt": cls._row("ACCU TANK TILT", f"{chart.tilt:.2f}"),
+            "shape": cls._row("ACCU SHAPE F", f"{chart.shape:.2f}"),
+            "volume": cls._row("ACCU FULL VOLUME", f"{chart.capacity:.0f}"),
         }.get(what, "")
 
     def restart(self, tank):
@@ -473,6 +567,10 @@ class AccuChart:
         """
         self.tanks.pop(tank, None)
         self._seen.pop(tank, None)
+        # The chip's copy goes with them. Leaving it would hand the old
+        # profiles straight back at the next look and the 56 days would not
+        # restart, which is the whole of what this screen promises.
+        self.c.e2_accuchart.pop(tank, None)
         entry = self.state(tank)
         now = time.mktime(self.c.now())
         entry.started = entry.mode_since = now
@@ -501,6 +599,25 @@ class AccuChart:
                 out.append(CAL_WARNING[0] + CAL_WARNING[1] + f"{tank:02d}")
         return out
 
+    def chart_alarm(self, tank):
+        """"llllllll - tank chart alarm", for one tank.
+
+        The fit has drifted past the warning threshold while monitoring,
+        which is what the Variance Analysis prints as CHART ALM.
+        """
+        entry = self.tanks.get(tank)
+        return bool(entry is not None and self.enabled(tank) and entry.warn)
+
+    def calibration_failed(self, tank):
+        """"LLLLLLLL - failure to calibrate in 56 days", for one tank.
+
+        A different flag from the one above and the report prints both, on
+        two rows: CHART ALM is the chart drifting, CALIB FAIL is the chart
+        never having been built.
+        """
+        entry = self.tanks.get(tank)
+        return bool(entry is not None and self.enabled(tank) and entry.failed)
+
     def alarm_state(self, tank):
         """B93's "AA - Alarm status: 00=No Alarm, 01=Alarm, 02=Alarm latched".
 
@@ -516,35 +633,41 @@ class AccuChart:
     # ---- the reports ---------------------------------------------------------
     def diagnostics_rows(self, tanks):
         """IB91, ACCU_CHART DIAGNOSTICS."""
+        # p.568: DIAMETER at 13, LENGTH 23, OFFSET 31, TILT 42, SHAPE F
+        # 50, CAPACITY 61, with the values held right against 21, 29, 36,
+        # 45, 56 and 68
         rows = ["ACCU_CHART DIAGNOSTICS", "",
-                "TK STATUS     DIAMETER LENGTH OFFSET   TILT  SHAPE F"
+                "TK STATUS    DIAMETER  LENGTH  OFFSET     TILT    SHAPE F"
                 "    CAPACITY"]
         for tank in tanks:
             if not self.enabled(tank):
                 rows.append(f"{tank:2d} DISABLED")
                 continue
             p = self.state(tank).chart
-            rows.append(f"{tank:2d} ENABLED      {p.diameter:8.1f}"
-                        f"{p.length:7.1f}{p.offset:7.2f}{p.tilt:7.2f}"
-                        f"{p.shape:9.2f}{p.capacity:12.0f}")
+            rows.append(f"{tank:2d} {'ENABLED':<8s}{p.diameter:10.1f}"
+                        f"{p.length:8.1f}{p.offset:8.2f}{p.tilt:9.2f}"
+                        f"{p.shape:12.2f}{p.capacity:12.0f}")
         return rows
 
     def status_rows(self, tanks):
         """IB93, ACCU_CHART STATUS."""
         now = time.mktime(self.c.now())
+        # p.569: MODE at 14, USER STATUS at 26, DURATION at 39, ALARM at
+        # 49, FITNESS at 58 and DATA at 70
         rows = ["ACCU_CHART STATUS", "",
-                "TK STATUS     MODE       USER STATUS DURATION ALARM"
-                "        FITNESS    DATA"]
+                "TK STATUS     MODE        USER STATUS  DURATION  ALARM"
+                "    FITNESS     DATA"]
         for tank in tanks:
             if not self.enabled(tank):
                 rows.append(f"{tank:2d} DISABLED")
                 continue
             e = self.state(tank)
             days = (now - (e.mode_since or now)) / 86400.0
-            rows.append(f"{tank:2d} ENABLED    {e.mode:<11s}"
-                        f"{'ENABLED' if e.user_status else 'DISABLED':<12s}"
-                        f"{days:8.1f}  {'ON' if e.warn else 'OFF':<10s}"
-                        f"{e.chart.fitness:9.2f}{e.data:8.0f}")
+            rows.append(f"{tank:2d} {'ENABLED':<11s}{e.mode:<12s}"
+                        f"{'ENABLED' if e.user_status else 'DISABLED':<13s}"
+                        f"{days:<12.1f}"
+                        f"{'ON' if e.warn else 'OFF':<10s}"
+                        f"{e.chart.fitness:9.2f}{e.data:9.0f}")
         return rows
 
     def history_rows(self, tanks):
@@ -557,8 +680,10 @@ class AccuChart:
                 rows.append("ACCUCHART NOT ENABLED")
                 rows.append("")
                 continue
-            rows.append("DATE/TIME       DIAM LENGTH   OFFSET   TILT"
-                        " SHAPE F   CAPACITY   FITNESS")
+            # p.570: DIAM at 18, LENGTH 24, OFFSET 33, TILT 42,
+            # SHAPE F 48, CAPACITY 58 and FITNESS 70
+            rows.append("DATE/TIME         DIAM  LENGTH   OFFSET   TILT"
+                        "  SHAPE F   CAPACITY    FITNESS")
             for when, p in self.state(tank).history:
                 rows.append(time.strftime("%y/%m/%d %H:%M",
                                           time.localtime(when))
@@ -649,15 +774,17 @@ class AccuChart:
             label = self.c.text("602", tank) or f"TANK {tank}"
             rows.append(f"T {tank}:{label}")
             rows.append("")
-            rows.append("Opening  Closing     TLS       Dispensed"
-                        "    Tank/Meter")
-            rows.append(" Height   Height   Volume        Volume"
-                        "         Ratio")
+            # p.12-30's own two header lines and its own five columns,
+            # measured off the word boxes: the fields end at 7, 16, 26, 35
+            # and 46, and the first header line is wider than the rows it
+            # heads. This drew a 53 column row under a header of its own.
+            rows.append("Opening  Closing    TLS    Dispensed  Tank/Meter")
+            rows.append("Height   Height   Volume    Volume      Ratio")
             entry = self.tanks.get(tank)
             for row in (entry.observations[-20:] if entry else []):
-                rows.append(f"{row['open']:7.3f} {row['close']:8.3f}"
-                            f"{row['tls']:9.2f}{row['metered']:14.2f}"
-                            f"{row['ratio']:14.4f}")
+                rows.append(f"{row['open']:7.3f}{row['close']:9.3f}"
+                            f"{row['tls']:10.2f}{row['metered']:9.2f}"
+                            f"{row['ratio']:11.4f}")
             rows.append("")
         return rows
 

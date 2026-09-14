@@ -96,3 +96,69 @@ COMM_ERROR = {
 # so the setter cannot name the two the reader can report.
 MODEM_TYPE = {"00": "NETCOMM SMART M7F", "01": "US ROBOTICS (UK)",
               "02": "VR TLS ANALOG MOD", "03": "VR TLS GSM MODEM"}
+
+
+# ---------------------------------------------------------------------------
+# 411 and 412's rows, which are one shape read off two rendered pages.
+#
+# Both samples are Courier at six points a character, so the columns can be
+# counted rather than guessed. On 412 (p.151) the VMC number's digit sits at
+# column 1, the serial at 5, the stamp at 13 and the alarm name at 41; on 411
+# (p.150) the device digit is at 5, the stamp at 8 and the name at 36. Six
+# spaces between the stamp and the name on both, and a second row for the same
+# device drops the leading columns and keeps the stamp where it was.
+#
+# The stamp is TWENTY-TWO characters, which is not `clock_words`. Both samples
+# put "8:02" one column further right than a 21-character stamp would --
+# `JAN  1, 2007   8:02 AM`, three spaces after the year where `clock_words`
+# has two. It is `clock_date` and `clock_hhmm` with two spaces between them,
+# and the extra column is what tells them apart.
+VMC_ROW_GAP = " " * 6
+
+
+def alarm_stamp(when):
+    """The 22-character date and time these two reports carry."""
+    from .clock import clock_wide
+    return clock_wide(when)
+
+
+def alarm_rows(console, category, devices, table, width):
+    """One block per device that has anything, oldest incident first.
+
+    `width` is where the stamp starts: 8 on 411, 13 on 412. The device's own
+    columns are written once and the rest of its incidents are indented onto
+    the stamp.
+    """
+    import time
+    rows = []
+    for number in devices:
+        found = [e for e in reversed(console.alarm_log)
+                 if e["aa"] == category and e.get("state") == "02"
+                 and e["tt"] == f"{number:02d}"]
+        if not found:
+            continue
+        for i, entry in enumerate(found):
+            head = console.vmc_alarm_head(category, number) if not i else ""
+            stamp = alarm_stamp(time.mktime(time.strptime(entry["at"],
+                                                          "%y%m%d%H%M")))
+            name = table.get("00" + entry["nn"], "")
+            rows.append(f"{head:<{width}s}{stamp}{VMC_ROW_GAP}{name}")
+    return rows
+
+
+def alarm_records(console, category, devices):
+    """The computer form: `xxNNYYMMDDHHmmaaaa...` per device.
+
+    Every device asked for gets a block, including the ones with nothing --
+    "NN - Number of alarm Incidents to follow" is then 00, which is what a
+    tool sweeping the range needs in order to skip it.
+    """
+    body = ""
+    for number in devices:
+        found = [e for e in reversed(console.alarm_log)
+                 if e["aa"] == category and e.get("state") == "02"
+                 and e["tt"] == f"{number:02d}"]
+        body += f"{number:02d}{len(found):02X}"
+        for entry in found:
+            body += entry["at"] + "00" + entry["nn"]
+    return body

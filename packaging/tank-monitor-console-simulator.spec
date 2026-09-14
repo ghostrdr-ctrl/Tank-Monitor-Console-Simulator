@@ -40,6 +40,12 @@ a = Analysis(
     datas=[
         (os.path.join(ROOT, "LICENSE"), "."),
         (os.path.join(ROOT, "assets", "icon.png"), "assets"),
+        # The .ico as DATA as well as the EXE's own resource: the exe
+        # resource is what Explorer and the taskbar's pinned shortcut use,
+        # and `SimApp._set_icon` needs the file itself to put the icon on
+        # the WINDOW. Without this line an installed copy falls back to the
+        # PNG path, which sets nothing at all on Windows.
+        (os.path.join(ROOT, "assets", "icon.ico"), "assets"),
     ] + [(f, "tls350sim")
          for f in glob.glob(os.path.join(ROOT, "tls350sim", "*.json"))
          if not f.endswith("_state.json")],   # runtime state, not shipped data

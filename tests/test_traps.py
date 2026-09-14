@@ -44,7 +44,7 @@ def send(h, cmd):
 
 
 def refused(h, cmd):
-    return send(h, cmd).strip(chr(1) + chr(3)).startswith("9999")
+    return send(h, cmd).strip(chr(1) + chr(3) + chr(13) + chr(10)).startswith("9999")
 
 
 class SameDigitDifferentMeaning(unittest.TestCase):
@@ -86,7 +86,7 @@ class SameLetterDifferentField(unittest.TestCase):
     def test_the_count_variants_carry_a_count(self):
         c, h = a_site()
         send(h, "S09901149")          # put sump 1 into a test
-        body = send(h, "i31901").strip(chr(1) + chr(3)).split("&&")[0][6 + 10:]
+        body = send(h, "i31901").strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0][6 + 10:]
         # sensor number then a COUNT, not a status
         self.assertEqual(body[0:2], "01")
         self.assertLessEqual(int(body[2:4]),
@@ -112,7 +112,7 @@ class RecordWidthsThatDiffer(unittest.TestCase):
         for _ in range(4):
             c.clock_offset += 600
             c.tick()
-        body = send(h, "i11300").strip(chr(1) + chr(3)).split("&&")[0]
+        body = send(h, "i11300").strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0]
         body = body[6 + 10 + 80:]            # past the code, stamp, headers
         self.assertTrue(body, "the tank should be in alarm")
         self.assertEqual(len(body) % 18, 0, len(body))
@@ -215,8 +215,8 @@ class TheDisplayAndTheWireDisagree(unittest.TestCase):
         _c, h = a_site()
         self.assertIn("ENDTEMP", send(h, "IA6101"))
         self.assertIn("ENDTEMP", send(h, "IA6301"))
-        one = send(h, "iA6101").strip(chr(1) + chr(3)).split("&&")[0]
-        two = send(h, "iA6301").strip(chr(1) + chr(3)).split("&&")[0]
+        one = send(h, "iA6101").strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0]
+        two = send(h, "iA6301").strip(chr(1) + chr(3) + chr(13) + chr(10)).split("&&")[0]
         self.assertGreater(len(two), len(one),
                            "A63 carries a float A61 does not")
 
@@ -264,7 +264,7 @@ class SomeCodesAreThingsYouDoNotThingsItHolds(unittest.TestCase):
         from tls350sim import wire
         _c, h = a_site()
         for tok in sorted(wire.SET_ONLY):
-            reply = send(h, "I" + tok + "01").strip(chr(1) + chr(3))
+            reply = send(h, "I" + tok + "01").strip(chr(1) + chr(3) + chr(13) + chr(10))
             rest = "".join(reply.splitlines()[2:]).strip()
             self.assertTrue(reply.startswith("9999") or rest,
                             f"{tok} answers with a header and nothing else")

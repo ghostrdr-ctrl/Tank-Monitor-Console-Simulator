@@ -74,11 +74,18 @@ def norm(s):
     the typesetting, not the screen.
     """
     for a, b in (("’", "'"), ("‘", "'"), ("“", chr(34)),
-                 ("”", chr(34)), ("-", "-"), ("--", "-"),
+                 ("”", chr(34)), ("\u2013", "-"), ("\u2014", "-"),
                  (" ", " "), ("±", "+")):
         s = s.replace(a, b)
     s = re.sub(r"\s+", " ", s).strip()
+    # A line that is ALL bullet is not a bulleted line: Figure 6-27 draws
+    # `* * * * * * * *` as a screen, and stripping its leading "* " eight
+    # times over left nothing at all, so the one screen in the manual made
+    # of punctuation could not be cited. Stop where there is nothing but
+    # punctuation left to strip.
     while s and (s[0] in BULLET or s[:2] in ("- ", "* ")):
+        if not any(ch.isalnum() for ch in s):
+            break
         s = s[1:].lstrip()
     return s.upper()
 
@@ -119,18 +126,30 @@ def label_of(s):
 
 
 # A flag screen has two states and the manual pictures one of them. Drawing
-# the other is the same screen, so it carries the same citation.
-FLAG_STATES = (("ENABLED", "DISABLED"), ("ON", "OFF"), ("YES", "NO"))
+# the other is the same screen, so it carries the same citation. ACTIVE/IDLE
+# is named as a pair the same way the rest are: 577013-344 Rev H draws
+# `0.10 GPH          ACTIVE` and annotates it "IDLE or ACTIVE (Active means
+# 0.1 gph test is scheduled)".
+FLAG_STATES = (("ENABLED", "DISABLED"), ("ON", "OFF"), ("YES", "NO"),
+               ("ACTIVE", "IDLE"))
 
 # The same screen once per day of the week. 576013-623 Rev AN p.128 draws
 # SUN and then MON and says "Repeat the procedures just described until you
 # have entered an average daily sales for each day of the week".
-WEEKDAYS = ("SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT")
+#
+# **THR, not THU.** No figure on this shelf draws a Thursday screen -- the
+# ones that draw days draw SUN and MON and say "repeat" -- and the only
+# literal Thursday anywhere is 576013-610 Rev AC p.7-3's report row,
+# `AVG SALES-THR`. This list said THU, which is the ordinary abbreviation
+# and not the console's, so it manufactured a citation for a screen the
+# console should not have been drawing. See FIDELITY O4.
+WEEKDAYS = ("SUN", "MON", "TUE", "WED", "THR", "FRI", "SAT")
 
 
 def other_states(n):
-    """-> the same screen said another way: the other state of a flag, or
-    the same screen on another day of the week."""
+    """-> the same screen said another way: the other state of a flag, the
+    same screen on another day of the week, or the same DIM screen headed
+    for the other kind of DIM."""
     out = []
     for day in WEEKDAYS:
         if day in n:
@@ -142,6 +161,14 @@ def other_states(n):
                 out.append(n[:-len(one)] + two)
             if n.endswith(":" + one):
                 out.append(n[:-len(one)] + two)
+    # "M for MDIMs and E for all other DIMs" -- 576013-818 Rev AB Figure
+    # 6-2's own note against the DIM DIAGNOSTIC DATA block, which draws the
+    # M form. The note states the substitution in words and no page draws
+    # the E form, so a console with an EDIM heads the same screen with the
+    # letter the note gives it. See FIDELITY D10.
+    for one, two in (("E", "M"), ("M", "E")):
+        if n.startswith(one + "#:"):
+            out.append(two + n[1:])
     return out
 
 
@@ -159,6 +186,15 @@ def deglossed(n):
     out = GLOSS.sub("", n)
     return re.sub(r"\s+", " ", out).strip()
 
+
+# The SYSTEM CONFIGURATION walk is one screen per card in the cage, and no
+# manual enumerates the cards on it: Figure 6-2 draws the screen with one
+# board in it -- `SLOT 1 4 PROBE/ G. T.`, and `COMM 6 UNUSED` at the end of
+# the same walk -- and Table 6-1 on the facing page names every board the
+# console can read there. A console with another card in that slot is
+# drawing the same screen with another of that table's names in it, which is
+# the same argument `state` and `placeholder` make. See FIDELITY D15.
+CAGE = re.compile(r"^(SLOT|COMM) # ")
 
 XRUN = re.compile(r"(?<![A-Z0-9])X{3,}(?![A-Z0-9])")
 QUOTED = re.compile(r"DISPLAY(?:S)? READS?:?\s*([^.]{6,40})")
@@ -214,6 +250,50 @@ def build_index(rows):
     return exact, clip, label
 
 
+# ---------------------------------------------------------------------------
+# Lines this console draws because a REAL ONE was photographed drawing them,
+# where the manuals say something else or say nothing.
+#
+# This category exists because the documents have now been wrong three times
+# and the hardware settled it each time: the tape's `L 6:FUEL ALARM` against
+# fifty-six drawings with the space (CLOSED U13), the centred mode screen no
+# manual could describe (CLOSED U17), and these two function names. It is
+# deliberately a short, named list rather than a general escape hatch -- a
+# line gets in only with a photograph behind it, and the value here says
+# which.
+ALL_PLACEHOLDER = re.compile(r"[#\s]+\Z")
+
+# A screen whose template carries no letters cannot be found by matching --
+# see the note where LETTER is used -- so its page is given here, read off
+# the heading the row sits under.
+GIVEN = {
+    # `BUS SLOT FUEL METER TANK` over `X    XX   XX    XX    XX`, the
+    # MODIFY TANK/METER MAP row. 576013-623 Rev AN p.17-5 is PDF p.171, and
+    # the heading above it cites there on its own words.
+    "# # # # #": ("576013-623_AN_SystemSetup", 171),
+    # `h1: FUEL POS LABEL` over `01`, EVR/ISD SETUP. 577013-800 Rev P p.20
+    # draws both halves -- `E  01` beside `h1: FUEL POS LABEL` in the
+    # figure's ENTER column -- and the head cites there on its own words.
+    "#": ("577013-800_RevP_ISD_ISO", 20),
+}
+
+PHOTOGRAPHED = {
+    # 576013-610 Rev AC writes `START LINE PRESSURE TEST` seven times and
+    # never this. The glass of a bare TLS-350, 2026-09-10, reads
+    # `START PRESSURE LINE TEST` over `SENSORS NOT CONFIGURED`.
+    "START PRESSURE LINE TEST": "photographed 2026-09-10",
+    # and its neighbour, where the manual writes both `STOP PRESSURE TEST`
+    # and `STOP LINE PRESSURE TEST` and the glass reads neither
+    "STOP PRESSURE LINE TEST": "photographed 2026-09-10",
+    # Three Diagnostic function names off the glass of the same bare
+    # console. The manuals write ACCUCHART, GROUNDTEMP and -- for the last
+    # -- an index row this project had imported as a function name (DG7).
+    "ACCU_CHART DIAGNOSTICS": "photographed 2026-09-10",
+    "GROUND TEMP DIAGNOSTIC": "photographed 2026-09-10",
+    "ARCHIVE DIAGNOSTIC": "photographed 2026-09-10",
+}
+
+
 def main():
     rows = load_manuals()
     value_rows = load_manuals(VALUE_DOCS)
@@ -227,6 +307,20 @@ def main():
     # It is only usable as evidence if what is NOT a placeholder is enough to
     # identify a screen: a line like "(Insert more deliveries for other
     # tanks)" is all placeholder and would otherwise match anything at all.
+    def _distinctive(literal):
+        """Is the non-placeholder half of a manual line worth matching on?
+
+        The floor is ten characters, and it is a proxy for "enough to
+        identify a screen". A short literal that is one real WORD is enough
+        too: `(Day) OPEN: (Date)` on p.28-3 carries seven characters and
+        names the screen exactly, where `(Insert more deliveries for other
+        tanks)` -- the case the floor was written for -- carries none at
+        all. So a word of four letters or more passes on its own. See
+        FIDELITY Q4.
+        """
+        return any(len(w) >= 4 and w.isalpha()
+                   for w in re.split(r"[^A-Za-z]+", literal))
+
     holders = []
     for name, page, n in rows:
         if "(" not in n and not XRUN.search(n):
@@ -234,7 +328,7 @@ def main():
         t = XRUN.sub("(X)", allscreens.template(n))
         parts = [x for x in re.split(r"(\([^()]*\))", t) if x]
         literal = "".join(x for x in parts if not x.startswith("("))
-        if len(literal.strip()) < 10:
+        if len(literal.strip()) < 10 and not _distinctive(literal):
             continue
         holders.append((re.compile("^" + "".join(
             ".+?" if x.startswith("(") else re.escape(x)
@@ -259,7 +353,9 @@ def main():
     how = collections.Counter()
     for n, where in lines.items():
         hit = kind = None
-        if n in exact:
+        if n in GIVEN:
+            hit, kind = GIVEN[n], "given"
+        elif n in exact:
             hit, kind = exact[n], "exact"
         elif n[:COLS] in clip:
             hit, kind = clip[n[:COLS]], "clip"
@@ -295,6 +391,15 @@ def main():
                     if m.startswith(lab3) and len(m) > len(lab3) and (
                             not val3 or val3 in m):
                         hit, kind = w, "table"
+                        break
+        if hit is None:
+            # One card cage screen per card, and the manual draws it with
+            # one board in it. See CAGE above.
+            m = CAGE.match(n)
+            if m:
+                for mm, w in sorted(exact.items()):
+                    if mm.startswith(m.group(1) + " # ") and mm != n:
+                        hit, kind = w, "cage"
                         break
         if hit is None:
             # The manual writes a placeholder where the console writes a
@@ -339,6 +444,23 @@ def main():
                                                                    ":")):
                     hit, kind = (name, page), "printed"
                     break
+        if hit and kind != "given" and ALL_PLACEHOLDER.match(n):
+            # **A template that is nothing but placeholders identifies
+            # nothing.** The MODIFY TANK/METER MAP row is
+            # `X    XX   XX    XX    XX`, which masks to `# # # # #` and
+            # matched a DIP switch legend on p.4-5 -- and would have
+            # matched any row of five numbers in any manual on the shelf.
+            # `_distinctive` already refuses a MANUAL line that is all
+            # placeholder; this is the same rule from the screen's side.
+            # A template with so much as a colon left in it survives, which
+            # is where `# #:` -- the VMC serial screen -- sits. One of
+            # these has to be cited by hand in GIVEN above, off the screen
+            # it sits under, or it is uncited.
+            hit = kind = None
+        if not hit and n in PHOTOGRAPHED:
+            # **A photograph of the glass outranks the page.** See the
+            # PHOTOGRAPHED table above for what each of these is and why.
+            hit, kind = (PHOTOGRAPHED[n], "a real TLS-350"), "photographed"
         if hit:
             how[kind] += 1
             cited[n] = {"manual": hit[0], "page": hit[1], "how": kind,
@@ -411,7 +533,11 @@ def main():
         "uncited": uncited,
     }
     path = os.path.join(HERE, "tests", "citations.json")
-    json.dump(out, open(path, "w", encoding="utf-8"), indent=1, sort_keys=True)
+    # newline="\n" the way build_wire_titles.py does: without it a rebuild on
+    # Windows rewrites every line ending in the file and buries the handful
+    # of citations that actually moved.
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(out, fh, indent=1, sort_keys=True)
     print(f"{len(screens)} screens, {len(lines)} distinct lines")
     print(f"  cited   {len(cited):>4}   " + ", ".join(
         f"{k} {v}" for k, v in how.most_common()))

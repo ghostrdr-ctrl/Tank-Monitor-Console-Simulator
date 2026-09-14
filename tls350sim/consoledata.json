@@ -31,58 +31,60 @@
  },
  "status_types": {
   "01": {
-   "01": "Printer out of Paper",
-   "02": "Printer Error",
-   "03": "EEPROM Config Error",
-   "04": "Battery Is Off",
-   "05": "Too Many Tanks",
-   "06": "System Security Warning",
-   "07": "ROM Revision Warning",
-   "08": "Remote Display Comm Error",
+   "01": "PAPER OUT",
+   "02": "PRINTER ERROR",
+   "03": "WRONG SOFTWARE WARNING",
+   "04": "BATTERY IS OFF",
+   "05": "TOO MANY TANKS",
+   "06": "SYS SECURITY WARNING",
+   "07": "ROM REVISION WARNING",
+   "08": "REMOTE DISPLAY ERROR",
    "09": "Autodial Failure",
-   "10": "Software Module Warning",
-   "11": "Tank Test Shutdown Warning",
+   "10": "SOFTWARE MODULE WARN",
+   "11": "TANK TEST SHUTDOWN",
    "12": "Protective Cover Alarm",
-   "13": "BIR Shift Close Pending",
-   "14": "BIR Daily Close Pending",
-   "15": "PC Revision Warning",
-   "16": "System Self Test Error",
-   "17": "System Clock Incorrect",
+   "13": "CLOSE SHIFT PENDING",
+   "14": "CLOSE DAILY PENDING",
+   "15": "PC (H8) REVISION WARN",
+   "16": "SYSTEM SELF TEST ALM",
+   "17": "CLOCK IS INCORRECT",
    "18": "System Device Poll Timeout",
    "19": "Maint Tracker NVMem Removed",
-   "20": "Maint Tracker Comm Module Removed"
+   "20": "NO MT COMM"
   },
   "02": {
-   "01": "Setup Data Warning",
-   "02": "Leak Alarm",
-   "03": "High Water Alarm",
-   "04": "Overfill Alarm",
-   "05": "Low Product Alarm",
-   "06": "Sudden Loss Alarm",
-   "07": "High Product Alarm",
-   "08": "Invalid Fuel Level Alarm",
-   "09": "Probe Out Alarm",
-   "10": "High Water Warning",
-   "11": "Delivery Needed",
-   "12": "Maximum Product Alarm",
-   "13": "Gross Leak Test Fail",
-   "14": "Periodic Leak Test Fail",
-   "15": "Annual Leak Test Fail",
-   "16": "Periodic Test Needed Warning",
-   "17": "Annual Test Needed Warning",
-   "18": "Periodic Test Needed Alarm",
-   "19": "Annual Test Needed Alarm",
-   "20": "Leak Test Active",
-   "21": "No CSLD Idle Time Warning",
-   "22": "Siphon Break Active",
-   "23": "CSLD Rate Increase Warning",
-   "24": "AccuChart Calibration Warning",
-   "25": "HRM Reconciliation Warning",
-   "26": "HRM Reconciliation Alarm",
-   "27": "Cold Temperature Warning",
-   "28": "Missing Delivery Ticket",
-   "29": "Tank/Line Gross Leak Alarm",
-   "30": "Delivery Density Warning"
+   "01": "SETUP DATA WARNING",
+   "02": "LEAK ALARM",
+   "03": "HIGH WATER ALARM",
+   "04": "OVERFILL ALARM",
+   "05": "LOW PRODUCT ALARM",
+   "06": "SUDDEN LOSS ALARM",
+   "07": "HIGH PRODUCT ALARM",
+   "08": "INVALID FUEL LEVEL",
+   "09": "PROBE OUT",
+   "10": "HIGH WATER WARNING",
+   "11": "DELIVERY NEEDED",
+   "12": "MAX PRODUCT ALARM",
+   "13": "GROSS TEST FAIL",
+   "14": "PERIODIC TEST FAIL",
+   "15": "ANNUAL TEST FAIL",
+   "16": "PER TST NEEDED WRN",
+   "17": "ANN TST NEEDED WRN",
+   "18": "PER TST NEEDED ALM",
+   "19": "ANN TST NEEDED ALM",
+   "20": "TANK TEST ACTIVE",
+   "21": "NO CSLD IDLE TIME",
+   "22": "TANK SIPHON BREAK",
+   "23": "CSLD INCR RATE WARN",
+   "24": "ACCUCHART CAL WARN",
+   "25": "RECON WARN",
+   "26": "RECON ALARM",
+   "27": "LOW TEMP WARNING",
+   "28": "MISSING TICKET WARN",
+   "29": "GROSS FAIL LINE TNK",
+   "30": "DELIVY DENSITY WARN",
+   "31": "DENSITY WARNING",
+   "32": "FUEL QUALITY ALARM"
   },
   "03": {
    "02": "Setup Data Warning",
@@ -151,115 +153,126 @@
    "10": "Liquid Warning"
   },
   "05": {
-   "01": "Setup Data Warning",
-   "02": "Input Normal",
-   "03": "Input Alarm"
+   "01": "SETUP DATA WARNING",
+   "02": "EXTERN INPUT NORMAL",
+   "03": "EXTERN INPUT ALARM"
   },
   "06": {
-   "01": "Setup Data Warning",
-   "02": "Self Test Alarm",
-   "03": "Shutdown Alarm",
-   "04": "Leak Test Fail Alarm",
-   "05": "Selftest Invalid Warning",
-   "06": "Continuous Handle On Warning",
-   "07": "Gross Line Test Fail",
-   "08": "Gross Line Selftest Fail",
-   "09": "Gross Pump Test Fail",
-   "10": "Gross Pump Selftest Fail",
-   "11": "Periodic Test Needed Warning",
-   "12": "Annual Test Needed Warning",
-   "13": "Periodic Test Needed Alarm",
-   "14": "Annual Test Needed Alarm",
-   "15": "Periodic Line Test Fail",
-   "16": "Periodic Line Selftest Fail",
-   "17": "Periodic Pump Test Fail",
-   "18": "Periodic Pump Selftest Fail",
-   "19": "Annual Line Test Fail",
-   "20": "Annual Line Selftest Fail",
-   "21": "Annual Pump Test Fail",
-   "22": "Annual Pump Selftest Fail",
-   "23": "Pressure Warning",
-   "24": "Pressure Alarm",
-   "25": "Gross Test Fault",
-   "26": "Periodic Test Fault",
-   "27": "Annual Test Fault",
-   "28": "Fuel Out Alarm"
+   "01": "SETUP DATA WARNING",
+   "02": "LLD SELF TEST FAIL",
+   "03": "LINE LEAK SHUTDOWN",
+   "04": "LINE LEAK TEST FAIL",
+   "05": "SELF TEST INVALID",
+   "06": "CONT HANDLE WARN",
+   "07": "GRS-LINE TEST FAIL",
+   "08": "GRS-LINE SELF FAIL",
+   "09": "GRS-PUMP TEST FAIL",
+   "10": "GRS-PUMP SELF FAIL",
+   "11": "PER TST NEEDED WRN",
+   "12": "ANN TST NEEDED WRN",
+   "13": "PER TST NEEDED ALM",
+   "14": "ANN TST NEEDED ALM",
+   "15": "PER-LINE TEST FAIL",
+   "16": "PER-LINE SELF FAIL",
+   "17": "PER-PUMP TEST FAIL",
+   "18": "PER-PUMP SELF FAIL",
+   "19": "ANN-LINE TEST FAIL",
+   "20": "ANN-LINE SELF FAIL",
+   "21": "ANN-PUMP TEST FAIL",
+   "22": "ANN-PUMP SELF FAIL",
+   "23": "LLD PRESSURE WARN",
+   "24": "LLD PRESSURE ALARM",
+   "25": "LLD TEST FAULT-GRS",
+   "26": "LLD TEST FAULT-PER",
+   "27": "LLD TEST FAULT-ANN",
+   "28": "FUEL OUT"
   },
   "14": {
-   "01": "Setup Data Warning",
-   "02": "Failed Alarm",
-   "03": "Service Report Warning",
-   "04": "Alarm Clear Warning",
-   "05": "Delivery Report Warning"
+   "01": "SETUP DATA WARNING",
+   "02": "AUTODIAL FAILURE",
+   "03": "SERVICE REPORT WARN",
+   "04": "ALARM CLEAR WARNING",
+   "05": "DELIVERY REPORT WRN"
   },
   "20": {
-   "01": "Setup Data Warning",
-   "02": "Threshold Alarm",
-   "03": "Close Shift Warning",
-   "04": "Close Daily Warning"
+   "01": "RECON SETUP WARNING",
+   "02": "PROD THRESHOLD ALM",
+   "03": "CLOSE SHIFT WARNING",
+   "04": "CLOSE DAILY WARNING"
   },
   "21": {
-   "01": "Setup Data Warning",
-   "02": "Gross Test Fail",
-   "03": "Annual Test Fail",
-   "04": "Periodic Test Needed Warning",
-   "05": "Periodic Test Needed Alarm",
-   "06": "Sensor Open Alarm",
+   "01": "SETUP DATA WARNING",
+   "02": "GROSS LINE FAIL",
+   "03": "ANNUAL LINE FAIL",
+   "04": "PER TST NEEDED WRN",
+   "05": "PER TST NEEDED ALM",
+   "06": "PLLD OPEN ALARM",
    "07": "High Pressure Alarm",
-   "08": "Shutdown Alarm",
+   "08": "PLLD SHUTDOWN ALARM",
    "09": "High Pressure Warning",
-   "10": "Continuous Handle On Warning",
-   "11": "Periodic Test Fail",
-   "12": "Annual Test Needed Warning",
-   "13": "Annual Test Needed Alarm",
-   "14": "Low Pressure Alarm",
+   "10": "CONT HANDLE WARN",
+   "11": "PERIOD LINE FAIL",
+   "12": "ANN TST NEEDED WRN",
+   "13": "ANN TST NEEDED ALM",
+   "14": "LOW PRESSURE ALARM",
    "15": "Sensor Short Alarm",
-   "16": "Continuous Handle On Alarm",
-   "17": "Fuel Out Alarm",
-   "18": "Line Equipment Alarm"
+   "16": "CONT HANDLE ALRM",
+   "17": "FUEL OUT",
+   "18": "LN EQUIP FAULT ALM",
+   "19": "GRS TST NEEDED ALM"
   },
   "26": {
-   "01": "Setup Data Warning",
-   "02": "Gross Test Fail",
-   "03": "Periodic Test Fail",
-   "04": "Periodic Test Needed Warning",
-   "05": "Periodic Test Needed Alarm",
-   "06": "Sensor Open Alarm",
-   "07": "Communications Alarm",
-   "08": "Shutdown Alarm",
-   "09": "Continuous Handle On Warning",
-   "10": "Annual Test Fail",
-   "11": "Annual Test Needed Warning",
-   "12": "Annual Test Needed Alarm",
+   "01": "SETUP DATA WARNING",
+   "02": "GROSS LINE FAIL",
+   "03": "PERIOD LINE FAIL",
+   "04": "PER TST NEEDED WRN",
+   "05": "PER TST NEEDED ALM",
+   "06": "WPLLD OPEN WARN",
+   "07": "WPLLD COMM ALARM",
+   "08": "WPLLD SHUTDOWN ALARM",
+   "09": "CONT HANDLE WARN",
+   "10": "ANNUAL LINE FAIL",
+   "11": "ANN TST NEEDED WRN",
+   "12": "ANN TST NEEDED ALM",
    "13": "High Pressure Warning",
    "14": "High Pressure Alarm",
    "15": "Sensor Short Alarm",
-   "16": "Continuous Handle On Alarm",
-   "17": "Fuel Out Alarm",
-   "18": "Line Equipment Alarm"
+   "16": "CONT HANDLE ALRM",
+   "17": "FUEL OUT",
+   "18": "LN EQUIP FAULT ALM"
   },
   "28": {
-   "01": "Setup Data Warning",
-   "02": "Communication Alarm",
-   "03": "Fault Alarm",
-   "04": "Fuel Warning",
-   "05": "Fuel Alarm",
-   "06": "Water Warning",
-   "07": "Water Alarm",
-   "08": "High Liquid Warning",
-   "09": "High Liquid Alarm",
-   "10": "Low Liquid Warning",
-   "11": "Low Liquid Alarm",
-   "12": "Temperature Warning",
-   "13": "Relay Active",
-   "14": "Install Alarm",
-   "15": "Sensor Fault Warning",
-   "16": "Vacuum Warning",
-   "17": "No Vacuum Warning"
+   "01": "SETUP DATA WARNING",
+   "02": "COMMUNICATION ALARM",
+   "03": "SENSOR FAULT ALARM",
+   "04": "FUEL WARNING",
+   "05": "FUEL ALARM",
+   "06": "WATER WARNING",
+   "07": "WATER ALARM",
+   "08": "HIGH LIQUID WARNING",
+   "09": "HIGH LIQUID ALARM",
+   "10": "LOW LIQUID WARNING",
+   "11": "LOW LIQUID ALARM",
+   "12": "TEMPERATURE WARNING",
+   "13": "RELAY ACTIVE",
+   "14": "INSTALL ALARM",
+   "15": "SENSOR FAULT WARN",
+   "16": "VACUUM WARNING",
+   "17": "NO VACUUM ALARM"
   },
   "34": {
-   "01": "Setup Data Warning",
-   "02": "Pump Relay Alarm"
+   "01": "SETUP DATA WARNING",
+   "02": "PUMP RELAY MON ALM"
+  },
+  "35": {
+   "01": "SETUP DATA WARNING",
+   "02": "COMMUNICATION ALARM"
+  },
+  "36": {
+   "01": "VMC COM TIMEOUT ALARM",
+   "02": "METER NOT CONNECTED",
+   "03": "FP SHUTDOWN WARNING",
+   "04": "FP SHUTDOWN ALARM"
   },
   "37": {
    "01": "Gross Over-Pressure Test Warning",
@@ -321,12 +334,13 @@
   },
   "18": {
    "02": "DIM Disabled",
-   "03": "DIM Communication Alarm"
+   "03": "DIM Communication Alarm",
+   "04": "TRANSACTION ALARM"
   },
   "19": {
    "02": "DIM Disabled",
    "03": "DIM Communication Alarm",
-   "04": "BDIM Transaction Alarm"
+   "04": "TRANSACTION ALARM"
   }
  },
  "status_device_word": {
@@ -422,20 +436,31 @@
   1593,
   1594,
   1595,
+  1602,
+  1608,
+  1611,
+  1617,
+  1618,
+  1619,
+  1620,
+  1621,
   1667,
   1793,
   1794,
   1795,
   1796,
   1798,
+  1799,
   1800,
   1801,
   1809,
   1810,
+  1811,
   1825,
   1826,
   1827,
   1831,
+  1832,
   1833,
   1834,
   1835,
@@ -461,6 +486,7 @@
   1879,
   1880,
   1881,
+  1883,
   1884,
   1885,
   1887,
@@ -468,9 +494,12 @@
   1889,
   1905,
   1906,
+  1907,
   1908,
   1909,
   1910,
+  1911,
+  1912,
   1913,
   1914,
   1915,
@@ -484,6 +513,7 @@
   1924,
   1925,
   1926,
+  1927,
   1928,
   1929,
   1930,
@@ -496,14 +526,21 @@
   1947,
   1948,
   1953,
+  1954,
   1955,
   1956,
+  1957,
   1958,
+  1959,
   1960,
   1961,
   1964,
+  1966,
   1967,
   1973,
+  1980,
+  1981,
+  1982,
   1986,
   1987,
   1988,
@@ -515,8 +552,15 @@
   2002,
   2003,
   2004,
+  2007,
+  2008,
+  2009,
+  2010,
+  2011,
+  2012,
   2049,
   2050,
+  2051,
   2052,
   2054,
   2055,
@@ -527,11 +571,17 @@
   2060,
   2061,
   2063,
+  2065,
+  2066,
+  2067,
   2081,
   2082,
   2178,
   2193,
-  2241
+  2236,
+  2241,
+  2242,
+  2243
  ],
  "multi_device": [
   1282,
@@ -788,7 +838,8 @@
   "S50201": {
    "label": "Shift start time",
    "kind": "time",
-   "code": "S50201"
+   "code": "S50201",
+   "wire_line": "SHIFT TIME %d :"
   },
   "S60201": {
    "label": "Tank product label",
@@ -806,7 +857,7 @@
    "label": "Tank diameter",
    "kind": "float",
    "min": 0.0,
-   "max": 1000.0,
+   "max": 999.99,
    "code": "S60701",
    "mask": "000.00"
   },
@@ -846,7 +897,7 @@
    "label": "Tank density",
    "kind": "float",
    "min": 0.0,
-   "max": 2000.0,
+   "max": 99.9999,
    "code": "S61E01",
    "mask": "0.0000"
   },
@@ -854,7 +905,7 @@
    "label": "Low product limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "code": "S62101",
    "mask": "000000"
   },
@@ -862,7 +913,7 @@
    "label": "High product limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 100.0,
    "code": "S62201",
    "mask": "000%"
   },
@@ -870,7 +921,7 @@
    "label": "Overfill limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 100.0,
    "code": "S62301",
    "mask": "000%"
   },
@@ -878,15 +929,16 @@
    "label": "High water limit",
    "kind": "float",
    "min": 0.0,
-   "max": 199.0,
+   "max": 5.0,
    "code": "S62401",
-   "mask": "0.0"
+   "mask": "0.0",
+   "max_metric": 199.0
   },
   "S62501": {
    "label": "Sudden loss limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "code": "S62501",
    "mask": "000000"
   },
@@ -897,7 +949,8 @@
    "max": 99,
    "width": 2,
    "label": "Delivery delay, minutes",
-   "mask": "00"
+   "mask": "00",
+   "default": "1"
   },
   "S62C01": {
    "code": "S62C01",
@@ -924,11 +977,11 @@
     ],
     [
      "01",
-     "ROTARY AIR FLOW METER"
+     "AIR FLOW METER"
     ],
     [
      "02",
-     "VAPOR PRESSURE SENSOR"
+     "VAPOR PRESSURE"
     ],
     [
      "03",
@@ -936,11 +989,11 @@
     ],
     [
      "04",
-     "VACUUM SENSOR"
+     "VAC SENSOR"
     ],
     [
      "05",
-     "ATMOSPHERIC SENSOR"
+     "ATMP SENSOR"
     ],
     [
      "08",
@@ -959,15 +1012,15 @@
    "kind": "enum",
    "choices": [
     [
-     "01",
+     "02",
      "3.0 GPH"
     ],
     [
-     "02",
+     "03",
      "0.2 GPH"
     ],
     [
-     "03",
+     "01",
      "0.1 GPH"
     ],
     [
@@ -1041,7 +1094,8 @@
    "kind": "float",
    "min": 0.0,
    "max": 100.0,
-   "code": "S75501"
+   "code": "S75501",
+   "mask": "000"
   },
   "S75801": {
    "label": "VLLD pump side test",
@@ -1056,7 +1110,8 @@
      "ENABLED"
     ]
    ],
-   "code": "S75801"
+   "code": "S75801",
+   "default": "01"
   },
   "S75E01": {
    "label": "VLLD fuel type",
@@ -1079,11 +1134,11 @@
    "choices": [
     [
      "1",
-     "TEMPERATURE MEAS"
+     "TEMP. MEAS."
     ],
     [
      "2",
-     "VOLUME CHANGE MEAS"
+     "VOL. CHG. MEAS."
     ]
    ],
    "code": "S75F01"
@@ -1093,11 +1148,11 @@
    "kind": "enum",
    "choices": [
     [
-     "0",
+     "01",
      "MONTHLY"
     ],
     [
-     "1",
+     "02",
      "ROLLING"
     ]
    ],
@@ -1127,7 +1182,11 @@
     ]
    ],
    "code": "S56400",
-   "wire_line": "ULLAGE:"
+   "wire_line": "ULLAGE:",
+   "screen_words": {
+    "90%": "90 PERCENT",
+    "95%": "95 PERCENT"
+   }
   },
   "S56500": {
    "label": "Maintenance history",
@@ -1157,7 +1216,10 @@
    "label": "Vapor loss factor",
    "kind": "float",
    "code": "S63D01",
-   "mask": "0.00%"
+   "mask": "0.00%",
+   "min": 0.0,
+   "max": 0.2,
+   "default": "0.00"
   },
   "S62F01": {
    "code": "S62F01",
@@ -1195,15 +1257,16 @@
    "label": "High water warning limit",
    "kind": "float",
    "min": 0.0,
-   "max": 199.0,
+   "max": 5.0,
    "code": "S62701",
-   "mask": "00.0"
+   "mask": "00.0",
+   "max_metric": 199.0
   },
   "S62901": {
    "label": "Delivery required limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 100.0,
    "code": "S62901",
    "mask": "000%"
   },
@@ -1223,7 +1286,7 @@
    "label": "Periodic test minimum volume",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 100.0,
    "code": "S63601",
    "mask": "000%"
   },
@@ -1231,7 +1294,7 @@
    "label": "Annual test minimum volume",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 100.0,
    "code": "S62A01",
    "mask": "000%"
   },
@@ -1284,19 +1347,21 @@
    "label": "WPLLD pipe length, feet",
    "kind": "float",
    "min": 0.0,
-   "max": 10000.0,
-   "code": "S7A901"
+   "max": 999.0,
+   "code": "S7A901",
+   "wire_format": "%d FEET",
+   "mask": "000"
   },
   "S7A401": {
    "label": "WPLLD shutdown rate",
    "kind": "enum",
    "choices": [
     [
-     "01",
+     "02",
      "3.0 GPH"
     ],
     [
-     "02",
+     "01",
      "0.2 GPH"
     ],
     [
@@ -1427,16 +1492,16 @@
    "code": "S70201"
   },
   "S70401": {
-   "label": "Liquid sensor category",
+   "code": "S70401",
    "kind": "enum",
    "choices": [
     [
      "1",
-     "OTHER"
+     "OTHER SENSORS"
     ],
     [
      "2",
-     "ANNULAR"
+     "ANNULAR SPACE"
     ],
     [
      "3",
@@ -1444,7 +1509,7 @@
     ],
     [
      "4",
-     "MONITORING WELL"
+     "MONITOR WELL"
     ],
     [
      "5",
@@ -1455,7 +1520,8 @@
      "PIPING SUMP"
     ]
    ],
-   "code": "S70401"
+   "default": "1",
+   "label": "Liquid sensor category"
   },
   "S70701": {
    "label": "Vapor sensor location label",
@@ -1466,7 +1532,10 @@
   "S70801": {
    "label": "Vapor sensor alarm threshold",
    "kind": "float",
-   "code": "S70801"
+   "code": "S70801",
+   "min": 1000.0,
+   "max": 100000.0,
+   "mask": "000000"
   },
   "S70901": {
    "label": "Vapor sensor category",
@@ -1474,11 +1543,11 @@
    "choices": [
     [
      "1",
-     "OTHER"
+     "OTHER SENSORS"
     ],
     [
      "2",
-     "ANNULAR"
+     "ANNULAR SPACE"
     ],
     [
      "3",
@@ -1486,7 +1555,7 @@
     ],
     [
      "4",
-     "MONITORING WELL"
+     "MONITOR WELL"
     ],
     [
      "5",
@@ -1511,11 +1580,11 @@
    "choices": [
     [
      "1",
-     "OTHER"
+     "OTHER SENSORS"
     ],
     [
      "2",
-     "ANNULAR"
+     "ANNULAR SPACE"
     ],
     [
      "3",
@@ -1523,7 +1592,7 @@
     ],
     [
      "4",
-     "MONITORING WELL"
+     "MONITOR WELL"
     ],
     [
      "5",
@@ -1548,11 +1617,11 @@
    "choices": [
     [
      "1",
-     "OTHER"
+     "OTHER SENSORS"
     ],
     [
      "2",
-     "ANNULAR"
+     "ANNULAR SPACE"
     ],
     [
      "3",
@@ -1560,7 +1629,7 @@
     ],
     [
      "4",
-     "MONITORING WELL"
+     "MONITOR WELL"
     ],
     [
      "5",
@@ -1585,11 +1654,11 @@
    "choices": [
     [
      "1",
-     "OTHER"
+     "OTHER SENSORS"
     ],
     [
      "2",
-     "ANNULAR"
+     "ANNULAR SPACE"
     ],
     [
      "3",
@@ -1597,7 +1666,7 @@
     ],
     [
      "4",
-     "MONITORING WELL"
+     "MONITOR WELL"
     ],
     [
      "5",
@@ -1772,7 +1841,7 @@
     ],
     [
      "4",
-     "THU"
+     "THR"
     ],
     [
      "5",
@@ -1870,29 +1939,73 @@
    ],
    "code": "S53200"
   },
+  "S50600": {
+   "label": "Periodic test needed warning",
+   "kind": "flag",
+   "code": "S50600",
+   "wire_line": "PERIODIC TEST WARNINGS:"
+  },
   "S54600": {
    "label": "Tank periodic test needed warning",
    "kind": "flag",
    "code": "S54600",
-   "wire_line": "TANK PER TEST NEEDED WRN:"
+   "wire_line": "TANK PER TST NEEDED WRN:"
+  },
+  "S50700": {
+   "default": 25,
+   "label": "Days before periodic test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S50700",
+   "wire_line": "PERIODIC TEST WARNING: DAYS =",
+   "wire_format": "%3d"
   },
   "S54700": {
+   "default": 25,
    "label": "Days before tank periodic test warning",
    "kind": "int",
    "min": 0,
    "max": 30,
    "width": 2,
    "code": "S54700",
-   "wire_line": "TANK PER TEST NEEDED WRN:"
+   "wire_line": "TANK PER TST NEEDED WRN: DAYS =",
+   "wire_format": "%3d",
+   "mask": "00"
+  },
+  "S50800": {
+   "default": 30,
+   "label": "Days before periodic test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 30,
+   "width": 2,
+   "code": "S50800",
+   "wire_line": "PERIODIC TEST ALARM: DAYS =",
+   "wire_format": "%3d"
   },
   "S54800": {
+   "default": 30,
    "label": "Days before tank periodic test alarm",
    "kind": "int",
    "min": 0,
    "max": 30,
    "width": 2,
    "code": "S54800",
-   "wire_line": "TANK PER TEST NEEDED ALM:"
+   "wire_line": "TANK PER TST NEEDED ALM: DAYS =",
+   "wire_format": "%3d",
+   "mask": "00"
+  },
+  "S50A00": {
+   "label": "Days before annual test warning",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S50A00",
+   "wire_line": "ANNUAL TEST WARNING: DAYS =",
+   "wire_format": "%3d"
   },
   "S54A00": {
    "label": "Days before tank annual test warning",
@@ -1901,8 +2014,20 @@
    "max": 365,
    "width": 3,
    "code": "S54A00",
-   "default": "355",
-   "wire_line": "TANK ANN TST NEEDED WRN:"
+   "wire_line": "TANK ANN TST NEEDED WRN: DAYS =",
+   "wire_format": "%3d",
+   "mask": "000"
+  },
+  "S50B00": {
+   "label": "Days before annual test alarm",
+   "kind": "int",
+   "min": 0,
+   "max": 365,
+   "width": 3,
+   "code": "S50B00",
+   "wire_line": "ANNUAL TEST ALARM: DAYS =",
+   "wire_format": "%3d",
+   "default": "355"
   },
   "S54B00": {
    "label": "Days before tank annual test alarm",
@@ -1911,7 +2036,10 @@
    "max": 365,
    "width": 3,
    "code": "S54B00",
-   "wire_line": "TANK ANN TEST NEEDED ALM:"
+   "wire_line": "TANK ANN TST NEEDED ALM: DAYS =",
+   "wire_format": "%3d",
+   "default": "355",
+   "mask": "000"
   },
   "S55300": {
    "label": "Line re-enable method",
@@ -1935,22 +2063,28 @@
    "wire_line": "LINE PER TST NEEDED WRN:"
   },
   "S55700": {
+   "default": 25,
    "label": "Days before line periodic test warning",
    "kind": "int",
    "min": 0,
    "max": 30,
    "width": 2,
    "code": "S55700",
-   "wire_line": "LINE PER TST NEEDED WRN:"
+   "wire_line": "LINE PER TST NEEDED WRN: DAYS =",
+   "wire_format": "%3d",
+   "mask": "00"
   },
   "S55800": {
+   "default": 30,
    "label": "Days before line periodic test alarm",
    "kind": "int",
    "min": 0,
    "max": 30,
    "width": 2,
    "code": "S55800",
-   "wire_line": "LINE PER TST NEEDED ALM:"
+   "wire_line": "LINE PER TST NEEDED ALM: DAYS =",
+   "wire_format": "%3d",
+   "mask": "00"
   },
   "S55900": {
    "label": "Line annual test needed warning",
@@ -1965,8 +2099,9 @@
    "max": 365,
    "width": 3,
    "code": "S55A00",
-   "default": "355",
-   "wire_line": "LINE ANN TST NEEDED WRN:"
+   "wire_line": "LINE ANN TST NEEDED WRN: DAYS =",
+   "wire_format": "%3d",
+   "mask": "000"
   },
   "S55B00": {
    "label": "Days before line annual test alarm",
@@ -1975,7 +2110,10 @@
    "max": 365,
    "width": 3,
    "code": "S55B00",
-   "wire_line": "LINE ANN TST NEEDED ALM:"
+   "wire_line": "LINE ANN TST NEEDED ALM: DAYS =",
+   "wire_format": "%3d",
+   "default": "355",
+   "mask": "000"
   },
   "S50D00": {
    "label": "Print temperature compensated volume",
@@ -1986,10 +2124,12 @@
    "label": "Temperature compensation value",
    "kind": "float",
    "min": 0.0,
-   "max": 100.0,
+   "max": 120.0,
    "code": "S50E00",
    "default": "60",
-   "mask": "+000.0"
+   "mask": "+000.0",
+   "min_metric": -17.0,
+   "max_metric": 49.0
   },
   "S60B00": {
    "label": "Stick height function",
@@ -2024,12 +2164,16 @@
   "S55400": {
    "label": "Periodic line leak test auto-confirm",
    "kind": "flag",
-   "code": "S55400"
+   "code": "S55400",
+   "wire_line": "0.20 GPH LINE TEST AUTO-CONFIRM:",
+   "default": "ENABLED"
   },
   "S55500": {
    "label": "Annual line leak test auto-confirm",
    "kind": "flag",
-   "code": "S55500"
+   "code": "S55500",
+   "wire_line": "0.10 GPH LINE TEST AUTO-CONFIRM:",
+   "default": "ENABLED"
   },
   "S51A00": {
    "label": "Automatic daylight saving time",
@@ -2043,7 +2187,9 @@
   },
   "S50400": {
    "label": "System RS-232 security code",
-   "kind": "text",
+   "_note": "576013-623 Rev AN p.5-17: 'a 6-digit NUMERIC code', and p.5-18 'Enter any six digits'. It was kind text, so p.2-3's keypad rule -- 'When a numeric value is required, the keys provide only a numeric function' -- did not apply and the digit keys multi-tapped: 1 2 3 4 5 6 entered QADGJM, and the console STORED it. FIDELITY SU7.",
+   "kind": "digits",
+   "width": 6,
    "maxlen": 6,
    "code": "S50400",
    "default": "000000"
@@ -2056,15 +2202,36 @@
   },
   "S88101.baud": {
    "label": "Baud rate",
-   "kind": "int",
+   "kind": "enum",
    "part": [
     0,
     5
    ],
-   "min": 300,
-   "max": 38400,
    "width": 5,
-   "code": "S88101"
+   "code": "S88101",
+   "choices": [
+    [
+     "00300",
+     "300"
+    ],
+    [
+     "01200",
+     "1200"
+    ],
+    [
+     "02400",
+     "2400"
+    ],
+    [
+     "04800",
+     "4800"
+    ],
+    [
+     "09600",
+     "9600"
+    ]
+   ],
+   "default": "01200"
   },
   "S88101.parity": {
    "label": "Parity",
@@ -2127,7 +2294,7 @@
    ],
    "code": "S88101"
   },
-  "S53601": {
+  "S53601.code": {
    "label": "RS-232 security code for this port",
    "kind": "text",
    "part": [
@@ -2137,7 +2304,19 @@
    "maxlen": 6,
    "blank": "1",
    "code": "S53601",
-   "default": "DISABLED"
+   "default": "DISABLED",
+   "wire_default": "000000",
+   "column": 0
+  },
+  "S53601.status": {
+   "label": "RS-232 security code status for this port",
+   "kind": "flag",
+   "part": [
+    0,
+    1
+   ],
+   "code": "S53601",
+   "column": 1
   },
   "S52201": {
    "label": "Receiver location label",
@@ -2161,7 +2340,7 @@
    "code": "S60401",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "Tank full volume, gallons",
    "mask": "000000"
   },
@@ -2227,6 +2406,42 @@
    ],
    "code": "S61601"
   },
+  "S60E01.wateroff": {
+   "label": "Custom float water offset, inches",
+   "kind": "float",
+   "part": [
+    0,
+    8
+   ],
+   "min": -9999.999,
+   "max": 9999.999,
+   "code": "S60E01",
+   "mask": "+0000.000"
+  },
+  "S60E01.fueloff": {
+   "label": "Custom float fuel offset, inches",
+   "kind": "float",
+   "part": [
+    8,
+    8
+   ],
+   "min": -9999.999,
+   "max": 9999.999,
+   "code": "S60E01",
+   "mask": "+0000.000"
+  },
+  "S60E01.invalid": {
+   "label": "Custom float invalid fuel level, inches",
+   "kind": "float",
+   "part": [
+    16,
+    8
+   ],
+   "min": 0.0,
+   "max": 9999.999,
+   "code": "S60E01",
+   "mask": "+0000.000"
+  },
   "S60E01.watermin": {
    "label": "Minimum water threshold, inches",
    "kind": "float",
@@ -2243,7 +2458,7 @@
    "label": "Maximum or label volume",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "code": "S62801",
    "mask": "000000"
   },
@@ -2251,7 +2466,7 @@
    "label": "Leak alarm limit",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 99.0,
    "code": "S62601",
    "mask": "00"
   },
@@ -2314,13 +2529,14 @@
    "min": 0.0,
    "max": 50.0,
    "code": "S63A01",
-   "mask": "00.00"
+   "mask": "00.00",
+   "default": "10.00"
   },
   "S68100": {
    "label": "Delivery needed warning, days",
    "kind": "float",
    "min": 0.0,
-   "max": 99.99,
+   "max": 99.9,
    "code": "S68100",
    "mask": "00.0"
   },
@@ -2551,29 +2767,89 @@
    "label": "PLLD primary pipe length, feet",
    "kind": "float",
    "min": 0.0,
-   "max": 10000.0,
-   "code": "S78901"
+   "max": 999.0,
+   "code": "S78901",
+   "wire_format": "%d FEET",
+   "mask": "000"
   },
   "S77F01": {
    "label": "PLLD secondary pipe length, feet",
    "kind": "float",
    "min": 0.0,
-   "max": 10000.0,
-   "code": "S77F01"
+   "max": 999.0,
+   "code": "S77F01",
+   "wire_format": "%d FEET",
+   "mask": "000"
+  },
+  "S7AD01": {
+   "label": "WPLLD secondary pipe length, feet",
+   "kind": "float",
+   "min": 0.0,
+   "max": 999.0,
+   "code": "S7AD01",
+   "wire_format": "%d FEET",
+   "mask": "000"
+  },
+  "S77401": {
+   "label": "PLLD continuous handle alarm timeout, hours",
+   "kind": "int",
+   "min": 1,
+   "max": 16,
+   "width": 2,
+   "mask": "00",
+   "default": "16",
+   "code": "S77401",
+   "wire_format": "%d HOURS"
+  },
+  "S77501": {
+   "label": "PLLD profile line test leak rate, GPH",
+   "kind": "float",
+   "min": 0.0,
+   "max": 99.99,
+   "code": "S77501",
+   "wire_format": "%.2f GPH"
+  },
+  "S77601": {
+   "label": "PLLD profile line test reference pressure, PSI",
+   "kind": "float",
+   "min": 0.0,
+   "max": 999.99,
+   "code": "S77601",
+   "wire_format": "%.2f PSI"
+  },
+  "S77701": {
+   "label": "PLLD primary pipe diameter, inches",
+   "kind": "float",
+   "min": 0.0,
+   "max": 9.99,
+   "code": "S77701",
+   "wire_format": "%.2f INCHES",
+   "mask": "0.00"
+  },
+  "S77801": {
+   "label": "PLLD secondary pipe diameter, inches",
+   "kind": "float",
+   "min": 0.0,
+   "max": 9.99,
+   "code": "S77801",
+   "wire_format": "%.2f INCHES",
+   "mask": "0.00"
   },
   "S77901": {
    "label": "PLLD primary pipe bulk modulus, PSI",
    "kind": "float",
    "min": 0.0,
    "max": 99999.0,
-   "code": "S77901"
+   "code": "S77901",
+   "wire_format": "%d PSI"
   },
   "S77A01": {
    "label": "PLLD secondary pipe bulk modulus, PSI",
    "kind": "float",
    "min": 0.0,
    "max": 99999.0,
-   "code": "S77A01"
+   "code": "S77A01",
+   "wire_format": "%d PSI"
   },
   "S77B01": {
    "label": "PLLD thermal expansion coefficient",
@@ -2654,7 +2930,10 @@
    "min": 0,
    "max": 16,
    "width": 2,
-   "code": "S78501"
+   "code": "S78501",
+   "screen_words": {
+    "0": "NONE"
+   }
   },
   "S78A01": {
    "label": "PLLD sensor type",
@@ -2681,7 +2960,8 @@
    "min": -5.0,
    "max": 5.0,
    "code": "S77D01",
-   "mask": "+00.0"
+   "mask": "+00.0",
+   "wire_format": "%.1f PSI"
   },
   "S7A101": {
    "code": "S7A101",
@@ -2731,13 +3011,25 @@
    ],
    "code": "S7AC01"
   },
+  "S7AE01": {
+   "label": "WPLLD continuous handle alarm timeout, hours",
+   "kind": "int",
+   "min": 1,
+   "max": 16,
+   "width": 2,
+   "mask": "00",
+   "default": "16",
+   "code": "S7AE01",
+   "wire_format": "%d HOURS"
+  },
   "S7AF01": {
    "label": "WPLLD altitude pressure offset, PSI",
    "kind": "float",
    "min": -5.0,
    "max": 5.0,
    "code": "S7AF01",
-   "mask": "+00.0"
+   "mask": "+00.0",
+   "wire_format": "%.1f PSI"
   },
   "S75101": {
    "code": "S75101",
@@ -2755,7 +3047,7 @@
    "label": "VLLD 2 inch pipe length, feet",
    "kind": "float",
    "min": 0.0,
-   "max": 10000.0,
+   "max": 999.0,
    "code": "S75301",
    "mask": "000"
   },
@@ -2763,7 +3055,7 @@
    "label": "VLLD 3 inch pipe length, feet",
    "kind": "float",
    "min": 0.0,
-   "max": 10000.0,
+   "max": 999.0,
    "code": "S75401",
    "mask": "000"
   },
@@ -2796,7 +3088,10 @@
    "min": 0,
    "max": 16,
    "width": 2,
-   "code": "S76101"
+   "code": "S76101",
+   "screen_words": {
+    "0": "NONE"
+   }
   },
   "S75901.method": {
    "label": "VLLD test method",
@@ -2894,7 +3189,10 @@
    "min": 0,
    "max": 16,
    "width": 2,
-   "code": "S77201"
+   "code": "S77201",
+   "screen_words": {
+    "0": "NONE"
+   }
   },
   "S7C401": {
    "code": "S7C401",
@@ -2929,7 +3227,8 @@
    "min": 5.0,
    "max": 600.0,
    "code": "S7C701",
-   "default": "60"
+   "default": "60",
+   "wire_format": "%d SEC"
   },
   "S7C801": {
    "label": "Maximum run time, hours",
@@ -2978,25 +3277,32 @@
   "S79800": {
    "label": "Periodic reconciliation alarm threshold",
    "kind": "float",
+   "min": 0.0,
+   "max": 5.0,
    "code": "S79800",
-   "default": "1.00"
+   "default": "1.00",
+   "mask": "0.00"
   },
   "S79900": {
    "label": "Periodic reconciliation alarm offset",
    "kind": "float",
    "code": "S79900",
-   "default": "130"
+   "default": "130",
+   "min": 0.0,
+   "max": 999999.0,
+   "width": 6,
+   "mask": "000000"
   },
   "S79A00": {
    "label": "Remote printer report format",
    "kind": "enum",
    "choices": [
     [
-     "0",
+     "01",
      "ROW"
     ],
     [
-     "1",
+     "02",
      "COLUMN"
     ]
    ],
@@ -3029,12 +3335,12 @@
    "label": "Sensor Config. - Module 1"
   },
   "S70301": {
-   "label": "Liquid sensor type",
+   "code": "S70301",
    "kind": "enum",
    "choices": [
     [
      "1",
-     "TRI-STATE"
+     "TRI-STATE (SINGLE FLOAT)"
     ],
     [
      "2",
@@ -3046,7 +3352,7 @@
     ],
     [
      "4",
-     "DUAL FLOAT DISCRIM"
+     "DUAL FLOAT DISCRIMINATING"
     ],
     [
      "5",
@@ -3054,14 +3360,15 @@
     ],
     [
      "6",
-     "INTERCEPTOR SENSOR"
+     "INTERCEPTOR"
     ],
     [
      "7",
-     "DW SUMP 2-1 SENSOR"
+     "DW SUMP"
     ]
    ],
-   "code": "S70301"
+   "default": "1",
+   "label": "Liquid sensor type"
   },
   "S70601": {
    "code": "S70601",
@@ -3099,7 +3406,7 @@
   "S74601": {
    "code": "S74601",
    "kind": "slots",
-   "slots": 5,
+   "slots": 6,
    "label": "Sensor Config. - Module 1"
   },
   "S74801": {
@@ -3164,21 +3471,6 @@
     [
      "51",
      "VAPOR PROCESSOR"
-    ]
-   ],
-   "code": "S80C01"
-  },
-  "S80C01.ack": {
-   "label": "Standard acknowledge input orientation",
-   "kind": "enum",
-   "choices": [
-    [
-     "41",
-     "NORMALLY OPEN"
-    ],
-    [
-     "42",
-     "NORMALLY CLOSED"
     ]
    ],
    "code": "S80C01"
@@ -3273,11 +3565,17 @@
    "hint": "category, type, device, 00 clear or 01 set",
    "code": "S75B01"
   },
+  "S50900": {
+   "label": "Annual test needed warning",
+   "kind": "flag",
+   "code": "S50900",
+   "wire_line": "ANNUAL TEST WARNINGS:"
+  },
   "S54900": {
    "label": "Tank annual test needed warning",
    "kind": "flag",
    "code": "S54900",
-   "wire_line": "TANK ANN TEST NEEDED WRN:"
+   "wire_line": "TANK ANN TST NEEDED WRN:"
   },
   "S88101.dial": {
    "label": "Dial type",
@@ -3306,9 +3604,10 @@
     2
    ],
    "min": 0,
-   "max": 99,
+   "max": 9,
    "width": 2,
-   "code": "S88101"
+   "code": "S88101",
+   "default": "01"
   },
   "S88501": {
    "code": "S88501",
@@ -3338,11 +3637,18 @@
    "min": 1,
    "max": 9999,
    "width": 4,
-   "code": "S88701"
+   "code": "S88701",
+   "wire_line": "DIAL TONE VALIDATION INTERVAL:",
+   "wire_format": "%4d HOURS"
   },
   "S52101": {
    "label": "Receiver configured",
    "kind": "flag",
+   "words": [
+    "OFF",
+    "ON"
+   ],
+   "default": "OFF",
    "code": "S52101"
   },
   "S52401": {
@@ -3370,7 +3676,9 @@
    "min": 3,
    "max": 99,
    "width": 2,
-   "code": "S52601"
+   "code": "S52601",
+   "mask": "00",
+   "default": "3"
   },
   "S52701": {
    "label": "Dial retry delay, minutes",
@@ -3378,12 +3686,17 @@
    "min": 0,
    "max": 60,
    "width": 2,
-   "code": "S52701"
+   "code": "S52701",
+   "mask": "00"
   },
   "S52801": {
    "label": "Confirmation report",
    "kind": "flag",
-   "code": "S52801"
+   "code": "S52801",
+   "words": [
+    "OFF",
+    "ON"
+   ]
   },
   "S52A01": {
    "label": "Reports to send, NN then two digits each",
@@ -3403,24 +3716,26 @@
   "S63401": {
    "label": "HRM reconciliation warning limit",
    "kind": "float",
-   "min": 0.0,
-   "max": 1000000.0,
+   "min": 1.0,
+   "max": 400.0,
    "code": "S63401",
-   "mask": "000000"
+   "mask": "000000",
+   "default": "000003"
   },
   "S63501": {
    "label": "HRM reconciliation alarm limit",
    "kind": "float",
-   "min": 0.0,
-   "max": 1000000.0,
+   "min": 1.0,
+   "max": 400.0,
    "code": "S63501",
-   "mask": "000000"
+   "mask": "000000",
+   "default": "000004"
   },
   "S60A01": {
    "code": "S60A01",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "Linear calculated full volume, gallons",
    "mask": "000000"
   },
@@ -3428,7 +3743,7 @@
    "code": "S63C01",
    "kind": "float",
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "50 point full volume, gallons",
    "mask": "000000"
   },
@@ -3440,7 +3755,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "4 point full volume, gallons",
    "mask": "000000"
   },
@@ -3452,7 +3767,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point full volume, gallons",
    "mask": "000000"
   },
@@ -3469,7 +3784,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "4 point 75% height volume, gallons"
   },
   "S60501.p50": {
@@ -3480,7 +3795,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "4 point 50% height volume, gallons"
   },
   "S60501.p25": {
@@ -3491,7 +3806,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "4 point 25% height volume, gallons"
   },
   "S60601.p95": {
@@ -3502,7 +3817,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 95% height volume, gallons"
   },
   "S60601.p90": {
@@ -3513,7 +3828,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 90% height volume, gallons"
   },
   "S60601.p85": {
@@ -3524,7 +3839,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 85% height volume, gallons"
   },
   "S60601.p80": {
@@ -3535,7 +3850,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 80% height volume, gallons"
   },
   "S60601.p75": {
@@ -3546,7 +3861,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 75% height volume, gallons"
   },
   "S60601.p70": {
@@ -3557,7 +3872,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 70% height volume, gallons"
   },
   "S60601.p65": {
@@ -3568,7 +3883,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 65% height volume, gallons"
   },
   "S60601.p60": {
@@ -3579,7 +3894,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 60% height volume, gallons"
   },
   "S60601.p55": {
@@ -3590,7 +3905,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 55% height volume, gallons"
   },
   "S60601.p50": {
@@ -3601,7 +3916,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 50% height volume, gallons"
   },
   "S60601.p45": {
@@ -3612,7 +3927,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 45% height volume, gallons"
   },
   "S60601.p40": {
@@ -3623,7 +3938,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 40% height volume, gallons"
   },
   "S60601.p35": {
@@ -3634,7 +3949,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 35% height volume, gallons"
   },
   "S60601.p30": {
@@ -3645,7 +3960,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 30% height volume, gallons"
   },
   "S60601.p25": {
@@ -3656,7 +3971,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 25% height volume, gallons"
   },
   "S60601.p20": {
@@ -3667,7 +3982,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 20% height volume, gallons"
   },
   "S60601.p15": {
@@ -3678,7 +3993,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 15% height volume, gallons"
   },
   "S60601.p10": {
@@ -3689,7 +4004,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 10% height volume, gallons"
   },
   "S60601.p5": {
@@ -3700,7 +4015,7 @@
     8
    ],
    "min": 0.0,
-   "max": 1000000.0,
+   "max": 999999.0,
    "label": "20 point 5% height volume, gallons"
   },
   "chart.code": {
@@ -3768,9 +4083,10 @@
    "prompt": "HOURS:",
    "scope": "system",
    "number": [
-    0,
+    5,
     999
    ],
+   "zero_disables": true,
    "width": 3,
    "default": "024"
   },
@@ -3796,7 +4112,6 @@
    "prompt": "MAX OR LABEL:",
    "scope": "system",
    "choices": [
-    "%MAX",
     "%FULL",
     "VOLUME",
     "HEIGHT"
@@ -3895,11 +4210,24 @@
    ],
    "default": "DISABLED"
   },
+  "set.service_duration": {
+   "kind": "setting",
+   "which": "service_duration",
+   "label": "Service notice session duration",
+   "prompt": "DURATION :",
+   "scope": "system",
+   "number": [
+    1,
+    8
+   ],
+   "width": 1,
+   "default": "2"
+  },
   "set.country": {
    "kind": "setting",
    "which": "country",
    "label": "ISO 3166 country code",
-   "prompt": "",
+   "prompt": "CODE:",
    "scope": "system",
    "maxlen": 3,
    "default": ""
@@ -3911,10 +4239,10 @@
    "prompt": "WATER ALARM FILTER:",
    "scope": "device",
    "choices": [
-    "OFF",
     "LOW",
     "MEDIUM",
-    "HIGH"
+    "HIGH",
+    "OFF"
    ],
    "default": "LOW"
   },
@@ -3953,11 +4281,48 @@
    "maxlen": 6,
    "default": "00, 00"
   },
+  "S51800": {
+   "label": "Alternate language code page",
+   "kind": "enum",
+   "choices": [
+    [
+     "00",
+     "WINDOWS"
+    ],
+    [
+     "01",
+     "DOS"
+    ]
+   ],
+   "code": "S51800",
+   "wire_block": [
+    "CODE PAGE SELECTED:",
+    " {}"
+   ]
+  },
+  "S85100": {
+   "label": "Restore all setup data from EEPROM",
+   "kind": "flag",
+   "code": "S85100",
+   "wire_line": "RESTORE SETUP DATA:"
+  },
+  "S85200": {
+   "label": "Save all setup data to EEPROM",
+   "kind": "flag",
+   "code": "S85200",
+   "wire_line": "SAVE SETUP DATA:"
+  },
+  "S85300": {
+   "label": "Clear all setup data from EEPROM",
+   "kind": "flag",
+   "code": "S85300",
+   "wire_line": "CLEAR SETUP DATA:"
+  },
   "S53000": {
    "code": "S53000",
    "kind": "flag",
    "label": "System beeper",
-   "wire_line": "BEEPER:"
+   "default": "ENABLED"
   },
   "S88901": {
    "code": "S88901",
@@ -4156,7 +4521,7 @@
     240
    ],
    "width": 3,
-   "default": "005"
+   "default": "060"
   },
   "set.tank_test_method": {
    "kind": "setting",
@@ -4211,7 +4576,7 @@
    "which": "evr_high_orvr",
    "scope": "system",
    "label": "Accept high ORVR",
-   "prompt": "ACCEPT HIGH ORVR:",
+   "prompt": "",
    "choices": [
     "ENABLED",
     "DISABLED"
@@ -4244,7 +4609,10 @@
    "prompt": "",
    "choices": [
     "NONE",
-    "ARID PERMEATOR"
+    "VST VAPOR PROCESSOR",
+    "VST GREEN MACHINE",
+    "V-R POLISHER",
+    "HIRT VCS 100"
    ],
    "default": "NONE"
   },
@@ -4263,7 +4631,7 @@
   "set.evr_ps": {
    "kind": "setting",
    "which": "evr_ps",
-   "scope": "system",
+   "scope": "device",
    "label": "Vapor pressure sensor",
    "prompt": "SN#:",
    "choices": [
@@ -4325,6 +4693,10 @@
      "Standard"
     ],
     [
+     "2",
+     "All %Full"
+    ],
+    [
      "3",
      "All Volume"
     ],
@@ -4379,6 +4751,14 @@
    "label": "Custom units type",
    "choices": [
     [
+     "1",
+     "% Max"
+    ],
+    [
+     "2",
+     "% Full"
+    ],
+    [
      "3",
      "Volume"
     ],
@@ -4397,9 +4777,10 @@
   "S64801": {
    "code": "S64801",
    "kind": "float",
-   "label": "Probe water minimum, inches",
+   "label": "Programmable minimum water threshold, inches",
    "min": 0.0,
-   "max": 20.0
+   "max": 1.0,
+   "mask": "0.000"
   },
   "S64B01": {
    "code": "S64B01",
@@ -4449,16 +4830,20 @@
   "S7D801": {
    "code": "S7D801",
    "kind": "float",
-   "min": 0.0,
-   "max": 999999.0,
-   "label": "pressure line leak switchover threshold, gallons"
+   "min": 10.0,
+   "max": 999.0,
+   "label": "pressure line leak switchover threshold, gallons",
+   "min_metric": 37.0,
+   "max_metric": 3781.0
   },
   "S7D901": {
    "code": "S7D901",
    "kind": "float",
-   "min": 0.0,
-   "max": 9999.9,
-   "label": "pressure line leak switchover threshold, inches"
+   "min": 1.0,
+   "max": 99.0,
+   "label": "pressure line leak switchover threshold, inches",
+   "min_metric": 25.4,
+   "max_metric": 2514.0
   },
   "S7DA01": {
    "label": "Auto active pump switchover",
@@ -4472,39 +4857,55 @@
   "S7DB01": {
    "label": "Auto active switchover volume threshold, gallons",
    "kind": "float",
-   "min": 0.0,
-   "max": 100000.0,
+   "min": 10.0,
+   "max": 999.0,
    "code": "S7DB01",
-   "mask": "000",
-   "default": "200"
+   "mask": "0000",
+   "default": "200",
+   "min_metric": 37.0,
+   "max_metric": 3781.0
   },
   "S7DC01": {
    "label": "Auto active switchover height threshold, inches",
    "kind": "float",
-   "min": 0.0,
-   "max": 200.0,
+   "min": 1.0,
+   "max": 99.0,
    "code": "S7DC01",
-   "mask": "0.0",
-   "default": "2.0"
+   "mask": "0000.0",
+   "default": "2.0",
+   "min_metric": 25.4,
+   "max_metric": 2514.0
   },
   "S81101": {
    "code": "S81101",
    "kind": "flag",
-   "label": "External input alternate modes"
+   "label": "External input alternate modes",
+   "words": [
+    "NO",
+    "YES"
+   ]
   },
   "S81201": {
    "code": "S81201",
    "kind": "float",
-   "min": 0.0,
-   "max": 999999.0,
-   "label": "external input switchover threshold, gallons"
+   "min": 10.0,
+   "max": 999.0,
+   "label": "external input switchover threshold, gallons",
+   "min_metric": 37.0,
+   "max_metric": 3781.0,
+   "default": "200",
+   "mask": "0000"
   },
   "S81301": {
    "code": "S81301",
    "kind": "float",
-   "min": 0.0,
-   "max": 9999.9,
-   "label": "external input switchover threshold, inches"
+   "min": 1.0,
+   "max": 99.0,
+   "label": "external input switchover threshold, inches",
+   "min_metric": 25.4,
+   "max_metric": 2514.0,
+   "default": "2.0",
+   "mask": "0000.0"
   },
   "S61101.ondate": {
    "label": "Leak test date",
@@ -4629,7 +5030,8 @@
     4
    ],
    "code": "S51B01",
-   "default": "2:00 AM"
+   "default": "2:00 AM",
+   "pad_hour": true
   },
   "S51B02.date": {
    "label": "Daylight saving end date",
@@ -4652,7 +5054,8 @@
     4
    ],
    "code": "S51B02",
-   "default": "2:00 AM"
+   "default": "2:00 AM",
+   "pad_hour": true
   },
   "S75901.ondate": {
    "label": "Line leak test date",
@@ -4710,7 +5113,8 @@
    "label": "Average daily sales, SUN",
    "prompt": "AVG SALES SUN:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_2": {
    "kind": "setting",
@@ -4719,7 +5123,8 @@
    "label": "Average daily sales, MON",
    "prompt": "AVG SALES MON:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_3": {
    "kind": "setting",
@@ -4728,7 +5133,8 @@
    "label": "Average daily sales, TUE",
    "prompt": "AVG SALES TUE:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_4": {
    "kind": "setting",
@@ -4737,16 +5143,18 @@
    "label": "Average daily sales, WED",
    "prompt": "AVG SALES WED:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_5": {
    "kind": "setting",
    "which": "avg_sales_5",
    "scope": "device",
-   "label": "Average daily sales, THU",
-   "prompt": "AVG SALES THU:",
+   "label": "Average daily sales, THR",
+   "prompt": "AVG SALES THR:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_6": {
    "kind": "setting",
@@ -4755,7 +5163,8 @@
    "label": "Average daily sales, FRI",
    "prompt": "AVG SALES FRI:",
    "default": "0",
-   "mask": "0"
+   "mask": "0",
+   "digits": true
   },
   "set.avg_sales_7": {
    "kind": "setting",
@@ -4764,23 +5173,8 @@
    "label": "Average daily sales, SAT",
    "prompt": "AVG SALES SAT:",
    "default": "0",
-   "mask": "0"
-  },
-  "set.evr_afm_label": {
-   "kind": "setting",
-   "which": "evr_afm_label",
-   "scope": "system",
-   "label": "Air flow meter label",
-   "prompt": "",
-   "default": ""
-  },
-  "set.evr_ps_label": {
-   "kind": "setting",
-   "which": "evr_ps_label",
-   "scope": "system",
-   "label": "Vapor pressure sensor label",
-   "prompt": "",
-   "default": ""
+   "mask": "0",
+   "digits": true
   },
   "S79600": {
    "label": "Periodic reconciliation rolling length, days",
@@ -4844,6 +5238,1119 @@
    "label": "Vapor processor on",
    "prompt": "IWC",
    "default": "+0.000"
+  },
+  "S52501": {
+   "code": "S52501",
+   "kind": "int",
+   "min": 1,
+   "max": 3,
+   "width": 1,
+   "label": "Receiver port number to dial",
+   "mask": "0",
+   "default": "1"
+  },
+  "S78F01": {
+   "label": "PLLD low pressure shutoff, PSI",
+   "kind": "int",
+   "min": 0,
+   "max": 25,
+   "width": 2,
+   "mask": "00",
+   "default": "0",
+   "code": "S78F01",
+   "wire_format": "%d PSI"
+  },
+  "S74B01": {
+   "kind": "slots",
+   "slots": 8,
+   "label": "Universal Sensor Config. - Module 1",
+   "code": "S74B01"
+  },
+  "S74C01": {
+   "kind": "text",
+   "maxlen": 20,
+   "label": "Universal sensor location label",
+   "code": "S74C01"
+  },
+  "S74D01": {
+   "kind": "enum",
+   "label": "Universal sensor type",
+   "choices": [
+    [
+     "1",
+     "TRI-STATE"
+    ],
+    [
+     "2",
+     "NORMALLY CLOSED"
+    ],
+    [
+     "3",
+     "DUAL DIFFERENTIATING"
+    ],
+    [
+     "4",
+     "ULTRA 2"
+    ],
+    [
+     "5",
+     "ULTRA 3"
+    ],
+    [
+     "6",
+     "ULTRA/Z-1"
+    ],
+    [
+     "7",
+     "ULTRA/Z-1 HV"
+    ]
+   ],
+   "code": "S74D01"
+  },
+  "S74E01": {
+   "kind": "enum",
+   "label": "Universal sensor category",
+   "choices": [
+    [
+     "1",
+     "OTHER"
+    ],
+    [
+     "2",
+     "ANNULAR"
+    ],
+    [
+     "3",
+     "DISPENSER PAN"
+    ],
+    [
+     "4",
+     "MONITORING WELL"
+    ],
+    [
+     "5",
+     "STP SUMP"
+    ],
+    [
+     "6",
+     "PIPING SUMP"
+    ]
+   ],
+   "code": "S74E01"
+  },
+  "S72701": {
+   "kind": "int",
+   "min": 0,
+   "max": 9999,
+   "width": 4,
+   "mask": "0000",
+   "label": "MAG sensor alarm upgrade delay, hours",
+   "code": "S72701"
+  },
+  "S72A01": {
+   "kind": "float",
+   "min": 1.0,
+   "max": 500.0,
+   "mask": "0000.0",
+   "wire_format": "%.1f GALLONS",
+   "default": "501",
+   "label": "Vacuum sensor volume, gallons",
+   "code": "S72A01"
+  },
+  "S72B01": {
+   "kind": "enum",
+   "default": "0",
+   "label": "Vacuum sensor relief valve present",
+   "choices": [
+    [
+     "0",
+     "NO"
+    ],
+    [
+     "1",
+     "YES"
+    ]
+   ],
+   "code": "S72B01"
+  },
+  "S72C01": {
+   "kind": "float",
+   "min": -9.0,
+   "max": -5.0,
+   "mask": "0.0",
+   "wire_format": "%.1f PSI",
+   "default": "-9",
+   "label": "Vacuum sensor relief valve pressure, PSI",
+   "code": "S72C01"
+  },
+  "S7C901": {
+   "kind": "enum",
+   "label": "Pump relay monitor type",
+   "choices": [
+    [
+     "1",
+     "PUMP MONITOR RELAY"
+    ],
+    [
+     "2",
+     "VAPOR PROCESSOR"
+    ]
+   ],
+   "code": "S7C901"
+  },
+  "S80401": {
+   "kind": "enum",
+   "default": "1",
+   "label": "Input dispense mode",
+   "choices": [
+    [
+     "1",
+     "STANDARD"
+    ],
+    [
+     "2",
+     "MANIFOLDED: ALTERNATE"
+    ],
+    [
+     "3",
+     "MANIFOLDED: SEQUENTIAL"
+    ],
+    [
+     "4",
+     "MANIFOLDED: ALL PUMPS"
+    ],
+    [
+     "5",
+     "MANIFOLDED: ALTERNATE-HT"
+    ]
+   ],
+   "code": "S80401"
+  },
+  "S72801.warning": {
+   "code": "S72801",
+   "kind": "float",
+   "min": 0.0,
+   "max": 24.0,
+   "mask": "0000.0",
+   "part": [
+    8,
+    8
+   ],
+   "default": "2.0",
+   "label": "MAG sensor water warning height, inches"
+  },
+  "S72801.alarm": {
+   "code": "S72801",
+   "kind": "float",
+   "min": 0.0,
+   "max": 24.0,
+   "mask": "0000.0",
+   "part": [
+    16,
+    8
+   ],
+   "default": "5.0",
+   "label": "MAG sensor water alarm height, inches"
+  },
+  "S72901": {
+   "code": "S72901",
+   "kind": "enum",
+   "choices_from": "pumps",
+   "default": "0000",
+   "label": "Vacuum sensor pump number"
+  },
+  "S52900": {
+   "code": "S52900",
+   "kind": "enum",
+   "default": "0",
+   "label": "Fax auto dial method",
+   "choices": [
+    [
+     "0",
+     "ALL PHONES"
+    ],
+    [
+     "1",
+     "SINGLE PHONE"
+    ]
+   ]
+  },
+  "S7A501": {
+   "label": "WPLLD tank number",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "code": "S7A501",
+   "screen_words": {
+    "0": "NONE"
+   }
+  },
+  "S80C01.orientation": {
+   "label": "External input switch orientation",
+   "kind": "enum",
+   "part": [
+    1,
+    1
+   ],
+   "choices": [
+    [
+     "1",
+     "NORMALLY OPEN"
+    ],
+    [
+     "2",
+     "NORMALLY CLOSED"
+    ]
+   ],
+   "code": "S80C01"
+  },
+  "S80C01.gentanks": {
+   "label": "Generator input tanks",
+   "kind": "list",
+   "part": [
+    2,
+    11
+   ],
+   "default": "00,00,00,00",
+   "code": "S80C01",
+   "screen_words": {
+    "00,00,00,00": "ALL TANK"
+   },
+   "alt": "input_tank"
+  },
+  "S80C01.pumptank": {
+   "label": "Pump sense input tank",
+   "kind": "int",
+   "min": 0,
+   "max": 16,
+   "width": 2,
+   "part": [
+    2,
+    2
+   ],
+   "mask": "00",
+   "code": "S80C01",
+   "screen_words": {
+    "00": "NONE"
+   },
+   "alt": "input_tank"
+  },
+  "set.relay_alm_intank": {
+   "kind": "setting",
+   "which": "relay_alm_intank",
+   "label": "Output relay: In-Tank Alarms assigned",
+   "prompt": "IN-TANK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_liquid": {
+   "kind": "setting",
+   "which": "relay_alm_liquid",
+   "label": "Output relay: Liquid Sensor Alarms assigned",
+   "prompt": "LIQUID SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_vapor": {
+   "kind": "setting",
+   "which": "relay_alm_vapor",
+   "label": "Output relay: Vapor Sensor Alarms assigned",
+   "prompt": "VAPOR SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_input": {
+   "kind": "setting",
+   "which": "relay_alm_input",
+   "label": "Output relay: External Inputs Alarms assigned",
+   "prompt": "EXTERNAL INPUTS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_vlld": {
+   "kind": "setting",
+   "which": "relay_alm_vlld",
+   "label": "Output relay: Line Leak Alarms assigned",
+   "prompt": "LINE LEAK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_gw": {
+   "kind": "setting",
+   "which": "relay_alm_gw",
+   "label": "Output relay: Groundwater Sensor Alarms assigned",
+   "prompt": "GROUNDWATER ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_2wire": {
+   "kind": "setting",
+   "which": "relay_alm_2wire",
+   "label": "Output relay: 2 Wire C.L. Sensor Alarms assigned",
+   "prompt": "2 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_3wire": {
+   "kind": "setting",
+   "which": "relay_alm_3wire",
+   "label": "Output relay: 3 Wire C.L. Sensor Alarms assigned",
+   "prompt": "3 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_mdim": {
+   "kind": "setting",
+   "which": "relay_alm_mdim",
+   "label": "Output relay: Power Side DIM Alarms assigned",
+   "prompt": "POWER SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_recon": {
+   "kind": "setting",
+   "which": "relay_alm_recon",
+   "label": "Output relay: Reconciliation Alarms assigned",
+   "prompt": "RECONCILIATION ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_plld": {
+   "kind": "setting",
+   "which": "relay_alm_plld",
+   "label": "Output relay: Pressure Line Leak Detector Alarms assigned",
+   "prompt": "PRESSURE LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_wplld": {
+   "kind": "setting",
+   "which": "relay_alm_wplld",
+   "label": "Output relay: WPLLD Line Leak Alarms assigned",
+   "prompt": "WPLLD LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_edim": {
+   "kind": "setting",
+   "which": "relay_alm_edim",
+   "label": "Output relay: Communication Side DIM Alarms assigned",
+   "prompt": "COMM SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_smart": {
+   "kind": "setting",
+   "which": "relay_alm_smart",
+   "label": "Output relay: Smart Sensor Alarms assigned",
+   "prompt": "SMART SENSOR ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_pumpmon": {
+   "kind": "setting",
+   "which": "relay_alm_pumpmon",
+   "label": "Output relay: Pump Relay Monitor Alarm assigned",
+   "prompt": "PUMP ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_vmci": {
+   "kind": "setting",
+   "which": "relay_alm_vmci",
+   "label": "Output relay: VMCI Alarms assigned",
+   "prompt": "VMCI ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.relay_alm_vmc": {
+   "kind": "setting",
+   "which": "relay_alm_vmc",
+   "label": "Output relay: VMC Alarms assigned",
+   "prompt": "VMC ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_intank": {
+   "kind": "setting",
+   "which": "plld_dis_intank",
+   "label": "PLLD line disable: In-Tank Alarms assigned",
+   "prompt": "IN-TANK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_liquid": {
+   "kind": "setting",
+   "which": "plld_dis_liquid",
+   "label": "PLLD line disable: Liquid Sensor Alarms assigned",
+   "prompt": "LIQUID SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_vapor": {
+   "kind": "setting",
+   "which": "plld_dis_vapor",
+   "label": "PLLD line disable: Vapor Sensor Alarms assigned",
+   "prompt": "VAPOR SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_input": {
+   "kind": "setting",
+   "which": "plld_dis_input",
+   "label": "PLLD line disable: External Inputs Alarms assigned",
+   "prompt": "EXTERNAL INPUTS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_vlld": {
+   "kind": "setting",
+   "which": "plld_dis_vlld",
+   "label": "PLLD line disable: Line Leak Alarms assigned",
+   "prompt": "LINE LEAK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_gw": {
+   "kind": "setting",
+   "which": "plld_dis_gw",
+   "label": "PLLD line disable: Groundwater Sensor Alarms assigned",
+   "prompt": "GROUNDWATER ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_2wire": {
+   "kind": "setting",
+   "which": "plld_dis_2wire",
+   "label": "PLLD line disable: 2 Wire C.L. Sensor Alarms assigned",
+   "prompt": "2 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_3wire": {
+   "kind": "setting",
+   "which": "plld_dis_3wire",
+   "label": "PLLD line disable: 3 Wire C.L. Sensor Alarms assigned",
+   "prompt": "3 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_mdim": {
+   "kind": "setting",
+   "which": "plld_dis_mdim",
+   "label": "PLLD line disable: Power Side DIM Alarms assigned",
+   "prompt": "POWER SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_recon": {
+   "kind": "setting",
+   "which": "plld_dis_recon",
+   "label": "PLLD line disable: Reconciliation Alarms assigned",
+   "prompt": "RECONCILIATION ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_plld": {
+   "kind": "setting",
+   "which": "plld_dis_plld",
+   "label": "PLLD line disable: Pressure Line Leak Detector Alarms assigned",
+   "prompt": "PRESSURE LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_wplld": {
+   "kind": "setting",
+   "which": "plld_dis_wplld",
+   "label": "PLLD line disable: WPLLD Line Leak Alarms assigned",
+   "prompt": "WPLLD LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_edim": {
+   "kind": "setting",
+   "which": "plld_dis_edim",
+   "label": "PLLD line disable: Communication Side DIM Alarms assigned",
+   "prompt": "COMM SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_smart": {
+   "kind": "setting",
+   "which": "plld_dis_smart",
+   "label": "PLLD line disable: Smart Sensor Alarms assigned",
+   "prompt": "SMART SENSOR ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_pumpmon": {
+   "kind": "setting",
+   "which": "plld_dis_pumpmon",
+   "label": "PLLD line disable: Pump Relay Monitor Alarm assigned",
+   "prompt": "PUMP ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_vmci": {
+   "kind": "setting",
+   "which": "plld_dis_vmci",
+   "label": "PLLD line disable: VMCI Alarms assigned",
+   "prompt": "VMCI ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.plld_dis_vmc": {
+   "kind": "setting",
+   "which": "plld_dis_vmc",
+   "label": "PLLD line disable: VMC Alarms assigned",
+   "prompt": "VMC ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_intank": {
+   "kind": "setting",
+   "which": "wplld_dis_intank",
+   "label": "WPLLD line disable: In-Tank Alarms assigned",
+   "prompt": "IN-TANK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_liquid": {
+   "kind": "setting",
+   "which": "wplld_dis_liquid",
+   "label": "WPLLD line disable: Liquid Sensor Alarms assigned",
+   "prompt": "LIQUID SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_vapor": {
+   "kind": "setting",
+   "which": "wplld_dis_vapor",
+   "label": "WPLLD line disable: Vapor Sensor Alarms assigned",
+   "prompt": "VAPOR SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_input": {
+   "kind": "setting",
+   "which": "wplld_dis_input",
+   "label": "WPLLD line disable: External Inputs Alarms assigned",
+   "prompt": "EXTERNAL INPUTS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_vlld": {
+   "kind": "setting",
+   "which": "wplld_dis_vlld",
+   "label": "WPLLD line disable: Line Leak Alarms assigned",
+   "prompt": "LINE LEAK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_gw": {
+   "kind": "setting",
+   "which": "wplld_dis_gw",
+   "label": "WPLLD line disable: Groundwater Sensor Alarms assigned",
+   "prompt": "GROUNDWATER ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_2wire": {
+   "kind": "setting",
+   "which": "wplld_dis_2wire",
+   "label": "WPLLD line disable: 2 Wire C.L. Sensor Alarms assigned",
+   "prompt": "2 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_3wire": {
+   "kind": "setting",
+   "which": "wplld_dis_3wire",
+   "label": "WPLLD line disable: 3 Wire C.L. Sensor Alarms assigned",
+   "prompt": "3 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_mdim": {
+   "kind": "setting",
+   "which": "wplld_dis_mdim",
+   "label": "WPLLD line disable: Power Side DIM Alarms assigned",
+   "prompt": "POWER SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_recon": {
+   "kind": "setting",
+   "which": "wplld_dis_recon",
+   "label": "WPLLD line disable: Reconciliation Alarms assigned",
+   "prompt": "RECONCILIATION ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_plld": {
+   "kind": "setting",
+   "which": "wplld_dis_plld",
+   "label": "WPLLD line disable: Pressure Line Leak Detector Alarms assigned",
+   "prompt": "PRESSURE LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_wplld": {
+   "kind": "setting",
+   "which": "wplld_dis_wplld",
+   "label": "WPLLD line disable: WPLLD Line Leak Alarms assigned",
+   "prompt": "WPLLD LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_edim": {
+   "kind": "setting",
+   "which": "wplld_dis_edim",
+   "label": "WPLLD line disable: Communication Side DIM Alarms assigned",
+   "prompt": "COMM SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_smart": {
+   "kind": "setting",
+   "which": "wplld_dis_smart",
+   "label": "WPLLD line disable: Smart Sensor Alarms assigned",
+   "prompt": "SMART SENSOR ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_pumpmon": {
+   "kind": "setting",
+   "which": "wplld_dis_pumpmon",
+   "label": "WPLLD line disable: Pump Relay Monitor Alarm assigned",
+   "prompt": "PUMP ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_vmci": {
+   "kind": "setting",
+   "which": "wplld_dis_vmci",
+   "label": "WPLLD line disable: VMCI Alarms assigned",
+   "prompt": "VMCI ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.wplld_dis_vmc": {
+   "kind": "setting",
+   "which": "wplld_dis_vmc",
+   "label": "WPLLD line disable: VMC Alarms assigned",
+   "prompt": "VMC ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_intank": {
+   "kind": "setting",
+   "which": "vlld_dis_intank",
+   "label": "VLLD line disable: In-Tank Alarms assigned",
+   "prompt": "IN-TANK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_liquid": {
+   "kind": "setting",
+   "which": "vlld_dis_liquid",
+   "label": "VLLD line disable: Liquid Sensor Alarms assigned",
+   "prompt": "LIQUID SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_vapor": {
+   "kind": "setting",
+   "which": "vlld_dis_vapor",
+   "label": "VLLD line disable: Vapor Sensor Alarms assigned",
+   "prompt": "VAPOR SENSOR ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_input": {
+   "kind": "setting",
+   "which": "vlld_dis_input",
+   "label": "VLLD line disable: External Inputs Alarms assigned",
+   "prompt": "EXTERNAL INPUTS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_vlld": {
+   "kind": "setting",
+   "which": "vlld_dis_vlld",
+   "label": "VLLD line disable: Line Leak Alarms assigned",
+   "prompt": "LINE LEAK ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_gw": {
+   "kind": "setting",
+   "which": "vlld_dis_gw",
+   "label": "VLLD line disable: Groundwater Sensor Alarms assigned",
+   "prompt": "GROUNDWATER ALMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_2wire": {
+   "kind": "setting",
+   "which": "vlld_dis_2wire",
+   "label": "VLLD line disable: 2 Wire C.L. Sensor Alarms assigned",
+   "prompt": "2 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_3wire": {
+   "kind": "setting",
+   "which": "vlld_dis_3wire",
+   "label": "VLLD line disable: 3 Wire C.L. Sensor Alarms assigned",
+   "prompt": "3 WIRE CL ALARMS:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_mdim": {
+   "kind": "setting",
+   "which": "vlld_dis_mdim",
+   "label": "VLLD line disable: Power Side DIM Alarms assigned",
+   "prompt": "POWER SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_recon": {
+   "kind": "setting",
+   "which": "vlld_dis_recon",
+   "label": "VLLD line disable: Reconciliation Alarms assigned",
+   "prompt": "RECONCILIATION ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_plld": {
+   "kind": "setting",
+   "which": "vlld_dis_plld",
+   "label": "VLLD line disable: Pressure Line Leak Detector Alarms assigned",
+   "prompt": "PRESSURE LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_wplld": {
+   "kind": "setting",
+   "which": "vlld_dis_wplld",
+   "label": "VLLD line disable: WPLLD Line Leak Alarms assigned",
+   "prompt": "WPLLD LINE LEAK:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_edim": {
+   "kind": "setting",
+   "which": "vlld_dis_edim",
+   "label": "VLLD line disable: Communication Side DIM Alarms assigned",
+   "prompt": "COMM SIDE DIM ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_smart": {
+   "kind": "setting",
+   "which": "vlld_dis_smart",
+   "label": "VLLD line disable: Smart Sensor Alarms assigned",
+   "prompt": "SMART SENSOR ALM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_pumpmon": {
+   "kind": "setting",
+   "which": "vlld_dis_pumpmon",
+   "label": "VLLD line disable: Pump Relay Monitor Alarm assigned",
+   "prompt": "PUMP ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_vmci": {
+   "kind": "setting",
+   "which": "vlld_dis_vmci",
+   "label": "VLLD line disable: VMCI Alarms assigned",
+   "prompt": "VMCI ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
+  },
+  "set.vlld_dis_vmc": {
+   "kind": "setting",
+   "which": "vlld_dis_vmc",
+   "label": "VLLD line disable: VMC Alarms assigned",
+   "prompt": "VMC ALARM:",
+   "scope": "device",
+   "choices": [
+    "NO",
+    "YES"
+   ],
+   "default": "NO"
   }
  },
  "setup_menu": [
@@ -4868,7 +6375,8 @@
      "scope": "console",
      "print": {
       "head": "SYSTEM UNITS",
-      "line": " {}"
+      "line": " {}",
+      "gap": 3
      },
      "print_before": "System Language"
     },
@@ -4883,7 +6391,7 @@
      "code": "S50100",
      "field": "S50100.date",
      "scope": "console",
-     "head": "SET: MONTH DAY YEAR",
+     "head": "SET MONTH DAY YEAR",
      "l2": "DATE:",
      "print": {
       "line": "{}",
@@ -4907,7 +6415,8 @@
      "l2": "#%d:",
      "repeat": true,
      "print": {
-      "line": "{}"
+      "line": "{}",
+      "gap": 1
      }
     },
     {
@@ -4918,7 +6427,8 @@
      "l2": "TIME:",
      "repeat": true,
      "print": {
-      "line": "SHIFT TIME %d :{:>9}"
+      "line": "SHIFT TIME %d :{:>9}",
+      "gap": 1
      }
     },
     {
@@ -4927,7 +6437,10 @@
      "when": {
       "software": "bir"
      },
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "gap": 1
+     }
     },
     {
      "text": "Daily BIR Printouts (Enable/Disable)",
@@ -5261,7 +6774,10 @@
      "code": "S50C00",
      "scope": "console",
      "head": "REMOTE PRINTER",
-     "l2": "PAGE EJECT"
+     "l2": "PAGE EJECT",
+     "when": {
+      "module": "rprinter"
+     }
     },
     {
      "text": "Print Tc Volume",
@@ -5270,7 +6786,10 @@
       "module": "probe"
      },
      "scope": "console",
-     "head": "PRINT TC VOLUMES"
+     "head": "PRINT TC VOLUMES",
+     "print": {
+      "gap": 1
+     }
     },
     {
      "text": "Temp Compensation",
@@ -5282,7 +6801,8 @@
      "l2": "VALUE (DEG F):",
      "print": {
       "head": "TEMP COMPENSATION",
-      "line": "VALUE (DEG F ):{:>7}"
+      "line": "VALUE (DEG F ):{:>7}",
+      "gap": 1
      }
     },
     {
@@ -5312,7 +6832,10 @@
     {
      "text": "H-Protocol Data Format",
      "code": "S51400",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "gap": 1
+     }
     },
     {
      "text": "Precision Test Duration (12 - 744 hrs [w/o CSLD]/60 - 744 hrs [w/CSLD])",
@@ -5434,6 +6957,14 @@
      }
     },
     {
+     "text": "Re-direct Local PrintouT (Enable/Disable)",
+     "code": "S51600",
+     "scope": "console",
+     "print": {
+      "gap": 1
+     }
+    },
+    {
      "text": "HRM-QPLD Printouts (Enable/Disable)",
      "code": "S51500",
      "when": {
@@ -5443,15 +6974,13 @@
      "head": "QPLD MONTHLY PRINTOUT"
     },
     {
-     "text": "Re-direct Local PrintouT (Enable/Disable)",
-     "code": "S51600",
-     "scope": "console"
-    },
-    {
      "text": "Euro Protocol Prefix",
      "scope": "console",
      "head": "EURO PROTOCOL PREFIX",
-     "console": "set.euro_prefix"
+     "console": "set.euro_prefix",
+     "print": {
+      "gap": 1
+     }
     },
     {
      "text": "Bdim Trans Alarm Delay",
@@ -5473,7 +7002,8 @@
      "l2": "CODE:",
      "print": {
       "head": "SYSTEM SECURITY",
-      "line": "CODE : {}"
+      "line": "CODE : {}",
+      "gap": 3
      }
     },
     {
@@ -5488,7 +7018,15 @@
      "text": "Tank Chart Security",
      "code": null,
      "console": "chart.code",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "head": "TANK CHART SECURITY",
+      "lines": [
+       "{}"
+      ],
+      "value": "secured",
+      "gap": 2
+     }
     },
     {
      "text": "Console Serial Number",
@@ -5512,10 +7050,32 @@
     },
     {
      "text": "Custom Alarms",
-     "code": "S5BD00",
      "scope": "console",
      "head": "CUSTOM ALARM LABELS",
      "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Custom Alarms",
+     "code": "S5BD00",
+     "scope": "console",
+     "head": "CUSTOM ALARM LABELS",
+     "depth": 1,
+     "print": {
+      "head": "CUSTOM ALARMS",
+      "lines": [
+       "{}"
+      ],
+      "gap": 2
+     }
+    },
+    {
+     "text": "Service Notice",
+     "scope": "console",
+     "head": "SERVICE NOTICE",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "feature": "service"
+     }
     },
     {
      "text": "Service Notice",
@@ -5525,7 +7085,11 @@
      "field": "S56600",
      "when": {
       "feature": "service"
-     }
+     },
+     "print": {
+      "gap": 2
+     },
+     "depth": 1
     },
     {
      "text": "Delivery Override",
@@ -5539,13 +7103,24 @@
       ],
       "module": "probe",
       "feature": "service"
-     }
+     },
+     "depth": 1
     },
     {
      "text": "ISO 3166 Country",
      "scope": "console",
      "head": "ISO 3166 COUNTRY",
-     "console": "set.country"
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "ISO 3166 Country",
+     "scope": "console",
+     "head": "ISO 3166 COUNTRY",
+     "console": "set.country",
+     "print": {
+      "gap": 2
+     },
+     "depth": 1
     },
     {
      "text": "Inventory Alarms Threshold Units",
@@ -5555,7 +7130,15 @@
      "when": {
       "feature": "invthresh"
      },
-     "print_after": "Fiscal Height Security"
+     "print_after": "Fiscal Height Security",
+     "print": {
+      "gap": 1,
+      "section": "INVENTORY ALARMS UNITS",
+      "lines": [
+       "{}"
+      ],
+      "lead": 1
+     }
     },
     {
      "text": "Custom Threshold Max Or Label",
@@ -5657,7 +7240,8 @@
      "scope": "console",
      "head": "BEEPER",
      "code": "S53000",
-     "field": "S53000"
+     "field": "S53000",
+     "sure": "0"
     },
     {
      "text": "Mass/Density",
@@ -5670,7 +7254,11 @@
      "scope": "console",
      "head": "MASS/DENSITY",
      "code": "S56000",
-     "field": "S56000"
+     "field": "S56000",
+     "print": {
+      "gap": 2
+     },
+     "depth": 1
     },
     {
      "text": "Fiscal Height Security",
@@ -5688,7 +7276,11 @@
      "console": "set.fiscal_height",
      "when": {
       "feature": "fiscal"
-     }
+     },
+     "print": {
+      "gap": 2
+     },
+     "depth": 1
     },
     {
      "text": "Alarm Reduction",
@@ -5697,39 +7289,70 @@
      "console": "set.alarm_reduction",
      "when": {
       "feature": "alarmreduce"
+     },
+     "print": {
+      "gap": 2
      }
     }
-   ]
+   ],
+   "print_lead": 0
   },
   {
-   "function": "COMMUNICATION SETUP",
+   "function": "COMMUNICATIONS SETUP",
    "steps": [
     {
      "text": "Baud Rate",
      "code": "S88101",
-     "field": "S88101.baud"
+     "field": "S88101.baud",
+     "print": {
+      "section": "PORT SETTINGS:",
+      "lines": [
+       " BAUD RATE  : {}"
+      ],
+      "head": "COMM BOARD  : %d ({board})"
+     }
     },
     {
      "text": "Parity",
      "code": "S88101",
-     "field": "S88101.parity"
+     "field": "S88101.parity",
+     "print": {
+      "lines": [
+       " PARITY     : {}"
+      ]
+     }
     },
     {
      "text": "Stop Bit",
      "code": "S88101",
-     "field": "S88101.stop"
+     "field": "S88101.stop",
+     "print": {
+      "lines": [
+       " STOP BIT   : {}"
+      ]
+     }
     },
     {
      "text": "Data Length",
      "code": "S88101",
-     "field": "S88101.data"
+     "field": "S88101.data",
+     "print": {
+      "lines": [
+       " DATA LENGTH: {}"
+      ]
+     }
     },
     {
      "text": "Dial Type",
      "code": "S88101",
      "field": "S88101.dial",
      "when": {
-      "module": "modem"
+      "board": "modem"
+     },
+     "print": {
+      "lines": [
+       " DIAL TYPE  : {}"
+      ]
      }
     },
     {
@@ -5737,27 +7360,44 @@
      "code": "S88101",
      "field": "S88101.rings",
      "when": {
-      "module": "modem"
+      "board": "modem"
+     },
+     "print": {
+      "lines": [
+       " ANSWER ON  : {}"
+      ]
      }
     },
     {
      "text": "Security Code",
      "code": "S53601",
-     "l2": "CODE:"
+     "field": "S53601.code",
+     "l2": "CODE:",
+     "print": {
+      "head": "RS-232 SECURITY",
+      "lines": [
+       "CODE : {}"
+      ]
+     }
     },
     {
      "text": "Modem Type",
      "code": "S88501",
      "when": {
-      "module": "modem"
+      "board": "modem"
      },
-     "l2": "SELECT MODEM:"
+     "l2": "SELECT MODEM:",
+     "print": {
+      "lines": [
+       "SELECT MODEM: {}"
+      ]
+     }
     },
     {
      "text": "Modem Setup String",
      "code": "S88601",
      "when": {
-      "module": "modem"
+      "board": "modem"
      },
      "head": "MODEM SETUP STRING",
      "l2": ""
@@ -5766,84 +7406,215 @@
      "text": "Dial Tone Interval",
      "code": "S88701",
      "when": {
-      "module": "modem"
+      "board": "modem"
+     },
+     "print": {
+      "lines": [
+       " DIAL TONE INTERVAL: {}"
+      ]
      }
     },
     {
      "text": "DTR Normal State",
      "code": "S88901",
      "field": "S88901",
-     "l2": "DTR NORMAL STATE:"
+     "l2": "DTR NORMAL STATE:",
+     "when": {
+      "board": [
+       "ssat",
+       "asat"
+      ]
+     },
+     "print": {
+      "lines": [
+       " DTR NORMAL STATE: {}"
+      ]
+     }
     },
     {
      "text": "Auto Transmit Setup",
      "head": "AUTO TRANSMIT SETUP",
-     "body": "PRESS <ENTER>"
+     "body": "PRESS <ENTER>",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     }
     },
     {
      "text": "Transmit Message Setup",
      "head": "TRANSMIT MESSAGE SETUP",
-     "body": "PRESS <ENTER>"
+     "body": "PRESS <ENTER>",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 1
     },
     {
      "text": "Auto Leak Alarm Limit",
      "head": "AUTO LEAK ALARM LIMIT",
-     "console": "set.autotx_1"
+     "console": "set.autotx_1",
+     "print": {
+      "section": "AUTO TRANSMIT SETTINGS:",
+      "gap": 2
+     },
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto High Water Limit",
      "head": "AUTO HIGH WATER LIMIT",
-     "console": "set.autotx_2"
+     "console": "set.autotx_2",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Overfill Limit",
      "head": "AUTO OVERFILL LIMIT",
-     "console": "set.autotx_3"
+     "console": "set.autotx_3",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Low Product",
      "head": "AUTO LOW PRODUCT",
-     "console": "set.autotx_4"
+     "console": "set.autotx_4",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Theft Limit",
      "head": "AUTO THEFT LIMIT",
-     "console": "set.autotx_5"
+     "console": "set.autotx_5",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Delivery Start",
      "head": "AUTO DELIVERY START",
-     "console": "set.autotx_6"
+     "console": "set.autotx_6",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Delivery End",
      "head": "AUTO DELIVERY END",
-     "console": "set.autotx_7"
+     "console": "set.autotx_7",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto External Input On",
      "head": "AUTO EXTERNAL INPUT ON",
-     "console": "set.autotx_8"
+     "console": "set.autotx_8",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto External Input Off",
      "head": "AUTO EXTERNAL INPUT OFF",
-     "console": "set.autotx_9"
+     "console": "set.autotx_9",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Sensor Fuel Alarm",
      "head": "AUTO SENSOR FUEL ALARM",
-     "console": "set.autotx_10"
+     "console": "set.autotx_10",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Sensor Water Alarm",
      "head": "AUTO SENSOR WATER ALARM",
-     "console": "set.autotx_11"
+     "console": "set.autotx_11",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Sensor Out Alarm",
      "head": "AUTO SENSOR OUT ALARM",
-     "console": "set.autotx_12"
+     "console": "set.autotx_12",
+     "devices": "console",
+     "when": {
+      "module": [
+       "rs232",
+       "mt"
+      ]
+     },
+     "depth": 2
     },
     {
      "text": "Auto Delay Time",
@@ -5868,8 +7639,18 @@
        "TRANSMIT",
        "TRANSMIT/REPEAT"
       ],
-      "device": true
-     }
+      "device": true,
+      "and": [
+       {
+        "module": [
+         "rs232",
+         "mt"
+        ]
+       }
+      ]
+     },
+     "devices": "console",
+     "depth": 1
     },
     {
      "text": "Auto Repeat Time",
@@ -5893,96 +7674,234 @@
       "is": [
        "TRANSMIT/REPEAT"
       ],
-      "device": true
-     }
+      "device": true,
+      "and": [
+       {
+        "module": [
+         "rs232",
+         "mt"
+        ]
+       }
+      ]
+     },
+     "devices": "console",
+     "depth": 1
     },
     {
      "text": "Receiver Configuration",
      "code": "S52101",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
      "head": "RCVR CONFIG",
-     "l2": ""
+     "l2": "",
+     "devices": "receiver",
+     "print": {
+      "off": true
+     }
     },
     {
      "text": "Receiver Location",
      "code": "S52201",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "head": "ENTER RCVR LOCATION"
+     "head": "ENTER RCVR LOCATION",
+     "devices": "receiver",
+     "print": {
+      "section": "RECEIVER SETUP:"
+     }
     },
     {
      "text": "Receiver Telephone Number",
      "code": "S52301",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "head": "ENTER RCVR PHONE NO."
+     "head": "ENTER RCVR PHONE NO.",
+     "devices": "receiver",
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Select Modem",
+     "code": "S52501",
+     "when": {
+      "module": [
+       "modem",
+       "ssat"
+      ]
+     },
+     "l2": "SELECT MODEM:",
+     "devices": "receiver",
+     "print": {
+      "lines": [
+       "PORT  NO: {}"
+      ]
+     },
+     "print_after": "Receiver Type",
+     "head": "D%d:"
     },
     {
      "text": "Receiver Type",
      "code": "S52401",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "l2": "RCVR TYPE:"
+     "l2": "RCVR TYPE:",
+     "print": {
+      "lines": [
+       "RCVR TYPE: {:>9}"
+      ],
+      "gap": 1
+     },
+     "devices": "receiver"
     },
     {
      "text": "Retry Number",
      "code": "S52601",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "l2": "DIAL RETRY NUMBER:"
+     "l2": "DIAL RETRY NUMBER:",
+     "print": {
+      "lines": [
+       "RETRY NO: {}"
+      ]
+     },
+     "devices": "receiver"
     },
     {
      "text": "Retry Delay Time",
      "code": "S52701",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "l2": "DIAL RETRY DELAY:"
+     "l2": "DIAL RETRY DELAY:",
+     "print": {
+      "lines": [
+       "RETRY DELAY: {}"
+      ]
+     },
+     "devices": "receiver"
     },
     {
      "text": "Confirmation Report",
      "code": "S52801",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
-     "l2": "CONFIRMATION REPORT:"
+     "l2": "CONFIRMATION REPORT:",
+     "print": {
+      "lines": [
+       "CONFIRMATION REPORT: {}"
+      ]
+     },
+     "devices": "receiver"
     },
     {
      "text": "Receiver Report List",
      "code": "S52A01",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
      "head": "D%d: RCVR REPORT LIST",
+     "l2": "",
+     "devices": "receiver",
+     "print": {
+      "section": "RECEIVER REPORTS:",
+      "off": true
+     }
+    },
+    {
+     "text": "Auto Dial Method (All Phones/Single Phone)",
+     "code": "S52900",
+     "head": "AUTO DIAL METHOD",
+     "l2": "",
+     "devices": "receiver",
+     "when": {
+      "module": [
+       "modem",
+       "ssat"
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Auto-Dial Frequency (On Date/Annually/Monthly/Weekly/Daily/BIR End)",
+     "code": "S52B01",
+     "when": {
+      "module": [
+       "modem",
+       "ssat"
+      ]
+     },
+     "devices": "receiver",
+     "print": {
+      "section": "AUTO DIAL TIME SETUP:",
+      "head": "D%d:",
+      "lines": [],
+      "after": "rcvrdial",
+      "gap": 2
+     },
+     "print_before": "Receiver Report List",
+     "setup_scope": "RCVR",
+     "scope_setting": "dial_method",
      "l2": ""
     },
     {
-     "text": "Auto Dial Method",
-     "code": "S52B01",
-     "when": {
-      "module": "modem"
-     }
+     "text": "RS-232 End Of Message",
+     "code": "S53100",
+     "devices": "console"
     },
     {
      "text": "Auto Dial Alarm",
      "code": "S52C01",
      "when": {
-      "module": "modem"
+      "module": [
+       "modem",
+       "ssat"
+      ]
      },
      "head": "AUTO DIAL ALARM SETUP",
-     "l2": ""
-    },
-    {
-     "text": "RS-232 End Of Message",
-     "code": "S53100"
+     "l2": "",
+     "devices": "receiver",
+     "print": {
+      "break": "AUTO DIAL ALARM SETUP",
+      "head": "D%d:",
+      "lines": [],
+      "after": "rcvralarms"
+     }
     }
-   ]
+   ],
+   "print_lead": 2
   },
   {
    "function": "IN-TANK SETUP",
@@ -5997,12 +7916,26 @@
     },
     {
      "text": "Product Code",
-     "code": "S60301"
+     "code": "S60301",
+     "print": {
+      "lines": [
+       "PRODUCT CODE    :{:>7}"
+      ]
+     }
     },
     {
      "text": "Thermal Coeff.",
      "code": "S60901",
-     "l2": "THERMAL COEFF:"
+     "l2": "THERMAL COEFF:",
+     "print": {
+      "lines": [
+       "THERMAL COEFF   :{:>7}"
+      ],
+      "mask": ".000000"
+     },
+     "when": {
+      "not_siphon_secondary": true
+     }
     },
     {
      "text": "Tank Density",
@@ -6018,13 +7951,24 @@
     },
     {
      "text": "Tank Diameter",
-     "code": "S60701"
+     "code": "S60701",
+     "print": {
+      "lines": [
+       "TANK DIAMETER   :{:>7}"
+      ]
+     }
     },
     {
      "text": "Tank Profile (1 Pt/4 Pts/20 Pts/linear/50 Pts)",
      "code": "S60101",
      "field": "S60101.profile",
-     "profile": true
+     "profile": true,
+     "print": {
+      "lines": [
+       "TANK PROFILE    :{:>7}"
+      ],
+      "value": "panel"
+     }
     },
     {
      "text": "Full Volume",
@@ -6036,7 +7980,13 @@
       "03": "S60A01",
       "04": "S63C01"
      },
-     "l2": "FULL VOL:"
+     "l2": "FULL VOL:",
+     "print": {
+      "lines": [
+       "       FULL VOL :{:>7}"
+      ],
+      "after": "fourpoint"
+     }
     },
     {
      "text": "Tank Capacity",
@@ -6084,7 +8034,8 @@
       "profile": [
        "01"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "50% Volume",
@@ -6094,7 +8045,8 @@
       "profile": [
        "01"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "25% Volume",
@@ -6104,7 +8056,8 @@
       "profile": [
        "01"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "95% Volume",
@@ -6154,7 +8107,8 @@
       "profile": [
        "02"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "70% Volume",
@@ -6204,7 +8158,8 @@
       "profile": [
        "02"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "45% Volume",
@@ -6254,7 +8209,8 @@
       "profile": [
        "02"
       ]
-     }
+     },
+     "print": {}
     },
     {
      "text": "20% Volume",
@@ -6341,11 +8297,28 @@
      "code": "S61501",
      "when": {
       "software": "bir"
+     },
+     "print": {
+      "lines": [
+       "METER DATA      : {}"
+      ]
      }
     },
     {
      "text": "Vapor Loss Factor",
-     "code": "S63D01"
+     "code": "S63D01",
+     "print": {
+      "lines": [
+       "VAPOR LOSS FACTOR: {}"
+      ],
+      "value": "panel"
+     },
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
     },
     {
      "text": "End Factor (None/Flat/Hemispherical/Other)",
@@ -6355,6 +8328,11 @@
       "code": "S61501",
       "is": [
        "1"
+      ]
+     },
+     "print": {
+      "lines": [
+       "END FACTOR: {}"
       ]
      }
     },
@@ -6382,37 +8360,66 @@
        "1"
       ]
      },
-     "l2": "CAL UPDATE:"
+     "l2": "CAL UPDATE:",
+     "print": {
+      "lines": [
+       "CAL UPDATE: {}"
+      ]
+     }
     },
     {
      "text": "Float Size",
-     "code": "S62F01"
-    },
-    {
-     "text": "Water Minimum",
-     "code": "S60E01",
-     "field": "S60E01.watermin",
-     "when": {
-      "feature": "waterthresh"
+     "code": "S62F01",
+     "print": {
+      "lines": [
+       "FLOAT SIZE:{:>13}"
+      ],
+      "gap": 2
      }
     },
     {
      "text": "Water Warning Limit (Not Active For Tanks With High Alcohol Probes)",
      "code": "S62701",
-     "l2": "WATER WARNING:"
+     "l2": "WATER WARNING:",
+     "when": {
+      "water_probe": true
+     },
+     "print": {
+      "lines": [
+       "WATER WARNING   :{:>7}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "High Water Limit (Not Active For Tanks With High Alcohol Probes)",
-     "code": "S62401"
+     "code": "S62401",
+     "when": {
+      "water_probe": true
+     },
+     "print": {
+      "lines": [
+       "HIGH WATER LIMIT:{:>7}"
+      ]
+     }
     },
     {
      "text": "Water Alarm Filter",
-     "console": "set.water_filter"
+     "console": "set.water_filter",
+     "when": {
+      "water_probe": true
+     },
+     "print": {
+      "lines": [
+       "WATER ALARM FILTER:{:>5}"
+      ]
+     }
     },
     {
      "text": "Water Alarm Delay",
      "console": "set.water_delay",
      "when": {
+      "water_probe": true,
       "setting": "water_filter",
       "is": [
        "OFF"
@@ -6421,112 +8428,272 @@
      }
     },
     {
+     "text": "Water Minimum",
+     "code": "S64801",
+     "when": {
+      "feature": "waterthresh",
+      "code": "S62F01",
+      "not": [
+       "9"
+      ]
+     },
+     "print": {
+      "lines": [
+       "WATER MINIMUM :{:>7}"
+      ]
+     },
+     "print_before": "Water Warning Limit"
+    },
+    {
      "text": "Max Or Label Volume",
      "code": "S62801",
-     "l2": "MAX OR LABEL VOL:"
+     "l2": "MAX OR LABEL VOL:",
+     "print": {
+      "head": "MAX OR LABEL",
+      "lines": [
+       "         VOLUME :{:>7}"
+      ],
+      "gap": 2
+     }
     },
     {
      "text": "Overfill Limit",
-     "code": "S62301"
+     "code": "S62301",
+     "print": {
+      "head": "OVERFILL LIMIT",
+      "lines": [
+       "          % MAX :{:>7}",
+       "      (GALLONS) :{gallons:>7}"
+      ],
+      "gap": 1,
+      "mask": "00.0"
+     }
     },
     {
      "text": "High Product",
-     "code": "S62201"
+     "code": "S62201",
+     "print": {
+      "head": "HIGH PRODUCT",
+      "lines": [
+       "          % MAX :{:>7}",
+       "      (GALLONS) :{gallons:>7}"
+      ],
+      "gap": 1,
+      "mask": "00.0"
+     },
+     "print_before": "Overfill Limit"
     },
     {
      "text": "Delivery Limit",
-     "code": "S62901"
+     "code": "S62901",
+     "print": {
+      "head": "DELIVERY LIMIT",
+      "lines": [
+       "          % MAX :{:>7}",
+       "      (GALLONS) :{gallons:>7}"
+      ],
+      "gap": 1,
+      "mask": "00.0"
+     }
     },
     {
      "text": "Low Product",
-     "code": "S62101"
+     "code": "S62101",
+     "print": {
+      "head": "LOW PRODUCT",
+      "lines": [
+       "         VOLUME :{:>7}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Leak Alarm Unit",
      "code": "S62601",
-     "l2": "LEAK ALARM LIMIT:"
+     "l2": "LEAK ALARM LIMIT:",
+     "print": {
+      "lines": [
+       "LEAK ALARM LIMIT:{:>7}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Sudden Loss Limit",
-     "code": "S62501"
+     "code": "S62501",
+     "print": {
+      "lines": [
+       "SUDDEN LOSS LIMIT:{:>6}"
+      ]
+     }
     },
     {
      "text": "Tank Tilt",
-     "code": "S60801"
+     "code": "S60801",
+     "print": {
+      "lines": [
+       "TANK TILT       :{:>7}"
+      ]
+     }
     },
     {
      "text": "Probe Offset",
-     "code": "S60F01"
+     "code": "S60F01",
+     "print": {
+      "lines": [
+       "PROBE OFFSET    :{:>7}"
+      ]
+     }
     },
     {
      "text": "Siphon Manifolded",
      "code": "S61201",
      "head": "T%d: SIPHON MANIFOLDED",
-     "l2": "T#:"
+     "l2": "T#:",
+     "print": {
+      "head": "SIPHON MANIFOLDED TANKS",
+      "lines": [
+       "T#: {}"
+      ],
+      "none": "NONE",
+      "gap": 2
+     }
     },
     {
      "text": "Line Manifolded",
      "code": "S61D01",
      "head": "T%d: LINE MANIFOLDED",
-     "l2": "T#:"
+     "l2": "T#:",
+     "print": {
+      "head": "LINE MANIFOLDED TANKS",
+      "lines": [
+       "T#: {}"
+      ],
+      "none": "NONE"
+     }
     },
     {
      "text": "Leak Minimum Periodic",
      "code": "S63601",
-     "l2": "LEAK MIN PERIODIC:"
+     "l2": "LEAK MIN PERIODIC:",
+     "print": {
+      "lines": [
+       "LEAK MIN PERIODIC:{:>5}%",
+       "                :{gallons:>7}"
+      ],
+      "gap": 2
+     }
     },
     {
      "text": "Leak Minimum Annual",
      "code": "S62A01",
-     "l2": "LEAK MIN ANNUAL:"
+     "l2": "LEAK MIN ANNUAL:",
+     "print": {
+      "lines": [
+       "LEAK MIN ANNUAL :{:>6}%",
+       "                :{gallons:>7}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Periodic Test Type",
      "code": "S62C01",
-     "head": "T%d: PERIODIC TEST TYPE"
+     "head": "T%d: PERIODIC TEST TYPE",
+     "print": {
+      "head": "PERIODIC TEST TYPE",
+      "lines": [
+       "{:>24}"
+      ],
+      "gap": 2
+     }
     },
     {
      "text": "Annual Test Fail Alarm",
      "code": "S62D01",
      "field": "S62D01.annual",
      "head": "T%d: ANNUAL TEST FAIL",
-     "l2": "ALARM"
+     "l2": "ALARM",
+     "print": {
+      "head": "ANNUAL TEST FAIL",
+      "lines": [
+       "          ALARM {:>8}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Periodic Test Fail Alarm",
      "code": "S62D01",
      "field": "S62D01.periodic",
      "head": "T%d: PERIODIC TEST FAIL",
-     "l2": "ALARM"
+     "l2": "ALARM",
+     "print": {
+      "head": "PERIODIC TEST FAIL",
+      "lines": [
+       "          ALARM {:>8}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Gross Test Fail Alarm",
      "code": "S62D01",
      "field": "S62D01.gross",
      "head": "T%d: GROSS TEST FAIL",
-     "l2": "ALARM"
+     "l2": "ALARM",
+     "print": {
+      "head": "GROSS TEST FAIL",
+      "lines": [
+       "          ALARM {:>8}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Annual Test Averaging",
      "code": "S63101",
      "field": "S63101.annual",
-     "l2": "ANN TEST AVERAGING:"
+     "l2": "ANN TEST AVERAGING:",
+     "print": {
+      "lines": [
+       "ANN TEST AVERAGING:{:>5}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Periodic Test Averaging",
      "code": "S63101",
      "field": "S63101.periodic",
-     "l2": "PER TEST AVERAGING:"
+     "l2": "PER TEST AVERAGING:",
+     "print": {
+      "lines": [
+       "PER TEST AVERAGING:{:>5}"
+      ]
+     }
     },
     {
      "text": "Tank Test Notify",
      "code": "S63001",
-     "l2": "TANK TEST NOTIFY:"
+     "l2": "TANK TEST NOTIFY:",
+     "print": {
+      "lines": [
+       "TANK TEST NOTIFY:{:>7}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Tank Test Siphon Break",
      "code": "S63201",
-     "l2": "TNK TST SIPHON BREAK:"
+     "l2": "TNK TST SIPHON BREAK:",
+     "print": {
+      "lines": [
+       "TNK TST SIPHON BREAK:{:>3}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Stick Offset",
@@ -6544,24 +8711,46 @@
      "text": "HRM Reconciliation Warning Limit",
      "code": "S63401",
      "l2": "RECON WARN LIMIT:",
-     "gap": ""
+     "gap": "",
+     "print": {
+      "lines": [
+       "RECON WARN LIMIT:{:>7}"
+      ]
+     }
     },
     {
      "text": "HRM Reconciliation Alarm Limit",
      "code": "S63501",
      "l2": "RECON ALM LIMIT:",
-     "gap": ""
+     "gap": "",
+     "print": {
+      "lines": [
+       "RECON ALM LIMIT :{:>7}"
+      ]
+     }
     },
     {
      "text": "Delivery Delay",
-     "code": "S61001"
+     "code": "S61001",
+     "print": {
+      "lines": [
+       "DELIVERY DELAY  :{:>3} MIN"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Pump Threshold",
      "code": "S63A01",
-     "l2": "PUMP THRESHOLD :"
+     "l2": "PUMP THRESHOLD :",
+     "print": {
+      "lines": [
+       "PUMP THRESHOLD  :{:>6}%"
+      ]
+     }
     }
-   ]
+   ],
+   "print_lead": 1
   },
   {
    "function": "FUEL MANAGEMENT SETUP",
@@ -6611,11 +8800,11 @@
      "align": "right"
     },
     {
-     "text": "Average Daily Sales THU",
+     "text": "Average Daily Sales THR",
      "code": null,
      "console": "set.avg_sales_5",
      "head": "product",
-     "l2": "AVG SALES THU:",
+     "l2": "AVG SALES THR:",
      "align": "right"
     },
     {
@@ -6644,13 +8833,32 @@
      "code": null,
      "head": "LEAK TEST METHOD",
      "scope": "console",
-     "console": "set.tank_test_method"
+     "console": "set.tank_test_method",
+     "print": {
+      "lines": [
+       "TEST {other:<8}: {}"
+      ],
+      "other": "S61101.method"
+     }
     },
     {
      "text": "Test Frequency (On Date/Annually/Monthly/Weekly/Daily/Automatic/CSLD)",
      "code": "S61101",
      "field": "S61101.method",
-     "setup_scope": "TEST"
+     "setup_scope": "TEST",
+     "print": {
+      "when": {
+       "code": "S61101",
+       "part": [
+        3,
+        1
+       ],
+       "not": [
+        "7"
+       ],
+       "default": "1"
+      }
+     }
     },
     {
      "text": "Test Date",
@@ -6742,6 +8950,11 @@
       ],
       "software": "csld",
       "default": "1"
+     },
+     "print": {
+      "lines": [
+       "Pd = {}"
+      ]
      }
     },
     {
@@ -6760,6 +8973,11 @@
       ],
       "software": "csld",
       "default": "1"
+     },
+     "print": {
+      "lines": [
+       "CLIMATE FACTOR:{}"
+      ]
      }
     },
     {
@@ -6777,7 +8995,15 @@
        "7"
       ],
       "software": "csld",
-      "default": "1"
+      "default": "1",
+      "and": [
+       {
+        "code": "S61401",
+        "is": [
+         "2"
+        ]
+       }
+      ]
      }
     },
     {
@@ -6795,40 +9021,103 @@
        "7"
       ],
       "software": "csld",
-      "default": "1"
+      "default": "1",
+      "and": [
+       {
+        "code": "S61401",
+        "is": [
+         "2"
+        ]
+       }
+      ]
      }
     },
     {
      "text": "Gross Test Auto-Confirm (If CSLD select with Pump Sense)",
      "code": "S61B01",
      "l2": "AUTO-CONFIRM:",
-     "setup_scope": "GROSS TEST"
+     "setup_scope": "GROSS TEST",
+     "when": {
+      "module": "pump",
+      "and": [
+       {
+        "code": "S61101",
+        "part": [
+         3,
+         1
+        ],
+        "is": [
+         "7"
+        ],
+        "default": "1"
+       }
+      ]
+     }
     },
     {
      "text": "Test Start Time",
      "code": "S61101",
      "field": "S61101.start",
      "setup_scope": "START TIME",
-     "l2": "TIME:"
+     "l2": "TIME:",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "not": [
+       "7"
+      ],
+      "default": "1"
+     }
     },
     {
      "text": "Leak Test Rate (0.2gph [0.76 lph]/0.1 gph [0.38 lph])",
      "code": "S61101",
      "field": "S61101.rate",
-     "setup_scope": "TEST RATE"
+     "setup_scope": "TEST RATE",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "not": [
+       "7"
+      ],
+      "default": "1"
+     }
     },
     {
      "text": "Test Duration",
      "code": "S61101",
      "field": "S61101.duration",
      "setup_scope": "TEST DURATION",
-     "l2": "DURATION:"
+     "l2": "DURATION:",
+     "when": {
+      "code": "S61101",
+      "part": [
+       3,
+       1
+      ],
+      "not": [
+       "7"
+      ],
+      "default": "1"
+     }
     },
     {
      "text": "Leak Test Early Stop",
      "code": "S61A01",
      "setup_scope": "TST EARLY STOP",
-     "scope_plural": true
+     "scope_plural": true,
+     "print": {
+      "lines": [
+       "TST EARLY STOP:{}"
+      ],
+      "gap": 1
+     }
     },
     {
      "text": "Report Only - if CSLD selected",
@@ -6845,13 +9134,30 @@
       ],
       "software": "csld",
       "default": "1"
-     }
+     },
+     "print": {
+      "head": "REPORT ONLY:",
+      "lines": [
+       "{}"
+      ],
+      "gap": 1
+     },
+     "print_before": "Leak Test Early Stop"
     },
     {
      "text": "Leak Test Report Format (Normal/Enhanced)",
-     "code": "S63300"
+     "code": "S63300",
+     "print": {
+      "head": "LEAK TEST REPORT FORMAT",
+      "lines": [
+       "                {}"
+      ],
+      "gap": 1
+     }
     }
-   ]
+   ],
+   "print_title": "LEAK TEST METHOD",
+   "print_lead": 0
   },
   {
    "function": "PRESSURE LINE LEAK SETUP",
@@ -6873,7 +9179,65 @@
     {
      "text": "Line Length",
      "code": "S78901",
+     "l2": "LINE LENGTH:",
+     "when": {
+      "code": "S78801",
+      "not": [
+       "07",
+       "11",
+       "13",
+       "01",
+       "18"
+      ]
+     }
+    },
+    {
+     "text": "Dual Pipe 1.5 In. Diameter Length",
+     "code": "S78901",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "07",
+       "11",
+       "13"
+      ]
+     },
+     "l2": "1.5 IN DIAM. LEN:"
+    },
+    {
+     "text": "Dual Pipe Second Diameter Length",
+     "code": "S77F01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "07",
+       "11",
+       "13"
+      ]
+     },
      "l2": "LINE LENGTH:"
+    },
+    {
+     "text": "Fiberglass 2.0 In. Diameter Length",
+     "code": "S78901",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "01"
+      ]
+     },
+     "l2": "2.0 IN DIAM. LEN:"
+    },
+    {
+     "text": "Fiberglass 3.0 In. Diameter Length",
+     "code": "S77F01",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "01"
+      ]
+     },
+     "l2": "3.0 IN DIAM. LEN:"
     },
     {
      "text": "User Defined Pipe Type - 1st Line Length",
@@ -6896,6 +9260,28 @@
       ]
      },
      "l2": "2ND LINE LENGTH:"
+    },
+    {
+     "text": "User Defined Pipe Type - 1st Line Diameter",
+     "code": "S77701",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "1ST LINE DIAMETER:"
+    },
+    {
+     "text": "User Defined Pipe Type - 2nd Line Diameter",
+     "code": "S77801",
+     "when": {
+      "code": "S78801",
+      "is": [
+       "18"
+      ]
+     },
+     "l2": "2ND LINE DIAMETER:"
     },
     {
      "text": "User Defined Pipe Type - 1st Bulk Modulus",
@@ -6982,13 +9368,17 @@
      "l2": "LOW PRESSURE SHUTOFF:"
     },
     {
+     "text": "Low Pressure Shutoff Value",
+     "code": "S78F01",
+     "l2": "LOW PRESSURE:"
+    },
+    {
      "text": "Select Tank - in which PLLD controlled pump is installed (None/Select Number)",
      "code": "S78501",
      "when": {
       "tanks": true
      },
-     "head": "Q%d: SELECT TANK",
-     "l2": "TANK#:"
+     "bare": true
     },
     {
      "text": "Dispense Mode",
@@ -7045,7 +9435,35 @@
     {
      "text": "Line Length",
      "code": "S7A901",
-     "l2": "LINE LENGTH:"
+     "l2": "LINE LENGTH:",
+     "when": {
+      "code": "S7A801",
+      "not": [
+       "01"
+      ]
+     }
+    },
+    {
+     "text": "Fiberglass 2.0 In. Diameter Length",
+     "code": "S7A901",
+     "when": {
+      "code": "S7A801",
+      "is": [
+       "01"
+      ]
+     },
+     "l2": "2.0 IN DIAM. LEN:"
+    },
+    {
+     "text": "Fiberglass 3.0 In. Diameter Length",
+     "code": "S7AD01",
+     "when": {
+      "code": "S7A801",
+      "is": [
+       "01"
+      ]
+     },
+     "l2": "3.0 IN DIAM. LEN:"
     },
     {
      "text": "0.2 gph (0.76 lph) Test (Disabled/Repetitive/Monthly/Manual)",
@@ -7069,15 +9487,32 @@
      "l2": "SHUTDOWN RATE:"
     },
     {
-     "text": "Dispense Mode",
-     "code": "S7A601",
-     "head": "W%d: ENTER DISPENSE MODE",
-     "l2": ""
-    },
-    {
      "text": "Pressure Offset Value",
      "code": "S7AF01",
      "l2": "PRESSURE OFFSET:"
+    },
+    {
+     "text": "Select Tank - the tank this WPLLD is connected to (None/Select Number)",
+     "code": "S7A501",
+     "when": {
+      "tanks": true
+     },
+     "head": "W%d: SELECT TANK",
+     "l2": ""
+    },
+    {
+     "text": "Dispense Mode",
+     "code": "S7A601",
+     "head": "W%d: ENTER DISPENSE MODE",
+     "l2": "",
+     "when": {
+      "code": "S7A501",
+      "not": [
+       "",
+       "0",
+       "00"
+      ]
+     }
     }
    ]
   },
@@ -7297,19 +9732,6 @@
      "l2": ""
     },
     {
-     "text": "Auto Active Switchover",
-     "code": null,
-     "scope": "console",
-     "head": "AUTO ACTIVE SWITCHOVER",
-     "body": "PRESS <ENTER>",
-     "when": {
-      "code": "S77301",
-      "is": [
-       "5"
-      ]
-     }
-    },
-    {
      "text": "Active Switchover",
      "code": "S7DA01",
      "head": "S%d: ACTIVE SWITCHOVER",
@@ -7317,6 +9739,7 @@
      "when": {
       "code": "S77301",
       "is": [
+       "2",
        "5"
       ]
      }
@@ -7329,7 +9752,7 @@
      "when": {
       "code": "S77301",
       "is": [
-       "5"
+       "2"
       ]
      }
     },
@@ -7406,47 +9829,95 @@
      "text": "Dispenser Module Data String",
      "code": "S79201",
      "head": "DISP. MODULE DATA STRING",
-     "l2": "EDIM #%d:"
+     "l2": "EDIM #%d:",
+     "when": {
+      "module": [
+       "edim",
+       "mdim"
+      ]
+     }
     },
     {
      "text": "Automatic Daily Closing Time",
      "code": "S79300",
      "head": "AUTOMATIC DAILY CLOSING",
-     "l2": "TIME:"
+     "l2": "TIME:",
+     "print": {
+      "lines": [
+       "TIME:{:>9}"
+      ],
+      "head": "AUTOMATIC DAILY CLOSING",
+      "gap": 2
+     }
     },
     {
      "text": "Auto Shift #1 Closing Time",
      "code": "S79401",
      "l2": "TIME:",
      "scope": "console",
-     "head": "AUTO SHIFT #1 CLOSING"
+     "head": "AUTO SHIFT #1 CLOSING",
+     "print": {
+      "lines": [
+       "TIME:{:>9}"
+      ],
+      "head": "AUTO SHIFT #1 CLOSING",
+      "gap": 1
+     }
     },
     {
      "text": "Auto Shift #2 Closing Time",
      "code": "S79402",
      "l2": "TIME:",
      "scope": "console",
-     "head": "AUTO SHIFT #2 CLOSING"
+     "head": "AUTO SHIFT #2 CLOSING",
+     "print": {
+      "lines": [
+       "TIME:{:>9}"
+      ],
+      "head": "AUTO SHIFT #2 CLOSING",
+      "gap": 1
+     }
     },
     {
      "text": "Auto Shift #3 Closing Time",
      "code": "S79403",
      "l2": "TIME:",
      "scope": "console",
-     "head": "AUTO SHIFT #3 CLOSING"
+     "head": "AUTO SHIFT #3 CLOSING",
+     "print": {
+      "lines": [
+       "TIME:{:>9}"
+      ],
+      "head": "AUTO SHIFT #3 CLOSING",
+      "gap": 1
+     }
     },
     {
      "text": "Auto Shift #4 Closing Time",
      "code": "S79404",
      "l2": "TIME:",
      "scope": "console",
-     "head": "AUTO SHIFT #4 CLOSING"
+     "head": "AUTO SHIFT #4 CLOSING",
+     "print": {
+      "lines": [
+       "TIME:{:>9}"
+      ],
+      "head": "AUTO SHIFT #4 CLOSING",
+      "gap": 1
+     }
     },
     {
      "text": "Periodic Reconciliation Mode (Monthly/Rolling [Length])",
      "code": "S79500",
      "head": "PERIODIC RECONCILIATION",
-     "l2": "MODE:"
+     "l2": "MODE:",
+     "print": {
+      "lines": [
+       "MODE:{:>19}"
+      ],
+      "head": "PERIODIC RECONCILIATION",
+      "gap": 2
+     }
     },
     {
      "text": "Periodic Reconciliation Length",
@@ -7466,61 +9937,124 @@
      "code": "S79700",
      "head": "PERIODIC RECONCILIATION",
      "l2": "ALARM:",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "lines": [
+       "ALARM:{:>18}"
+      ],
+      "head": "PERIODIC RECONCILIATION"
+     }
     },
     {
      "text": "Periodic Reconciliation Alarm Threshold",
      "code": "S79800",
      "head": "PERIODIC RECONCILIATION",
      "l2": "ALARM THRESHOLD:",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "when": {
+       "code": "S79700",
+       "is": [
+        "02"
+       ]
+      }
+     }
     },
     {
      "text": "Periodic Reconciliation Offset",
      "code": "S79900",
      "head": "PERIODIC RECONCILIATION",
      "l2": "ALARM OFFSET:",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "when": {
+       "code": "S79700",
+       "is": [
+        "02"
+       ]
+      }
+     }
     },
     {
      "text": "Remote Report Format (Line/Column)",
      "code": "S79A00",
      "head": "REMOTE REPORT FORMAT",
      "l2": "SELECT:",
-     "scope": "console"
+     "scope": "console",
+     "when": {
+      "module": "rprinter"
+     }
     },
     {
      "text": "Temp Compensation (Standard/TC Vol)",
      "code": "S79F00",
      "head": "TEMP COMPENSATION",
-     "scope": "console"
+     "scope": "console",
+     "print": {
+      "gap": 1
+     }
     },
     {
      "text": "Meter Calibration Offset",
      "code": "S7B200",
      "head": "METER CALIBRATION",
-     "l2": "OFFSET:"
+     "l2": "OFFSET:",
+     "print": {
+      "lines": [
+       "OFFSET:{:>7}%"
+      ],
+      "head": "METER CALIBRATION",
+      "mask": "00.000"
+     },
+     "when": {
+      "software": "bir"
+     }
     },
     {
      "text": "Individual Meter Offset",
-     "code": "S7B400",
      "head": "INDIVIDUAL METER OFFSET",
-     "body": "PRESS <ENTER>"
+     "body": "PRESS <ENTER>",
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     }
     },
     {
      "text": "Meter Offset Row",
      "code": "S7B400",
      "head": "FUEL METER TANK OFFSET",
-     "l2": ""
+     "depth": 1,
+     "when": {
+      "code": "S51C00",
+      "is": [
+       "1"
+      ]
+     },
+     "offset": true,
+     "expand": "meters"
     },
     {
      "text": "Modify Tank/Meter Map",
-     "code": "S7B100",
      "head": "MODIFY TANK/METER MAP",
      "body": "PRESS <ENTER>",
      "scope": "console"
+    },
+    {
+     "text": "Tank/Meter Map Row",
+     "code": "S7B100",
+     "scope": "console",
+     "head": "BUS SLOT FUEL METER TANK",
+     "map": true,
+     "report": "metermap",
+     "depth": 1,
+     "print": {
+      "gap": 1
+     }
     }
-   ]
+   ],
+   "print_lead": 2
   },
   {
    "function": "LIQUID SENSOR SETUP",
@@ -7537,14 +10071,28 @@
      "text": "Sensor Types (Tri-State/NC/Dual Float Hydrostatic/Dual Float Discriminating/Dual Float High",
      "code": "S70301",
      "head": "L%d: ENTER SENSOR TYPE",
-     "l2": ""
+     "l2": "",
+     "field": "S70301",
+     "print": {
+      "lines": [
+       "{}"
+      ]
+     }
     },
     {
      "text": "Category (Annular Space/Dispenser Pan/Monitor Well/STP Sump/Piping Sump/Other)",
      "code": "S70401",
-     "l2": "CATEGORY:"
+     "l2": "CATEGORY:",
+     "print": {
+      "lines": [
+       "CATEGORY : {}"
+      ]
+     },
+     "field": "S70401"
     }
-   ]
+   ],
+   "print_lead": 1,
+   "print_gap": 3
   },
   {
    "function": "VAPOR SENSOR SETUP",
@@ -7652,22 +10200,134 @@
      "l2": ""
     },
     {
-     "text": "Standard ACK (NO/NC)",
+     "text": "Select Orientation (NO/NC)",
      "code": "S80C01",
-     "field": "S80C01.ack",
+     "field": "S80C01.orientation",
+     "head": "I%d: SELECT ORIENTATION",
+     "l2": ""
+    },
+    {
+     "text": "Generator Tank",
+     "code": "S80C01",
+     "field": "S80C01.gentanks",
+     "head": "I%d: SELECT TANK",
+     "l2": "TANK #:",
      "when": {
       "code": "S80C01",
       "is": [
-       "41",
-       "42"
+       "2"
       ],
       "part": [
        0,
-       2
+       1
       ]
-     },
-     "head": "I%d: SELECT ORIENTATION",
-     "l2": ""
+     }
+    },
+    {
+     "text": "Pump Sense Tank",
+     "code": "S80C01",
+     "field": "S80C01.pumptank",
+     "head": "I%d: SELECT TANK",
+     "l2": "",
+     "when": {
+      "code": "S80C01",
+      "is": [
+       "3"
+      ],
+      "part": [
+       0,
+       1
+      ]
+     }
+    },
+    {
+     "text": "Input Dispense Mode",
+     "code": "S80401",
+     "head": "I%d: ENTER DISPENSE MODE",
+     "l2": "",
+     "when": {
+      "code": "S80C01",
+      "is": [
+       "3"
+      ],
+      "part": [
+       0,
+       1
+      ]
+     }
+    },
+    {
+     "text": "Input Active Switchover",
+     "code": "S81101",
+     "head": "I%d: ACTIVE SWITCHOVER",
+     "l2": "ENABLE:",
+     "when": {
+      "code": "S80401",
+      "is": [
+       "2",
+       "5"
+      ],
+      "and": [
+       {
+        "code": "S80C01",
+        "is": [
+         "3"
+        ],
+        "part": [
+         0,
+         1
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "text": "Input Switchover Volume",
+     "code": "S81201",
+     "head": "I%d: SWITCHOVER VOLUME",
+     "l2": "THRESHOLD:",
+     "when": {
+      "code": "S80401",
+      "is": [
+       "2"
+      ],
+      "and": [
+       {
+        "code": "S80C01",
+        "is": [
+         "3"
+        ],
+        "part": [
+         0,
+         1
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "text": "Input Switchover Height",
+     "code": "S81301",
+     "head": "I%d: SWITCHOVER HEIGHT",
+     "l2": "THRESHOLD:",
+     "when": {
+      "code": "S80401",
+      "is": [
+       "5"
+      ],
+      "and": [
+       {
+        "code": "S80C01",
+        "is": [
+         "3"
+        ],
+        "part": [
+         0,
+         1
+        ]
+       }
+      ]
+     }
     }
    ]
   },
@@ -7716,14 +10376,326 @@
      "l2": ""
     },
     {
-     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
-     "code": "S80801",
+     "text": "Relay Assignments - In-Tank Alarms",
+     "console": "set.relay_alm_intank",
      "when": {
-      "code": "S80A01",
-      "not": [
-       "4"
-      ],
-      "default": "1"
+      "module": "probe",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Liquid Sensor Alarms",
+     "console": "set.relay_alm_liquid",
+     "when": {
+      "module": "liquid",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Vapor Sensor Alarms",
+     "console": "set.relay_alm_vapor",
+     "when": {
+      "module": "vapor",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - External Inputs Alarms",
+     "console": "set.relay_alm_input",
+     "when": {
+      "module": "io",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Line Leak Alarms",
+     "console": "set.relay_alm_vlld",
+     "when": {
+      "module": "vlld",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Groundwater Sensor Alarms",
+     "console": "set.relay_alm_gw",
+     "when": {
+      "module": "gw",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - 2 Wire C.L. Sensor Alarms",
+     "console": "set.relay_alm_2wire",
+     "when": {
+      "module": "2wire",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - 3 Wire C.L. Sensor Alarms",
+     "console": "set.relay_alm_3wire",
+     "when": {
+      "module": "3wire",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Power Side DIM Alarms",
+     "console": "set.relay_alm_mdim",
+     "when": {
+      "module": "mdim",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Reconciliation Alarms",
+     "console": "set.relay_alm_recon",
+     "when": {
+      "software": "bir",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Pressure Line Leak Detector Alarms",
+     "console": "set.relay_alm_plld",
+     "when": {
+      "module": "plld",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - WPLLD Line Leak Alarms",
+     "console": "set.relay_alm_wplld",
+     "when": {
+      "module": "wplld",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Communication Side DIM Alarms",
+     "console": "set.relay_alm_edim",
+     "when": {
+      "module": "edim",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Smart Sensor Alarms",
+     "console": "set.relay_alm_smart",
+     "when": {
+      "module": "smart",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - Pump Relay Monitor Alarm",
+     "console": "set.relay_alm_pumpmon",
+     "when": {
+      "module": "pumpmon",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - VMCI Alarms",
+     "console": "set.relay_alm_vmci",
+     "when": {
+      "module": "vmc",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Relay Assignments - VMC Alarms",
+     "console": "set.relay_alm_vmc",
+     "when": {
+      "module": "vmc",
+      "and": [
+       {
+        "code": "S80A01",
+        "not": [
+         "4"
+        ],
+        "default": "1"
+       }
+      ]
+     },
+     "print": {
+      "off": true
      }
     }
    ]
@@ -7732,8 +10704,174 @@
    "function": "PLLD LINE DISABLE SETUP",
    "steps": [
     {
-     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
-     "code": "S78701"
+     "text": "Line Disable - In-Tank Alarms",
+     "console": "set.plld_dis_intank",
+     "when": {
+      "module": "probe"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Liquid Sensor Alarms",
+     "console": "set.plld_dis_liquid",
+     "when": {
+      "module": "liquid"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Vapor Sensor Alarms",
+     "console": "set.plld_dis_vapor",
+     "when": {
+      "module": "vapor"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - External Inputs Alarms",
+     "console": "set.plld_dis_input",
+     "when": {
+      "module": "io"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Line Leak Alarms",
+     "console": "set.plld_dis_vlld",
+     "when": {
+      "module": "vlld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Groundwater Sensor Alarms",
+     "console": "set.plld_dis_gw",
+     "when": {
+      "module": "gw"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 2 Wire C.L. Sensor Alarms",
+     "console": "set.plld_dis_2wire",
+     "when": {
+      "module": "2wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 3 Wire C.L. Sensor Alarms",
+     "console": "set.plld_dis_3wire",
+     "when": {
+      "module": "3wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Power Side DIM Alarms",
+     "console": "set.plld_dis_mdim",
+     "when": {
+      "module": "mdim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Reconciliation Alarms",
+     "console": "set.plld_dis_recon",
+     "when": {
+      "software": "bir"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pressure Line Leak Detector Alarms",
+     "console": "set.plld_dis_plld",
+     "when": {
+      "module": "plld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - WPLLD Line Leak Alarms",
+     "console": "set.plld_dis_wplld",
+     "when": {
+      "module": "wplld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Communication Side DIM Alarms",
+     "console": "set.plld_dis_edim",
+     "when": {
+      "module": "edim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Smart Sensor Alarms",
+     "console": "set.plld_dis_smart",
+     "when": {
+      "module": "smart"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pump Relay Monitor Alarm",
+     "console": "set.plld_dis_pumpmon",
+     "when": {
+      "module": "pumpmon"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMCI Alarms",
+     "console": "set.plld_dis_vmci",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMC Alarms",
+     "console": "set.plld_dis_vmc",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
     }
    ]
   },
@@ -7741,8 +10879,174 @@
    "function": "WPLLD LINE DISABLE SETUP",
    "steps": [
     {
-     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
-     "code": "S7A701"
+     "text": "Line Disable - In-Tank Alarms",
+     "console": "set.wplld_dis_intank",
+     "when": {
+      "module": "probe"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Liquid Sensor Alarms",
+     "console": "set.wplld_dis_liquid",
+     "when": {
+      "module": "liquid"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Vapor Sensor Alarms",
+     "console": "set.wplld_dis_vapor",
+     "when": {
+      "module": "vapor"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - External Inputs Alarms",
+     "console": "set.wplld_dis_input",
+     "when": {
+      "module": "io"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Line Leak Alarms",
+     "console": "set.wplld_dis_vlld",
+     "when": {
+      "module": "vlld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Groundwater Sensor Alarms",
+     "console": "set.wplld_dis_gw",
+     "when": {
+      "module": "gw"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 2 Wire C.L. Sensor Alarms",
+     "console": "set.wplld_dis_2wire",
+     "when": {
+      "module": "2wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 3 Wire C.L. Sensor Alarms",
+     "console": "set.wplld_dis_3wire",
+     "when": {
+      "module": "3wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Power Side DIM Alarms",
+     "console": "set.wplld_dis_mdim",
+     "when": {
+      "module": "mdim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Reconciliation Alarms",
+     "console": "set.wplld_dis_recon",
+     "when": {
+      "software": "bir"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pressure Line Leak Detector Alarms",
+     "console": "set.wplld_dis_plld",
+     "when": {
+      "module": "plld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - WPLLD Line Leak Alarms",
+     "console": "set.wplld_dis_wplld",
+     "when": {
+      "module": "wplld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Communication Side DIM Alarms",
+     "console": "set.wplld_dis_edim",
+     "when": {
+      "module": "edim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Smart Sensor Alarms",
+     "console": "set.wplld_dis_smart",
+     "when": {
+      "module": "smart"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pump Relay Monitor Alarm",
+     "console": "set.wplld_dis_pumpmon",
+     "when": {
+      "module": "pumpmon"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMCI Alarms",
+     "console": "set.wplld_dis_vmci",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMC Alarms",
+     "console": "set.wplld_dis_vmc",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
     }
    ]
   },
@@ -7750,8 +11054,174 @@
    "function": "VLLD LINE DISABLE SETUP",
    "steps": [
     {
-     "text": "Relay Assignments - for each relay except Pump Comm Control types (In-Tank Alarms [None/",
-     "code": "S75B01"
+     "text": "Line Disable - In-Tank Alarms",
+     "console": "set.vlld_dis_intank",
+     "when": {
+      "module": "probe"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Liquid Sensor Alarms",
+     "console": "set.vlld_dis_liquid",
+     "when": {
+      "module": "liquid"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Vapor Sensor Alarms",
+     "console": "set.vlld_dis_vapor",
+     "when": {
+      "module": "vapor"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - External Inputs Alarms",
+     "console": "set.vlld_dis_input",
+     "when": {
+      "module": "io"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Line Leak Alarms",
+     "console": "set.vlld_dis_vlld",
+     "when": {
+      "module": "vlld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Groundwater Sensor Alarms",
+     "console": "set.vlld_dis_gw",
+     "when": {
+      "module": "gw"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 2 Wire C.L. Sensor Alarms",
+     "console": "set.vlld_dis_2wire",
+     "when": {
+      "module": "2wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - 3 Wire C.L. Sensor Alarms",
+     "console": "set.vlld_dis_3wire",
+     "when": {
+      "module": "3wire"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Power Side DIM Alarms",
+     "console": "set.vlld_dis_mdim",
+     "when": {
+      "module": "mdim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Reconciliation Alarms",
+     "console": "set.vlld_dis_recon",
+     "when": {
+      "software": "bir"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pressure Line Leak Detector Alarms",
+     "console": "set.vlld_dis_plld",
+     "when": {
+      "module": "plld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - WPLLD Line Leak Alarms",
+     "console": "set.vlld_dis_wplld",
+     "when": {
+      "module": "wplld"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Communication Side DIM Alarms",
+     "console": "set.vlld_dis_edim",
+     "when": {
+      "module": "edim"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Smart Sensor Alarms",
+     "console": "set.vlld_dis_smart",
+     "when": {
+      "module": "smart"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - Pump Relay Monitor Alarm",
+     "console": "set.vlld_dis_pumpmon",
+     "when": {
+      "module": "pumpmon"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMCI Alarms",
+     "console": "set.vlld_dis_vmci",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
+    },
+    {
+     "text": "Line Disable - VMC Alarms",
+     "console": "set.vlld_dis_vmc",
+     "when": {
+      "module": "vmc"
+     },
+     "print": {
+      "off": true
+     }
     }
    ]
   },
@@ -7769,7 +11239,135 @@
     {
      "text": "Select SS Category (Air Flow Meter[ISD System Device - ref. manual 577013-800]/ Vapor",
      "code": "S72301",
-     "l2": "CATEGORY:"
+     "l2": "",
+     "head": "s %d: SELECT SS CATEGORY"
+    },
+    {
+     "text": "Mag Sensor Setup",
+     "code": null,
+     "scope": "console",
+     "head": "s %d: MAG SENSOR SETUP",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "03"
+      ]
+     }
+    },
+    {
+     "text": "Alm Upgrade Delay (up to 9999 hours, 0 disables)",
+     "code": "S72701",
+     "head": "s %d: (Label)",
+     "l2": "ALM UPGRADE DELAY:",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "03"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Water Warning Height",
+     "code": "S72801",
+     "field": "S72801.warning",
+     "head": "s %d: WATER WARNING",
+     "l2": "WATER HT     >",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "03"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Water Alarm Height",
+     "code": "S72801",
+     "field": "S72801.alarm",
+     "head": "s %d: WATER ALARM",
+     "l2": "WATER HT     >",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "03"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Vac Sensor Setup",
+     "code": null,
+     "scope": "console",
+     "head": "s %d: VAC SENSOR SETUP",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "04"
+      ]
+     }
+    },
+    {
+     "text": "Select Pump # (PLLD/WPLLD/Output Relay)",
+     "code": "S72901",
+     "head": "s %d: SELECT PUMP #",
+     "l2": "",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "04"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Interstitial Volume (1 to 500 gallons)",
+     "code": "S72A01",
+     "head": "s %d: (Label)",
+     "l2": "VOLUME:",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "04"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Relief Valve (Yes/No)",
+     "code": "S72B01",
+     "head": "s %d: (Label)",
+     "l2": "RELIEF VALVE:",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "04"
+      ]
+     },
+     "depth": 1
+    },
+    {
+     "text": "Relief Valve Pressure (-5 to -9 PSI)",
+     "code": "S72C01",
+     "head": "s %d: (Label)",
+     "l2": "RELIEF VALVE PRESSURE:",
+     "when": {
+      "code": "S72301",
+      "is": [
+       "04"
+      ],
+      "and": [
+       {
+        "code": "S72B01",
+        "is": [
+         "1"
+        ]
+       }
+      ]
+     },
+     "depth": 1
     }
    ]
   },
@@ -7777,10 +11375,17 @@
    "function": "EVR/ISD SETUP",
    "steps": [
     {
+     "text": "EVR Type Menu",
+     "scope": "console",
+     "head": "EVR TYPE",
+     "body": "PRESS <ENTER>"
+    },
+    {
      "text": "EVR Type (Balance/Vacuum Assist)",
      "scope": "console",
      "head": "EVR TYPE",
-     "console": "set.evr_type"
+     "console": "set.evr_type",
+     "depth": 1
     },
     {
      "text": "Vacuum Assist Type (Vapor Vac/Healy Vac)",
@@ -7792,83 +11397,140 @@
       "is": [
        "VACUUM ASSIST"
       ]
-     }
+     },
+     "depth": 1
     },
     {
      "text": "Accept High ORVR (Enabled/Disabled)",
      "scope": "console",
-     "head": "ACCEPT HIGH ORVR",
+     "head": "ACCEPT HIGH ORVR:",
      "console": "set.evr_high_orvr"
     },
     {
-     "text": "Nozzle A/L Range Minimum",
+     "text": "Nozzle A/L Range Menu",
      "scope": "console",
      "head": "NOZZLE A/L RANGE",
-     "l2": "MIN:",
-     "console": "set.evr_al_min"
+     "body": "PRESS <ENTER>"
     },
     {
      "text": "Nozzle A/L Range Maximum",
      "scope": "console",
      "head": "NOZZLE A/L RANGE",
      "l2": "MAX:",
-     "console": "set.evr_al_max"
+     "console": "set.evr_al_max",
+     "depth": 1
     },
     {
-     "text": "Vapor Processor Type (None/Arid Permeator)",
+     "text": "Nozzle A/L Range Minimum",
+     "scope": "console",
+     "head": "NOZZLE A/L RANGE",
+     "l2": "MIN:",
+     "console": "set.evr_al_min",
+     "depth": 1
+    },
+    {
+     "text": "Vapor Processor Setup",
+     "scope": "console",
+     "head": "VAPOR PROCESSOR SETUP",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Vapor Processor Type (None/VST/Green Machine/Polisher/Hirt)",
      "scope": "console",
      "head": "VAPOR PROCESSOR TYPE",
-     "console": "set.evr_vp_type"
+     "console": "set.evr_vp_type",
+     "depth": 1
+    },
+    {
+     "text": "Airflow Meter Select",
+     "scope": "console",
+     "head": "AIRFLOW METER SELECT",
+     "body": "PRESS <ENTER>"
     },
     {
      "text": "Air Flow Meter Enable/Disable",
      "head": "LABEL: (AFM label)",
      "l2": "SN#:",
-     "console": "set.evr_afm"
+     "console": "set.evr_afm",
+     "depth": 1,
+     "smart_kind": "01"
+    },
+    {
+     "text": "Pressure Sensor Select",
+     "scope": "console",
+     "head": "PRESSURE SENSOR SELECT",
+     "body": "PRESS <ENTER>"
     },
     {
      "text": "Vapor Pressure Sensor Enable/Disable",
-     "scope": "console",
      "head": "LABEL: (PS label)",
      "l2": "SN#:",
-     "console": "set.evr_ps"
+     "console": "set.evr_ps",
+     "depth": 1,
+     "smart_kind": "02"
+    },
+    {
+     "text": "Fuel Hose Table Setup",
+     "scope": "console",
+     "head": "FUEL HOSE TABLE SETUP",
+     "body": "PRESS <ENTER>"
+    },
+    {
+     "text": "Edit Fuel Hose Labels Menu",
+     "scope": "console",
+     "head": "EDIT FUEL HOSE LABELS",
+     "body": "PRESS <ENTER>",
+     "depth": 1
     },
     {
      "text": "Edit Fuel Hose Labels",
      "head": "HOSE LABEL %d",
      "console": "set.evr_hose_name",
-     "repeat": true
+     "repeat": true,
+     "depth": 2
+    },
+    {
+     "text": "Edit Fuel Hose",
+     "scope": "console",
+     "head": "EDIT FUEL HOSE %d",
+     "body": "PRESS <ENTER>",
+     "depth": 1
     },
     {
      "text": "Fuel Position Label",
      "head": "h%d: FUEL POS LABEL",
      "console": "set.evr_fuel_pos",
-     "repeat": true
+     "repeat": true,
+     "depth": 2
     },
     {
      "text": "Assign Hose Label",
      "head": "h%d: ASSIGN HOSE LABEL",
      "console": "set.evr_hose_label",
-     "repeat": true
+     "repeat": true,
+     "depth": 2
     },
     {
      "text": "Assign AF Meter ID",
      "head": "h%d: ASSIGN AF METER ID",
      "console": "set.evr_afm_id",
-     "repeat": true
+     "repeat": true,
+     "depth": 2
     },
     {
      "text": "Add New Fuel Hose",
      "head": "ADD NEW FUEL HOSE %d",
      "body": "PRESS <ENTER>",
-     "isdflow": "addhose"
+     "isdflow": "addhose",
+     "depth": 1
     },
     {
      "text": "Clear Fuel Hose",
      "head": "CLEAR FUEL HOSE %d",
      "body": "PRESS <ENTER>",
      "isdflow": "clearhose",
-     "repeat": true
+     "repeat": true,
+     "depth": 1
     },
     {
      "text": "Auto Map Grade - Hose",
@@ -7889,16 +11551,33 @@
      }
     },
     {
+     "text": "Set Analysis Times",
+     "scope": "console",
+     "head": "SET ANALYSIS TIMES",
+     "body": "PRESS <ENTER>",
+     "when": {
+      "isd_hoses": true
+     }
+    },
+    {
      "text": "Set Analysis Start Time",
      "scope": "console",
      "head": "SET START TIME",
-     "console": "set.evr_start_time"
+     "console": "set.evr_start_time",
+     "depth": 1,
+     "when": {
+      "isd_hoses": true
+     }
     },
     {
      "text": "Set Post Delay Duration",
      "scope": "console",
      "head": "SET POST DELAY DURATION",
-     "console": "set.evr_post_delay"
+     "console": "set.evr_post_delay",
+     "depth": 1,
+     "when": {
+      "isd_hoses": true
+     }
     }
    ]
   },
@@ -7937,7 +11616,8 @@
      "code": null,
      "scope": "console",
      "console": "vmc.serial",
-     "head": "ADD VMC SERIAL NUMBER"
+     "head": "ADD VMC SERIAL NUMBER",
+     "depth": 1
     },
     {
      "text": "Edit VMC Serial Number",
@@ -7951,7 +11631,8 @@
      "code": null,
      "scope": "console",
      "console": "vmc.serial",
-     "head": "EDIT VMC SERIAL NUMBER"
+     "head": "EDIT VMC SERIAL NUMBER",
+     "depth": 1
     },
     {
      "text": "Remove VMC Serial Number",
@@ -7964,8 +11645,12 @@
      "text": "Remove VMC Serial Number Entry",
      "code": null,
      "scope": "console",
-     "console": "vmc.serial",
-     "head": "REMOVE VMC SERIAL NUMBER"
+     "head": "REMOVE VMC SERIAL NUMBER",
+     "vmc": "remove",
+     "depth": 1,
+     "print": {
+      "off": true
+     }
     }
    ]
   },

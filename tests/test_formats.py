@@ -61,7 +61,7 @@ def send(h, cmd):
 
 
 def refused(h, cmd):
-    return send(h, cmd).strip(chr(1) + chr(3)).startswith("9999")
+    return send(h, cmd).strip(chr(1) + chr(3) + chr(13) + chr(10)).startswith("9999")
 
 
 class ItCatchesGarbage(unittest.TestCase):

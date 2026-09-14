@@ -20,7 +20,7 @@
     "live": "water"
    },
    {
-    "text": "TEMPERATURE",
+    "text": "TEMP",
     "live": "temperature"
    },
    {
@@ -30,6 +30,10 @@
    {
     "text": "TC VOLUME",
     "live": "tc_volume"
+   },
+   {
+    "text": "DELIVERY",
+    "live": "delivery"
    },
    {
     "text": "DENSITY",
@@ -52,12 +56,11 @@
     }
    },
    {
-    "text": "DELIVERY",
-    "live": "delivery"
-   },
-   {
     "text": "NEXT DELIVER DENSITY",
     "live": "next_density",
+    "head": "T %d: NEXT DELIVERY",
+    "reading": "DENSITY = {}",
+    "density": "0",
     "when": {
      "code": "S56000",
      "is": [
@@ -68,11 +71,15 @@
    {
     "text": "LAST DELIVERY DENSITY",
     "live": "last_density",
+    "head": "T %d: LAST DELIVERY",
+    "reading": "DENSITY = {}",
+    "density": "1",
     "when": {
      "code": "S56000",
      "is": [
       "1"
-     ]
+     ],
+     "has_delivery": true
     }
    }
   ],
@@ -89,43 +96,86 @@
     "choices": [
      "EDIT/VIEW",
      "INSERT"
-    ]
+    ],
+    "sel_label": "SELECT"
    },
    {
     "text": "TICKET VOLUME",
     "live": null,
-    "dlv": "ticket"
+    "dlv": "ticket",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "EDIT/VIEW"
+     ]
+    }
    },
    {
     "text": "BOL",
     "live": null,
     "dlv": "bol",
-    "print_scope": "device"
+    "print_scope": "device",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "EDIT/VIEW"
+     ]
+    }
    },
    {
     "text": "PRIOR DLVY FOR TANK",
     "live": null,
-    "dlv": "prior"
+    "dlv": "prior",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "EDIT/VIEW"
+     ]
+    }
    },
    {
-    "text": "ENTER DLVY DATE",
+    "text": "ENTER DELIVERY DATE",
     "live": null,
-    "dlv": "date"
+    "dlv": "date",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "INSERT"
+     ]
+    }
    },
    {
-    "text": "ENTER DLVY TIME",
+    "text": "ENTER DELIVERY TIME",
     "live": null,
-    "dlv": "time"
+    "dlv": "time",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "INSERT"
+     ]
+    }
    },
    {
     "text": "ENTER TICKET VOLUME",
     "live": null,
-    "dlv": "insert"
+    "dlv": "insert",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "INSERT"
+     ]
+    }
    },
    {
     "text": "BOL",
     "live": null,
-    "dlv": "insertbol"
+    "dlv": "insertbol",
+    "when": {
+     "sel": "dlv_mode",
+     "is": [
+      "INSERT"
+     ]
+    }
    }
   ],
   "when": {
@@ -164,58 +214,105 @@
   "steps": [
    {
     "text": "PRINT SHORT REPORT",
-    "live": null
+    "head": "function",
+    "body": "PRINT SHORT REPORT",
+    "print_scope": "short"
    },
    {
     "text": "DAYS FUEL REMAINING",
-    "live": "days_fuel",
-    "print_scope": "device"
+    "live": "fuel_days",
+    "head": "product"
    },
    {
     "text": "INVENTORY",
-    "live": "volume"
+    "live": "fuel_inventory",
+    "head": "product"
    },
    {
     "text": "95% ULLAGE",
-    "live": "ullage95",
-    "head": "T %d: (PRODUCT LABEL)",
-    "l2": "95% ULLAGE"
+    "live": "fuel_ullage95",
+    "head": "product"
    },
    {
-    "text": "AVG. DAILY SALES SUN. - SAT.",
-    "live": "avg_sales"
+    "text": "AVG SALES-SUN",
+    "live": "fuel_avg_SUN",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-MON",
+    "live": "fuel_avg_MON",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-TUE",
+    "live": "fuel_avg_TUE",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-WED",
+    "live": "fuel_avg_WED",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-THR",
+    "live": "fuel_avg_THR",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-FRI",
+    "live": "fuel_avg_FRI",
+    "head": "product"
+   },
+   {
+    "text": "AVG SALES-SAT",
+    "live": "fuel_avg_SAT",
+    "head": "product"
    }
   ],
   "when": {
    "software": "fuelman"
   },
-  "print": "fuel"
+  "print": "fuel",
+  "scope": "product"
  },
  {
-  "function": "LAST SHIFT INVENTORY",
+  "function": "LAST-SHIFT INVENTORY",
   "requires": "probe",
   "steps": [
    {
     "text": "BEGINNING INVENTORY",
     "live": "shift_opening",
-    "print_scope": "device"
+    "print_scope": "device",
+    "reading": "BEGIN INVENTORY: {}"
    },
    {
     "text": "ENDING INVENTORY",
-    "live": "shift_physical"
+    "live": "shift_physical",
+    "reading": "END INVENTORY: {}"
    },
    {
-    "text": "ADJUSTMENT DELIVERY",
-    "live": "shift_deliveries"
+    "text": "DELIVERY ADJUSTMENT",
+    "live": "shift_deliveries",
+    "reading": "DLVY ADJUSTMENT: {}",
+    "when": {
+     "code": "S51C00",
+     "is": [
+      "0",
+      ""
+     ]
+    }
    },
    {
     "text": "GROSS CHANGE",
-    "live": "shift_gross"
+    "live": "shift_gross",
+    "reading": "GROSS CHANGE: {}"
    },
    {
-    "text": "GROSS CURRENT SHIFT NOW (No/Yes)",
+    "text": "CLOSE CURRENT SHIFT",
     "live": null,
-    "action": "close:shift"
+    "action": "close:shift",
+    "head": "plain",
+    "body": "CLOSE NOW: NO"
    }
   ],
   "when": {
@@ -230,15 +327,18 @@
    {
     "text": "GROSS",
     "live": "result_tank_gross",
-    "print_scope": "device"
+    "print_scope": "device",
+    "reading": "GRS: {}"
    },
    {
     "text": "PERIODIC",
-    "live": "result_tank_periodic"
+    "live": "result_tank_periodic",
+    "reading": "PER: {}"
    },
    {
     "text": "ANNUAL",
-    "live": "result_tank_annual"
+    "live": "result_tank_annual",
+    "reading": "ANN: {}"
    }
   ],
   "print": "tank_tests"
@@ -282,19 +382,16 @@
     "text": "3.0 gph (11.3 lph) TEST",
     "live": "result_plld_gross",
     "print_scope": "device",
-    "runtest": "plld:gross",
     "head": "Q %d: PLLD #%d"
    },
    {
     "text": "0.2 gph (0.76 lph) TEST",
     "live": "result_plld_periodic",
-    "runtest": "plld:periodic",
     "head": "Q %d: PLLD #%d"
    },
    {
     "text": "0.1 gph (0.38 lph) TEST",
     "live": "result_plld_annual",
-    "runtest": "plld:annual",
     "head": "Q %d: PLLD #%d"
    },
    {
@@ -307,7 +404,7 @@
   "print": "plld_tests"
  },
  {
-  "function": "START LINE PRESSURE TEST",
+  "function": "START PRESSURE LINE TEST",
   "requires": "plld",
   "steps": [
    {
@@ -349,7 +446,7 @@
   "scope": "plld"
  },
  {
-  "function": "STOP PRESSURE TEST",
+  "function": "STOP PRESSURE LINE TEST",
   "requires": "plld",
   "steps": [
    {
@@ -379,23 +476,20 @@
     "text": "3.0 gph (11.3 lph) TEST",
     "live": "result_wplld_gross",
     "print_scope": "device",
-    "runtest": "wplld:gross",
-    "head": "W %d: WPLLD #%d"
+    "head": "W %d: WPLLD NUMBER %d"
    },
    {
     "text": "0.2 gph (0.76 lph) TEST",
     "live": "result_wplld_periodic",
-    "runtest": "wplld:periodic",
-    "head": "W %d: WPLLD #%d"
+    "head": "W %d: WPLLD NUMBER %d"
    },
    {
     "text": "0.1 gph (0.38 lph) TEST",
     "live": "result_wplld_annual",
-    "runtest": "wplld:annual",
-    "head": "W %d: WPLLD #%d"
+    "head": "W %d: WPLLD NUMBER %d"
    },
    {
-    "text": "PRESS PRINT FOR HISTORY",
+    "text": "PRESS <PRINT> FOR HISTORY",
     "live": null,
     "history": "wplld",
     "print_scope": "device"
@@ -459,10 +553,10 @@
     ]
    },
    {
-    "text": "STOP LINE TEST",
+    "text": "STOP LEAK TEST",
     "live": null,
     "action": "stop:wplld",
-    "head_scope": "STOP LINE TEST"
+    "head_scope": "STOP LEAK TEST"
    }
   ],
   "print": "wplld_tests",
@@ -570,7 +664,8 @@
   "steps": [
    {
     "text": "SENSOR STATUS",
-    "live": "sensor_liquid"
+    "live": "sensor_liquid",
+    "reading": "{}"
    }
   ],
   "print": "sensors:liquid"
@@ -581,7 +676,8 @@
   "steps": [
    {
     "text": "SENSOR STATUS",
-    "live": "sensor_vapor"
+    "live": "sensor_vapor",
+    "reading": "{}"
    }
   ],
   "print": "sensors:vapor"
@@ -592,7 +688,8 @@
   "steps": [
    {
     "text": "SENSOR STATUS",
-    "live": "sensor_gw"
+    "live": "sensor_gw",
+    "reading": "{}"
    }
   ],
   "print": "sensors:gw"
@@ -603,7 +700,8 @@
   "steps": [
    {
     "text": "SENSOR STATUS",
-    "live": "sensor_2wire"
+    "live": "sensor_2wire",
+    "reading": "{}"
    }
   ],
   "print": "sensors:2wire"
@@ -614,7 +712,8 @@
   "steps": [
    {
     "text": "SENSOR STATUS",
-    "live": "sensor_3wire"
+    "live": "sensor_3wire",
+    "reading": "{}"
    }
   ],
   "print": "sensors:3wire"
@@ -704,8 +803,22 @@
   "requires": "io",
   "steps": [
    {
-    "text": "ENTER RELAY NUMBER",
-    "live": "relay_test"
+    "text": "ENTER RELAY NUMBER #",
+    "head": "function",
+    "body": "ENTER RELAY NUMBER #",
+    "pick": "device",
+    "print_scope": "device"
+   },
+   {
+    "text": "PUSH ALARM/TEST KEY",
+    "head": "device",
+    "body": "PUSH ALARM/TEST KEY"
+   },
+   {
+    "text": "ON - PRESS ANY KEY",
+    "head": "device",
+    "live": "relay_test",
+    "reading": "{} - PRESS ANY KEY"
    }
   ],
   "print": "relay_setup"
@@ -764,7 +877,8 @@
     "live": null,
     "action": "sump:stop"
    }
-  ]
+  ],
+  "print": "sensors:smart"
  },
  {
   "function": "SMART SENSOR STATUS",
@@ -772,7 +886,8 @@
   "steps": [
    {
     "text": "SS STATUS",
-    "live": "sensor_smart"
+    "live": "sensor_smart",
+    "reading": "{}"
    }
   ],
   "print": "sensors:smart"

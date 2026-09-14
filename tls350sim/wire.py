@@ -23,6 +23,7 @@ shares its framing code with the thing under test cannot catch a framing bug.
 """
 import json
 import os
+import re
 import socket
 import threading
 import time
@@ -32,6 +33,7 @@ from .console import describe_alarms
 from . import fieldio
 from . import alarmreports
 from . import controls
+from . import delivery
 from . import recon
 from . import hrmreports
 from . import sumpreports
@@ -40,6 +42,7 @@ from . import packed
 from . import readings
 from . import versions
 from . import wirelines
+from . import wiretables
 from tls350sim import formats
 from tls350sim import wirelists
 from tls350sim import wirelater
@@ -63,6 +66,18 @@ CR = b"\r"
 # "If the system receives a command message string containing a function code
 # that it does not recognize, it will respond with a <SOH>9999FF1B<ETX>."
 NOT_UNDERSTOOD = SOH + b"9999FF1B" + ETX
+
+# 888's connect type for a command that arrived on the serial port,
+# "06=RS232 REQUEST". See `note_comm`.
+RS232_REQUEST = "06"
+
+
+# What the manual titles each Display response and the columns it draws it
+# in, read off its own pages by tools/build_wire_titles.py. It lives in
+# `wiretables` so that a renderer in any of the wire modules can read it
+# without importing this one back. Absent for a code the manual prints no
+# display response for, which is why every use is a .get().
+WIRE_TITLES = wiretables.TITLES
 
 
 def checksum(message):
@@ -99,6 +114,25 @@ def stamp(console=None):
 SHORT_COMMANDS = {"200": "I20100"}
 
 
+def _sent_token(raw, folded):
+    """The three token characters as the caller typed them.
+
+    `parse_command` folds the token to upper case so one dispatch table can
+    serve either format, but the reply echoes what was sent.
+    """
+    try:
+        body = raw.lstrip(SOH).rstrip(CR).decode("ascii", "replace")
+    except AttributeError:
+        return folded
+    body = body.rstrip("\r\n\x00")
+    if body in SHORT_COMMANDS:
+        body = SHORT_COMMANDS[body]
+    if len(body) > 6 and body[0].isdigit():
+        body = body[6:]
+    sent = body[1:4]
+    return sent if sent.upper() == folded else folded
+
+
 def parse_command(raw):
     """(security, letter, token, device, data)."""
     body = raw.lstrip(SOH).rstrip(CR).decode("ascii", "replace")
@@ -131,9 +165,37 @@ REPORTS = {"101", "102", "111", "112", "201", "202", "203", "204", "205",
            "B91", "B93", "B94", "C03", "C04", "132"}
 REPORTS |= set(recon.RECON)
 REPORTS |= {"113", "114", "115", "116", "119", "11A", "11B"}
+# 121 is in no manual on this shelf -- not in the body, not in the index --
+# and a real console answers it. `tests/console_capture/raw/I12100.bin` comes
+# back with `ACTIVE ALARMS REPORT` over
+# `ID  CATEGORY  DESCRIPTION          ALARM TYPE             DATE    TIME`,
+# which is 113's title and 113's heading, character for character; 120 and
+# 122 either side of it are refused. This console refused all three.
+#
+# The captured console had no alarms standing, so what the capture CANNOT say
+# is whether 121 differs from 113 in which alarms it lists -- both are empty
+# on a quiet console. Answering it as 113 is the reading that fits everything
+# known; the alternative, going on refusing a code the hardware answers, fits
+# nothing. See FIDELITY S17.
+REPORTS |= {"121"}
 REPORTS |= {"212", "213", "214", "215", "216", "21B", "222",
             "225", "226", "227", "281", "282", "2E2"}
 REPORTS |= {"A56", "A61", "A62", "A63", "A81", "A91", "B61", "B62"}
+
+
+# B61's value block is 24 characters wide and its value is set against the
+# right of it, every line of it: 576013-635 Rev AA p.540 runs each of them
+# from x=72 to x=221.9, which at that manual's 6.0 points per character is
+# column 0 to column 24 exactly. 577013-937 Rev J Figure 42, a real console's
+# printout of the same report, measures the same 24 at its own pitch. It is
+# the display's own width, and it is why `SERIAL NUMBER` carries no colon --
+# there is no room for one.
+VALVE_COLUMNS = 24
+
+
+def _valve_line(label, value):
+    """One line of B61's block, the value against column 24."""
+    return f"{label}{str(value).rjust(VALVE_COLUMNS - len(label))}"
 REPORTS |= set(sumpreports.SUMP_REPORTS) | {"391", "392", "411", "412",
                                             "680", "790", "888", "88D",
                                             "8A2", "8A3", "901", "903",
@@ -220,7 +282,7 @@ SETTABLE |= {"550", "551", "581", "648", "64B",
 # six or the tool merely saved them is not settled here -- see UNKNOWNS C6.
 INQUIRE_ONLY = {
             "101", "102", "111", "112", "113", "114", "115", "116", "119", "11A",
-            "11B", "132", "201", "202", "203", "204", "205", "206", "207", "208",
+            "11B", "121", "132", "201", "202", "203", "204", "205", "206", "207", "208",
             "20A", "20B", "20C", "20D", "211", "212", "213", "214", "215", "216",
             "217", "218", "219", "21A", "21B", "221", "225", "226", "227", "251",
             "281", "282", "2E2", "301", "302", "306", "307", "311", "312", "315",
@@ -246,6 +308,16 @@ SET_ONLY = {"001", "002", "003", "010", "031", "051", "052", "053", "054",
             "081", "082", "083", "084", "087", "088", "089", "090", "091",
             "092", "093", "094", "095", "096", "097", "098", "099", "09A",
             "09B", "7B6"}
+
+# 7.3.3's Service Notice block, less 566 -- which is the FEATURE switch, has a
+# panel step and a field, and so reads back down the generic path like any
+# other stored value. These three do not: 567 is a setting the console keeps
+# for itself, 568 is not a stored value at all but whether a session is open,
+# and 569 is the duration that session runs for. See FIDELITY D9.
+SERVICE_NOTICE = {"567", "568", "569"}
+# The two codes that answer with a RESULT CODE of their own rather than 9999.
+TICKET_CODES = {"7B5", "7B6"}
+_ON_OFF = {"1": "enabled", "0": "disabled"}
 
 VERIFIED = {"530": "149", "081": "149", "082": "149",
             "083": "149", "084": "149",
@@ -314,6 +386,7 @@ class Handler:
         self.c = console
         self.verbose = verbose
         self.log = log
+        self._token = None
 
     def _frame(self, code, value=""):
         """A reply, in whichever format the letter's case asked for.
@@ -342,20 +415,68 @@ class Handler:
             # includes the && tag itself
             body += b"&&"
             return body + checksum(body).encode("ascii") + ETX
-        lines = [code, self.c.clock_text()]
-        if code[1:4] in REPORTS:
-            # a report carries the station header, the way it does on paper;
-            # a Set acknowledgement and a setup value do not
-            lines += [t for t in (self.c.text("503", n)
-                                  for n in range(1, 5)) if t]
-        text = SEP.join(lines) + SEP + value.lstrip(SEP)
-        return SOH + text.encode("ascii", "replace") + ETX
+        lines = [code, self.c.clock_stamp()]
+        body = value.lstrip(SEP)
+        if body and self._draws_station(code[1:4]):
+            # All four, programmed or not. 576013-635 draws its samples
+            # with STATION HEADER 1 through 4 standing where a site's own
+            # lines would be, so a site that has set only the first still
+            # sends four. Same rule as the paper's header. FIDELITY W5.
+            #
+            # Confirmed on a real TLS-350 with NO header programmed: I10100
+            # still carries four blank lines before SYSTEM STATUS REPORT. An
+            # earlier reading of this bench -- that a console with no header
+            # sends none -- was wrong, and came from I20100, which sends
+            # nothing at all for a different reason.
+            #
+            # That reason is the `body and` above. A report with no content
+            # carries no header block either: the same console answers
+            # I20100 with the code, the stamp and nothing else, because it
+            # has no tanks. Header lines belong to a report, not to a reply.
+            # ONE BLANK LINE between the stamp and the header block, which
+            # is what the manual draws in every one of the 128 samples that
+            # print a header at all, and what a real console's own I10100
+            # carries -- six blank lines before SYSTEM STATUS REPORT on a
+            # console with nothing programmed, where this sent five. The
+            # blank BELOW the block was already here; the one above it was
+            # not. See FIDELITY S6.
+            lines.insert(2, "")
+            lines += [self.c.text("503", n) or "" for n in range(1, 5)]
+        if body and self._head_gap(code[1:4]):
+            # ONE BLANK LINE between the header block and the body, which is
+            # what 576013-635 draws and this console did not. Measured across
+            # the manual rather than argued: of 321 display samples whose
+            # header block is followed by anything, 304 leave a full line's
+            # gap after it and nine do not -- and the rule holds whether the
+            # station header block is there or not, so it belongs here and
+            # not in the reports.
+            #
+            # It looked as though the blank was already there, and that is
+            # the trap: a site with three programmed station header lines
+            # sends an EMPTY fourth, and an empty fourth reads exactly like
+            # the missing blank. Programme all four and the body ran straight
+            # onto the header. See FIDELITY S6.
+            lines += [""] * self._head_gap(code[1:4])
+        # A report's own blank lines, where the manual's sample leaves them,
+        # and one line ending rather than two: the header block was joined
+        # with CR/LF and several report bodies with a bare line feed, so one
+        # reply carried both. See FIDELITY S6.
+        body = wiretables.lead(code[1:4], body)
+        text = SEP.join(lines) + SEP + body.replace(SEP, chr(10)).replace(
+            chr(13), chr(10)).replace(chr(10), SEP)
+        # A display reply opens SOH CR LF and closes CR LF ETX. The manual
+        # draws the text of a report and not its framing, so this was written
+        # without the two line endings for a long time. Measured on a real
+        # TLS-350 (software 326.01) over its TCP/IP card: all 49 replies
+        # captured begin SOH CR LF and end CR LF ETX, without exception.
+        return SOH + SEP.encode("ascii") + text.encode("ascii", "replace") \
+            + SEP.encode("ascii") + ETX
 
     def _devices_of(self, module, dev):
         """One device, or every one the module carries."""
         if dev != "00" and dev.isdigit() and int(dev):
             return [int(dev)]
-        return list(range(1, max(self.c.capacity(module), 1) + 1))
+        return list(range(1, self.c.capacity(module) + 1))
 
     def _chart_step(self, data, code):
         """I211's height step: six decimal digits, or a packed float."""
@@ -372,6 +493,122 @@ class Handler:
         except ValueError:
             return None
 
+    @staticmethod
+    def _tanker_stamp(when):
+        """`97/07/24 07:57`, which is how the tanker load reports write a time.
+
+        576013-635 draws 391 and 392 with placeholders rather than a made-up
+        date -- `YY/MM/DD HH:mm` -- and the COLUMNS are what say that is the
+        format rather than a lazy sample. p.146 gives the start group columns
+        4 to 24, twenty-one characters, holding the stamp, a space and a
+        six-digit volume; `clock_words` is twenty-one characters on its own
+        and would run through the volume and out the other side. The slashes
+        and the colon are not in the computer format either, so somebody
+        chose them.
+        """
+        return time.strftime("%y/%m/%d %H:%M", time.localtime(when))
+
+    # 576013-635 Rev AA p.474 and p.475. The block per port is a block per
+    # ERROR: "nn - Number of Errors to follow for each port", and the four
+    # UART lines are the settings "During Error", so a port that has not
+    # failed prints its connection and nothing else -- which is exactly what
+    # the sample's port 1 does. The two TIME lines are inside the port's own
+    # record in the computer format and the sample prints them under the port
+    # that has them, which is the reading that makes both halves agree.
+    #
+    # CONNECTION is the connect type of the last connection a port
+    # established, and the sample is what says "last" rather than "right
+    # now": port 1 there reads NONE and has no TIME OF LAST COMM DATA line
+    # at all, while port 2 reads MODEM DIAL IN over a last-comm stamp of
+    # 9:12 AM. A port that has never carried data has neither; a port that
+    # has carried data has both. `note_comm` keeps the pair together, and
+    # `console.comm_connect` is where the type lands. See FIDELITY S13.
+    COMM_STATE = {0: "NONE", 1: "OPEN PHONE PORT",
+                  2: "MODEM CHECK CONNECTION", 3: "TRANSMITTING DATA",
+                  4: "CHECKING FOR CARRIER", 5: "WAITING FOR DATA",
+                  6: "HANGING UP", 7: "FAXMODEM INITIALIZING",
+                  8: "FAX CHECK CONNECTION", 9: "FAX CHECK PAGE",
+                  10: "FAX END PAGE", 11: "FAX BUILD MESSAGE"}
+    COMM_ERROR = {1: "UART SETTINGS ERROR", 2: "MODEM INITIALIZATION FAILED",
+                  3: "MODEM TIMED OUT", 4: "LOST CARRIER",
+                  5: "DATA TIMED OUT", 6: "HANG UP FAILED",
+                  7: "FAX INITIALIZATION FAILED", 8: "FAX CONNECTION FAILED",
+                  9: "FAX TIMED OUT", 10: "FAX INTERPAGE ERROR",
+                  11: "FAX END PAGE ERROR", 12: "FAX BUILD MESSAGE ERROR"}
+    CONNECT_TYPE = {0: "NONE", 1: "AUTO DIAL TELETYPE", 2: "AUTO DIAL FAX",
+                    3: "AUTO DIAL COMPUTER", 4: "AUTO TRANSMIT",
+                    5: "MODEM DIAL IN", 6: "RS232 REQUEST"}
+
+    UART_PARTS = ("baud", "parity", "stop", "data")
+
+    @staticmethod
+    def _uart_field(port, part):
+        from .console import FIELDS
+        return (FIELDS.get(f"S881{port:02d}.{part}")
+                or FIELDS.get(f"S88101.{part}"))
+
+    def _port_uart(self, port):
+        """One port's UART settings as the manual ENCODES them, `01200 0 1 7`.
+
+        These are 881's part fields, which the COMMUNICATIONS SETUP report
+        already prints off the same console; 888 was answering 9600, odd, one
+        stop and eight data for every port whatever was programmed. The codes
+        rather than the words, because the computer format sends BBBBB, P, S
+        and D and the display side can always look them back up.
+        """
+        from .screens import shown
+        key = f"S881{port:02d}"
+        stored = self.c.values.get(key)
+        out = {}
+        for part in self.UART_PARTS:
+            field = self._uart_field(port, part)
+            word = shown(self.c, field,
+                         fieldio.decode(field, key, stored)
+                         if field and stored is not None else "")
+            out[part] = next(
+                (str(choice[0]) for choice in (field or {}).get("choices") or ()
+                 if str(choice[1]) == str(word)), str(word))
+        return out
+
+    def _uart_words(self, port, codes):
+        """The same four settings as the display prints them."""
+        out = {}
+        for part in self.UART_PARTS:
+            field = self._uart_field(port, part)
+            value = str(codes.get(part, ""))
+            out[part] = next(
+                (str(choice[1]) for choice in (field or {}).get("choices") or ()
+                 if str(choice[0]) == value), value)
+        return out
+
+    def _comm_status(self, ports):
+        """888's display format: a block per port, and its errors under it."""
+        rows = []
+        for n in ports:
+            rows.append(f"COMM BOARD  : {n} ({self.c.comm_board_name(n)})")
+            rows.append(" CONNECTION : " + self.CONNECT_TYPE[
+                int(self.c.comm_connect.get(n) or 0)])
+            for one in self.c.comm_errors.get(n) or ():
+                uart = self._uart_words(
+                    n, one.get("uart") or self._port_uart(n))
+                rows += [
+                    " FUNCTION   : "
+                    + self.COMM_STATE.get(one.get("state", 0), "NONE"),
+                    " ERROR      : "
+                    + self.COMM_ERROR.get(one.get("error", 0), "NONE"),
+                    f" BAUD RATE  : {uart['baud']}",
+                    f" PARITY     : {uart['parity']}",
+                    f" STOP BIT   : {uart['stop']}",
+                    f" DATA LENGTH: {uart['data']}"]
+            for label, which in (("TIME OF LAST COMM DATA:", "comm_data_at"),
+                                 ("TIME OF LAST COMM ERROR:", "comm_error_at")):
+                when = getattr(self.c, which).get(n)
+                if when:
+                    # p.474 puts both stamps at column 25, and it is
+                    # `clock_words` here rather than the wide form
+                    rows.append(f"{label:<25s}{clock_words(when)}")
+        return rows
+
     def _shift_rows(self, tank):
         """The shifts this tank has closed, oldest first, then the one open."""
         closed = list(reversed(self.c.bir.closed.get((tank, "shift")) or []))
@@ -379,13 +616,27 @@ class Handler:
 
     def _gauges(self, tank, row, which):
         """Volume, ullage, TC volume, height, water and temperature at one
-        end of a shift."""
+        end of a shift.
+
+        Every one of them off the ROW. The volume, the ullage and the height
+        always were; the TC volume and the temperature were the live tank,
+        for both ends, so a shift that sold anything printed its opening
+        volume beside the CLOSING volume's correction. `bir` has stored
+        `temp_open` and `temp_close` on the row all along and neither was
+        read. See FIDELITY X4.
+        """
+        opening = which == "opening"
         volume = row[which]
         full = self.c.full_volume(tank) or 0.0
-        diameter = self.c.limit("607", tank) or 96.0
-        water = row["water_open"] if which == "opening" else row["water"]
-        return [volume, max(full - volume, 0.0), volume * 0.998,
-                (volume / full if full else 0.0) * diameter, water, 55.0]
+        water = row["water_open"] if opening else row["water"]
+        temp = row.get("temp_open" if opening else "temp_close")
+        if temp is None:
+            # a row written before either stamp existed, or restored from a
+            # saved state that predates them
+            temp = self.c.product_temperature(tank)
+        return [volume, max(full - volume, 0.0),
+                self.c.tc_volume_at(tank, volume, temp),
+                self.c.height_at(tank, volume), water, temp]
 
     def _shift_lines(self, tank, number, row):
         """One shift's block of the I204 display report."""
@@ -397,24 +648,44 @@ class Handler:
         end = self._gauges(tank, row, "physical")
         return [line(f"SHIFT {number:2d} STARTING VALUES", start),
                 line("         ENDING VALUES", end),
-                f"{'         DELIVERY VALUE':<28s}{row['deliveries']:8.0f}",
+                # p.65 holds both summary figures right against 33,
+                # which is five columns left of the VOLUME column above them
+                f"{'         DELIVERY VALUE':<28s}{row['deliveries']:6.0f}",
                 f"{'         TOTALS':<28s}"
-                f"{row['physical'] - row['opening']:8.0f}"]
+                f"{row['physical'] - row['opening']:6.0f}"]
+
+    # A setup report lists the tank POSITIONS the console has; an inventory
+    # report lists the tanks that are programmed. Measured on a real TLS-350
+    # with all four positions OFF: I60400, I60A00, I60C00, I61200, I61500 and
+    # I61A00 each print four rows, and I20100 prints an empty body. The
+    # families divide on the leading digit of the function code.
+    POSITION_REPORTS = "6"
 
     def _tanks(self, dev):
         """"TT - Tank Number (Decimal, 00=all)"."""
         if dev != "00":
             return [int(dev)]
-        return sorted(self.c.tank_level) or sorted(
-            self.c.programmed_tanks()) or [1]
+        live = sorted(self.c.tank_level) or sorted(self.c.programmed_tanks())
+        if live:
+            return live
+        # Nothing programmed. A setup report still has a row per position;
+        # an inventory report has nothing to say and says nothing. Inventing
+        # a tank 1 here, as this console used to, reported fuel in a console
+        # that had none.
+        if (self._token or "")[:1] in self.POSITION_REPORTS:
+            return list(range(1, max(self.c.capacity("probe"), 0) + 1))
+        return []
 
     def _inventory(self, tank, tok):
         """The seven numbers I201 reports, in the manual's own order."""
         st = self.c.tank_level.get(tank, {})
         volume, water = st.get("volume", 0.0), st.get("water", 0.0)
         full = self.c.full_volume(tank) or 0.0
-        diameter = self.c.limit("607", tank) or 96.0
-        height = (volume / full if full else 0.0) * diameter
+        # The calibration chart, not a straight line: height_at() is what
+        # I204, I214, the printed inventory and a delivery snapshot all use,
+        # and 576013-635 Rev AA p.84's I21A row fixes it at 80.00 where the
+        # fraction-of-diameter form gave 85.48 (X1).
+        height = self.c.height_at(tank, volume)
         if tok == "21A":
             # the 90 or 95 percent the site programmed at S564
             share = 0.95 if (self.c.values.get("S56400")
@@ -422,11 +693,20 @@ class Handler:
             ullage = max(full * share - volume, 0.0)
         else:
             ullage = max(full - volume, 0.0)
-        return [volume, volume * 0.998, ullage, height, water, 55.0,
-                water * 12]
+        return [volume, self.c.tc_volume(tank), ullage, height, water,
+                self.c.product_temperature(tank), self.c.water_volume(tank)]
 
     def _inventory_text(self, tanks, tok):
-        """The report as the manual prints it, columns and all."""
+        """The report as the manual prints it, columns and all.
+
+        With no tanks the body is empty -- not even the column header. A
+        real TLS-350 with its four tank positions all OFF answers I20100
+        with the frame, the code, the stamp and nothing else, 37 bytes in
+        all. The manual only ever draws a site that has tanks, so the empty
+        case had to come from hardware.
+        """
+        if not tanks:
+            return ""
         if tok == "21A":
             share = "95%" if (self.c.values.get("S56400")
                               or "").strip().endswith("1") else "90%"
@@ -440,8 +720,12 @@ class Handler:
         for tank in tanks:
             label = self.c.text("602", tank) or ""
             v = self._inventory(tank, tok)
+            # The display form's three whole-number columns are TRUNCATED,
+            # the same rule the panel and the paper follow -- the COMPUTER
+            # form is untouched, because it carries the float. FIDELITY Y11.
             rows.append(f"{tank:3d}  {label:<16.16s}"
-                        + widths.format(v[0], v[1], v[2], v[3], v[4], v[5]))
+                        + widths.format(int(v[0]), int(v[1]), int(v[2]),
+                                        v[3], v[4], v[5]))
         return SEP.join(rows)
 
     def _inventory_data(self, tank, tok):
@@ -474,27 +758,46 @@ class Handler:
         elif tok == "@A4":
             if not c.licensed("bir"):
                 return self._nine(code), "BIR not installed"
-            rows = ["BASIC_RECONCILIATION HISTORY", ""]
-            for tank in tanks:
-                label = c.text("602", tank) or f"TANK {tank}"
-                rows.append(f"T {tank}:{label}")
-                rows.append(c.bir.report([tank]))
-                rows.append("")
+            # The daily history, which is what the title says: "I@A400
+            # DAILY RECONCILIATION LIST FOR LAST 31 DAYS". This printed the
+            # SHIFT report under it -- the wrong period, one row of it, in
+            # the wrong layout. FIDELITY G12.
+            rows = c.bir.history_report(tanks).split(chr(10))
         elif tok == "@A0":
-            if not c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
-            rows = ["METER MAP DIAGNOSTICS", "",
-                    "FP    METER   TANK   THROUGHPUT"]
-            for meter, tank in sorted(c.meters.items()):
-                rows.append(f"{(meter + 1) // 2:2d}    {meter:5d}"
-                            f"{tank:7d}{c.bir.totals.get(meter, 0.0):13.1f}")
-            if len(rows) == 3:
-                rows.append("NO METERS MAPPED")
+            # No BIR gate here. A real console with no BIR in its feature
+            # list -- I90200 shows only the in-tank tests, CSLD, PLLD and
+            # WPLLD -- still answers I@A002 with the ballot grid. I@A400 is
+            # the one that goes silent without BIR, and it keeps its gate.
+            # The ballot, not the result. FIDELITY S11 had this printing a
+            # four-column FP/METER/TANK/THROUGHPUT table, which is what the
+            # mapping arrived at; the report exists to show it working, and
+            # the guide's first instruction under it is "look for unmapped
+            # or retired meters", neither of which a result table can show.
+            #
+            # Head and rule are a real console's, byte for byte: the state
+            # line, a blank, the two-row column header and the rule. The
+            # grid under them is `bir.ballot_rows`, whose rows are fueling
+            # positions -- which is why it needed G7's key first.
+            rows = ["MAP IS COMPLETE" if c.bir.map_complete()
+                    else "MAP IS INCOMPLETE", "",
+                    " FP|     METER         **TANK_MAP_BALLOT**",
+                    "   |     0          1          2          3"
+                    "          4          5     ",
+                    c.bir.BALLOT_RULE]
+            rows += c.bir.ballot_rows()
         else:
             # "ASR Error Event History Buffer": the console keeps what went
             # wrong, and the alarm log is where this console keeps it
-            rows = ["ASR ERROR EVENT HISTORY", ""]
-            rows += c.alarm_state_lines(priority=True)[1:12] or ["NO EVENTS"]
+            # Titled and bodied as a real console does it. FIDELITY S11
+            # had the title a word short and the empty body reading
+            # "NO ALARM HISTORY" -- W13's invented phrase, in a report that
+            # is not an alarm history. The console prints a column header
+            # and the single word EMPTY.
+            rows = ["ASR ERROR EVENT HISTORY BUFFER", "",
+                    "TIME         CODE MESSAGE"]
+            events = [line for line in c.alarm_state_lines(priority=True)[1:12]
+                      if line.strip() and "NO ALARM HISTORY" not in line]
+            rows += events or ["EMPTY"]
         if code[0].isupper():
             return self._frame(code, SEP.join(rows)), AT_COMMANDS[tok]
         # No manual shows a computer format for these; the console answers the
@@ -539,13 +842,24 @@ class Handler:
         # 132, the report: "FISCALLY SEALED", the flag, and the switch
         sealed = c.chart_secured()
         if code[0].isupper():
-            rows = [f"FISCALLY SEALED                  : {'YES' if sealed else 'NO'}",
-                    "FISCAL HEIGHT SECURITY           : "
-                    + ("ENABLED" if enabled else "DISABLED"),
-                    "FISCAL HEIGHT SECURITY SWITCH : "
-                    + ("ON" if enabled else "OFF")]
+            # p.61 sets all three colons at column 30 and the values at
+            # 32, which is what makes the block a column rather than three
+            # sentences; the longest label, FISCAL HEIGHT SECURITY SWITCH,
+            # is 29 characters and that is where the 30 comes from.
+            rows = [f"{label:<30s}: {value}" for label, value in (
+                ("FISCALLY SEALED", "YES" if sealed else "NO"),
+                ("FISCAL HEIGHT SECURITY",
+                 "ENABLED" if enabled else "DISABLED"),
+                # The SWITCH is DIP SW2 position 4, not the flag again. The
+                # two were the same value under two labels, so they could
+                # never disagree -- and disagreeing is the whole point of
+                # printing both. FIDELITY M13.
+                ("FISCAL HEIGHT SECURITY SWITCH",
+                 "ON" if c.fiscal_height_switch else "OFF"))]
             return self._frame(code, SEP.join(rows)), "fiscal height report"
-        return (self._frame(code, f"{int(sealed)}{int(enabled)}{int(enabled)}"),
+        return (self._frame(code,
+                            f"{int(sealed)}{int(enabled)}"
+                            f"{int(c.fiscal_height_switch)}"),
                 "fiscal height report")
 
     def _accu_record(self, tok, tanks):
@@ -774,33 +1088,80 @@ class Handler:
                     return key
         return "00"
 
+    # 576013-635 Rev AA p.588's own columns, measured off the word boxes:
+    # the two stamps at 0 and 11, then 7, 8, 7, 8, 5, 8, 5 and 8. The header
+    # is the manual's, character for character -- this had one space where
+    # the page has two and three where it has one.
+    C09_HEAD = ("STRT TIME  END TIME   STRT HT END HT STRT VL END_VL SALES"
+                "  DELIV OFFSET   VAR")
+
     def _recon_history(self, dev, data):
-        """C09, which is the odd one: keyed by TANK and not by product."""
+        """C09, which is the odd one: keyed by TANK and not by product.
+
+        **A history is a table and this drew one row of it**, the current
+        day, twice over: `STRT HT` and `END HT` were both `stick_height`,
+        the reading NOW, so the two columns could never differ on a report
+        whose whole subject is a day's movement. p.588's sample chains --
+        the second row's start height and start volume are the first row's
+        end height and end volume -- and it replays exactly against this
+        console's own chart: 4700 gallons in a 10,000 gallon 96 inch tank
+        is 45.737 inches, 5000 is 48.000 and 4986.1 is 47.895, which are
+        the sample's three heights to the digit. See FIDELITY G12.
+
+        The blank after the title is p.588's leading: its lines are 8.6
+        points apart and the gap in front of the tank line is 17.3.
+        """
         tanks = ([int(dev)] if dev not in ("00", "") and dev.isdigit()
-                 and int(dev) else sorted(self.c.tank_level) or [1])
+                 and int(dev) else sorted(self.c.tank_level))
         ticketed = (data or "").strip().startswith("1")
-        out = ["INDIVIDUAL BASIC RECONCILIATION HISTORY DIAGNOSTIC"]
-        for tank in tanks:
-            label = self.c.text("602", tank) or "TANK %d" % tank
-            out.append("T %d:%s" % (tank, label))
-            out.append("STRT TIME  END TIME   STRT HT END HT STRT VL"
-                       " END_VL  SALES  DELIV OFFSET VAR")
-            row = self.c.bir.row(tank, "daily")
-            if not row:
+        out = ["INDIVIDUAL BASIC RECONCILIATION HISTORY DIAGNOSTIC", ""]
+        for tank in self.c.bir.report_tanks(tanks):
+            out += self.c.bir.tank_lines(tank)
+            out.append(self.C09_HEAD)
+            rows = self.c.bir.daily_history(tank)
+            if not rows:
                 out.append("  NO DATA AVAILABLE")
                 continue
-            deliv = row["ticketed"] if ticketed else row["deliveries"]
-            out.append(
-                "%s %s" % (time.strftime("%y%m%d%H%M",
-                                         time.localtime(row["opened"])),
-                           time.strftime("%y%m%d%H%M",
-                                         time.localtime(row["closed"])))
-                + "%8.3f%8.3f" % (self.c.stick_height(tank),
-                                  self.c.stick_height(tank))
-                + "%9.1f%8.1f" % (row["opening"], row["physical"])
-                + "%7.1f%7.1f" % (row["sales"], deliv)
-                + "%7.1f%7.1f" % (0.0, row["variance"]))
+            for row in rows:
+                deliv = row["ticketed"] if ticketed else row["deliveries"]
+                out.append(
+                    "%s %s" % (time.strftime("%y%m%d%H%M",
+                                             time.localtime(row["opened"])),
+                               time.strftime("%y%m%d%H%M",
+                                             time.localtime(row["closed"])))
+                    + "%7.3f%8.3f" % (
+                        self.c.stick_height(tank, row["opening"]),
+                        self.c.stick_height(tank, row["physical"]))
+                    + "%7.1f%8.1f" % (row["opening"], row["physical"])
+                    + "%5.1f%8.1f" % (row["sales"], deliv)
+                    + "%5.1f%8.1f" % (row["adjust"], row["variance"]))
         return chr(10).join(out)
+
+    def _recon_history_body(self, dev):
+        """C09's computer format, which is not the shape the other C-codes
+        share: "TT - Tank Number, rr - Number of records to follow, ...
+        NN - Number of eight character Data Fields to follow", and three
+        stamps per record rather than two -- the requested start, the actual
+        start and the end. It went through `_recon_body` and sent one
+        record, two stamps and the wrong floats."""
+        tanks = ([int(dev)] if dev not in ("00", "") and dev.isdigit()
+                 and int(dev) else sorted(self.c.tank_level))
+        body = ""
+        for tank in self.c.bir.report_tanks(tanks):
+            rows = self.c.bir.daily_history(tank)
+            body += "%02d%02X" % (tank, len(rows))
+            for row in rows:
+                values = self.c.bir.history_figures(tank, row)
+                body += (time.strftime("%y%m%d%H%M",
+                                       time.localtime(row.get("requested",
+                                                              row["opened"])))
+                         + time.strftime("%y%m%d%H%M",
+                                         time.localtime(row["opened"]))
+                         + time.strftime("%y%m%d%H%M",
+                                         time.localtime(row["closed"]))
+                         + "%02X" % len(values)
+                         + packed.hexfloats(values))
+        return body
 
     def _recon_body(self, tok, spec, tanks, previous):
         """The computer format: product, its tanks, the period, then floats."""
@@ -835,26 +1196,10 @@ class Handler:
 
     @staticmethod
     def _maintenance_words(entry):
-        """119's six character data field, read the way its type says to.
-
-        One field, six meanings: a filler, a login ID, a device/type/alarm
-        triple, a service code or a device number. The same hazard as 087 and
-        088, in a single field this time. See alarmreports.MAINTENANCE_DATA.
-        """
-        how = alarmreports.MAINTENANCE_DATA.get(entry["type"], "filler")
-        data = entry.get("data", "000000")
-        if how == "filler":
-            return ""
-        if how == "login":
-            return data.strip("0") or data
-        if how == "service":
-            return data[-4:]
-        if how == "device":
-            return f"DEVICE {int(data[-2:] or 0)}"
-        described = describe_alarms([data[2:4] + data[4:6] + data[0:2]])
-        if described:
-            return described[0]["description"].upper()
-        return data
+        """119's data field. Moved to `alarmreports.maintenance_words`, so
+        that the white key's printed Maintenance Report reads its records
+        the same way this does rather than growing a second copy."""
+        return alarmreports.maintenance_words(entry)
 
     def _hrm_hours(self, tank):
         """A61 and A63's hourly reconciliation records.
@@ -893,14 +1238,35 @@ class Handler:
                  "ave": sum(variances) / len(variances), "status": "01"}]
 
     def _csld_states(self, tank, previous=False):
-        """A56's month of CSLD state changes, newest first."""
+        """A56's month of CSLD state changes, newest first.
+
+        This read `probe_leak_buffer(tank, "periodic")` -- the SCHEDULED
+        leak-test buffer -- and a CSLD tank runs no scheduled tests, so the
+        list was always empty and the fallback fired. **No PASS or FAIL
+        could ever appear in the monthly report**, against the manual's own
+        sample showing a month of RESULT: PASS, RESULT: FAIL, RESULT: INCR
+        and STATUS: changes. `csld.history` is the database it wanted. See
+        FIDELITY K3.
+        """
+        now = self.c.now()
+        month = (now.tm_year, now.tm_mon)
+        if previous:
+            month = ((month[0] - 1, 12) if month[1] == 1
+                     else (month[0], month[1] - 1))
         out = []
-        for result in self.c.probe_leak_buffer(tank, "periodic", most=8):
-            out.append((result.started,
-                        "01" if result.result == "PASSED" else "02"))
-        if not out:
-            out.append((time.mktime(self.c.now()), "99"))
-        return out
+        for when, code in reversed(self.c.csld.history.get(tank) or []):
+            stamp = time.localtime(when)
+            if (stamp.tm_year, stamp.tm_mon) == month:
+                out.append((when, code))
+        if out:
+            return out[:31]
+        if previous:
+            return []
+        # Nothing decided this month. A tank CSLD is still gathering on is
+        # active; one that cannot find an idle hour says so, which is the
+        # other status word the report has.
+        idle = self.c.csld.idle_from.get(tank)
+        return [(time.mktime(now), "99" if idle is not None else "98")]
 
     def _outages(self, tank):
         """A91: what the tank held either side of a power cut."""
@@ -916,13 +1282,38 @@ class Handler:
                  "on_volume": volume, "on_water": water, "on_temp": temp,
                  "change": 0.0}]
 
+    def _probe_head(self, tank, tail="", word=None):
+        """`TANK  1  REGULAR UNLEADED      MAG`, and whatever follows it.
+
+        Section 7.4.2's reports all open each tank's block with this line and
+        they all set it the same way, measured off pp.489, 490 and 495: the
+        word TANK at column 0, the tank number right against 7, the product
+        label at 9, the probe's type at 31 and anything after it at 38.
+
+        Four reports built it with single spaces between the four pieces --
+        `TANK 1 REGULAR UNLEADED MAG` -- so none of the columns landed and
+        the line moved whenever a product label changed width.
+        """
+        label = self.c.text("602", tank) or f"TANK {tank}"
+        word = word or self.c.probe_type_word(tank)
+        line = f"TANK {tank:2d}  {label:<22.22s}"
+        line += f"{word:<7s}" if tail else word
+        return (line + tail).rstrip()
+
     def _valve(self, number):
-        """B61's live state for one vapour valve."""
+        """B61's live state for one vapour valve.
+
+        The battery is `0`, Unknown, because nothing here makes a valve a
+        WIRELESS one and the manual's own annotation on that line is "(only
+        if wireless)". 577013-937 Rev J Figure 42 is a real console's IB6100
+        for a wired valve and prints no BATTERY line; the packed form still
+        carries the byte, because B61's computer format always has it.
+        """
         want = self.c.values.get("SVC800") or "0"
         return {
             "serial": f"{readings.integer(10000000, 99999999, 'valve', number)}",
             "position": want,
-            "battery": "1", "open_cap": "1", "close_cap": "1",
+            "battery": "0", "open_cap": "1", "close_cap": "1",
             "ambient": readings.wander(self.c, 65.0, 78.0, "amb", number),
             "outlet": readings.wander(self.c, 68.0, 82.0, "outlet", number),
             "faults": []}
@@ -1008,14 +1399,16 @@ class Handler:
 
     @staticmethod
     def _delivery_head(tok):
+        # 213 is 202's report with a count on the front, so it prints 202's
+        # columns: `Deliveries.DELIVERY_HEAD` is p.63's header counted off
+        # the page, and both reports use the same row builder. 215 keeps its
+        # own three columns, which S12 sourced from a different page.
         if tok == "215":
-            return ("INCREASE DATE / TIME   GALLONS  MASS   DENSITY"
-                    "  WATER  TEMP   HEIGHT")
+            return delivery.Deliveries.MASS_HEAD
         if tok == "21B":
             return ("DELIVERY START DATE   DELIVERY END DATE  VOLUME"
                     " VOLUME DELIV  DELIV")
-        return ("INCREASE DATE / TIME    GALLONS  TC GALLONS  WATER"
-                "  TEMP DEG F  HEIGHT")
+        return delivery.Deliveries.DELIVERY_HEAD
 
     def _delivery_rows(self, tok, tank, rec):
         """One delivery, printed the way this particular report prints one."""
@@ -1027,23 +1420,39 @@ class Handler:
                     f"{r.end.get('volume', 0.0):7.0f}"
                     f"{rec['amount']:6.0f}{rec['tc']:7.0f}"]
         out = []
-        for name, side in (("END:  ", r.end), ("START:", r.start)):
+        line = delivery.Deliveries.delivery_line
+        for name, side in (("END", r.end), ("START", r.start)):
+            stamp = clock_words(side.get("at", 0.0))
             if tok == "215":
-                out.append(f"{name} {clock_words(side.get('at', 0.0)):22s}"
-                           f"{side.get('volume', 0.0):6.0f}"
-                           f"{side.get('volume', 0.0) * self.c.product_density(tank):7.0f}"
-                           f"{self.c.product_density(tank):8.4f}"
-                           f"{side.get('water', 0.0):6.2f}"
-                           f"{side.get('temp', 0.0):7.2f}"
-                           f"{side.get('height', 0.0):7.2f}")
+                out.append(line(name, stamp, (
+                    f"{side.get('volume', 0.0):.0f}",
+                    f"{side.get('volume', 0.0) * self.c.product_density(tank):.0f}",
+                    f"{self.c.product_density(tank):.4f}",
+                    f"{side.get('water', 0.0):.2f}",
+                    f"{side.get('temp', 0.0):.2f}",
+                    f"{side.get('height', 0.0):.2f}"),
+                    delivery.Deliveries.MASS_WIDTHS))
             else:
-                out.append(f"{name} {clock_words(side.get('at', 0.0)):22s}"
-                           f"{side.get('volume', 0.0):6.0f}"
-                           f"{side.get('tc', 0.0):6.0f}"
-                           f"{side.get('water', 0.0):6.2f}"
-                           f"{side.get('temp', 0.0):7.2f}"
-                           f"{side.get('height', 0.0):7.2f}")
-        out.append(f"{'AMOUNT:':29s}{rec['amount']:6.0f}{rec['tc']:6.0f}")
+                out.append(line(name, stamp, (
+                    f"{side.get('volume', 0.0):.0f}",
+                    f"{side.get('tc', 0.0):.0f}",
+                    f"{side.get('water', 0.0):.2f}",
+                    f"{side.get('temp', 0.0):.2f}",
+                    f"{side.get('height', 0.0):.2f}")))
+        if tok == "215":
+            # 576013-635 Rev AA p.79: the AMOUNT row's second column is the
+            # MASS delta, under the MASS heading, not the TC volume the 213
+            # row carries -- 3303 gallons is 19,814 pounds. The trailing star
+            # is the density-defaulted flag the computer format already emits
+            # (X3).
+            mass = rec["amount"] * self.c.product_density(tank)
+            star = "*" if self.c.density_defaulted(tank) else ""
+            out.append(line("AMOUNT", "", (f"{rec['amount']:.0f}",
+                                           f"{mass:.0f}{star}"),
+                            delivery.Deliveries.MASS_WIDTHS))
+        else:
+            out.append(line("AMOUNT", "", (f"{rec['amount']:.0f}",
+                                           f"{rec['tc']:.0f}")))
         return out
 
     def _delivery_floats(self, tok, tank, rec):
@@ -1169,7 +1578,14 @@ class Handler:
         rows.append(f"{'':47s}Period Below Above")
         for label, per, lo, hi, unit, only in isd.CARB_THRESHOLDS:
             if only in (site, "any"):
-                rows.append(f"{label:47s}{per:6s} {lo:5s} {hi}{unit}")
+                # 47 is the column the manual puts the period in, and one
+                # label is longer than that: VAPOR COLLECTION ASSIST SYSTEM
+                # A/L DEGRADATION FAIL is 51 characters, so a fixed field ran
+                # the two together as `...DEGRADATION FAIL7dys`. The page
+                # leaves two spaces, so the long row pushes its period right
+                # rather than losing the gap.
+                wide = max(47, len(label) + 2)
+                rows.append(f"{label:{wide}s}{per:6s} {lo:5s} {hi}{unit}")
         return rows
 
     def _isd_status_lines(self, since, monthly, heading):
@@ -1232,10 +1648,17 @@ class Handler:
                 "degrade": "A/L RATIO DEGRADATION",
                 "collect_gross": "A/L RATIO GROSS BLOCKAGE",
                 "collect_degrade": "A/L RATIO DEGRADATION",
+                # 577013-937 Rev J p.12-32's own monthly sample, which is a
+                # BALANCE site's: `FLOW PERFORMANCE HOSE BLOCKAGE` in both
+                # the warning and the failure group
+                "collect_flow": "FLOW PERFORMANCE HOSE BLOCKAGE",
                 "sensor": "CHECK ISD SENSORS",
                 "setup": "CHECK SETUP CONFIGURATION"}
         warnings, failures = [], []
-        for test, state in sorted(self.c.isd_forced.items()):
+        # The ASSESSED state, not the bench's: a test that has been failing
+        # since Tuesday is a warning, and the same test on its eighth
+        # consecutive day is a failure alarm. See FIDELITY I3.
+        for test, state in sorted(self.c.isd_states().items()):
             at = self.c.isd_forced_at.get(test, started)
             row = (at, LONG.get(test, test.upper()), "")
             (warnings if state == "warn" else failures).append(row)
@@ -1367,6 +1790,7 @@ class Handler:
         smart sensors this console already models -- SMART_TYPE's 01 and 02
         are AIR FLOW METER and VAPOR PRESSURE by name.
         """
+        from . import wiresensors
         from .wiresensors import SMART_TYPE, SMART_UNKNOWN
         out = []
         for number in range(1, max(self.c.capacity("smart"), 0) + 1):
@@ -1374,12 +1798,40 @@ class Handler:
             if not kind:
                 continue
             _code, name = SMART_TYPE.get(kind, SMART_UNKNOWN)
-            serial = f"{readings.digits(5, 'isdsn', number)}"
-            tag = {"01": "AF", "02": "PS"}.get(kind, "HC")
-            in_use = (self.c.values.get(f"SV43{number:02d}") or "0") == "1"
-            out.append((f"{number:02d}", name, f"{serial}{tag}{number:03d}",
-                        in_use))
+            out.append((f"{number:02d}", name,
+                        wiresensors.isd_serial(self.c, number),
+                        wiresensors.isd_in_use(self.c, number)))
         return out
+
+    @staticmethod
+    def _draws_station(tok):
+        """Whether this reply carries the four station header lines.
+
+        **The manual's own sample for the code, and a fallback for the
+        codes it has no sample for.** This used to be "is it in `REPORTS`",
+        a hand-kept set -- and a hand-kept set is exactly what the samples
+        are there to replace. 67 codes in it draw no header on the page and
+        got one anyway, most of the sensor diagnostics along with `217`
+        TANK PROFILE, `218` TANK CHART AUDIT TRAIL, `219` TANK CHART
+        SECURITY and `888`; and 50 codes outside it draw one on the page and
+        got none, the whole ISD `V` family included. Both directions are one
+        defect: the header was decided by the wrong thing.
+
+        The obvious rule is wrong too. A section 7.4 DIAGNOSTIC mostly draws
+        no header and a 7.2 or 7.3 report mostly draws one, but that misses
+        twenty-seven codes: A15, A81, A91, B62 and BB1 are diagnostics with
+        a header, and the twenty-two above are reports without.
+
+        Read by `tools/build_wire_titles.py` off the word boxes, and checked
+        against a plain-text scan of both manual revisions: 367 of the 371
+        codes both readings could see agree, and all four disagreements are
+        the text scan running past a page boundary -- `208`, `219`, `503`
+        and `7B4` plainly draw no header on the page.
+
+        See FIDELITY L5.
+        """
+        drawn = wiretables.station_header(tok)
+        return tok in REPORTS if drawn is None else drawn
 
     def _nine(self, _code=None):
         """What the console says when it has not understood."""
@@ -1396,12 +1848,21 @@ class Handler:
         # No comm card in the cage, no serial port. A real console with its
         # RS-232 module pulled has nothing to answer on, so neither does this
         # one: the socket stays open but the console is deaf. 329362-001 is
-        # the RS-232 card; the modem and MT cards are ports too.
-        if not any(self.c.has(k) for k in ("rs232", "modem", "mt")):
+        # the RS-232 card; the modem and MT cards are ports too, and so is
+        # the DB-9 half of any dual-port module -- 577013-819's own procedure
+        # plugs a laptop into "the TLS console's RS-232 or Multiport card".
+        #
+        # A card in the WRONG SLOT is the same silence with a card in the
+        # cage, which is 576013-818 Table 7-2: "System will not communicate
+        # via RS-232 Module -- RS-232 Module in slot 4 of Comm Bay card cage
+        # -- Move Module to Comm Cage slots 1, 2, or 3." See FIDELITY M7.
+        if not self.c.serial_port_works():
             if self.log:
                 self.log(f"{raw!r}   [no comm card fitted]")
             return b""
         security, letter, tok, dev, data = parse_command(raw)
+        # _tanks needs to know which family it is answering for
+        self._token = tok
         # 576013-635 p.267: with the security DIP on and a code programmed,
         # "the system will not respond to a command without the proper
         # security code." No response at all, not an error frame: a caller
@@ -1418,7 +1879,12 @@ class Handler:
             if self.log:
                 self.log(f"{raw!r}   [not understood]")
             return NOT_UNDERSTOOD
-        code = f"{letter}{tok}{dev}"
+        # The console echoes the function code exactly as it was sent. Only
+        # the dispatch is case-folded, which is why parse_command upper-cases
+        # the token. Sending i@a900 to a real TLS-350 brings back i@a900, not
+        # i@A900 -- the only codes where it shows are the undocumented @
+        # family, because everything else is typed in one case anyway.
+        code = f"{letter}{_sent_token(raw, tok)}{dev}"
         if not dev.isdigit():
             # the device is two decimal digits; anything else is not a command
             if self.log:
@@ -1430,7 +1896,8 @@ class Handler:
                 self.log(f"{letter}{tok}{dev}   [not understood]")
             return self._eom(NOT_UNDERSTOOD, letter)
         if (not self.c.supports(versions.TOKEN_FEATURE.get(tok.upper()))
-                or not versions.knows_token(tok.upper(), self.c.version)):
+                or not versions.knows_token(tok.upper(), self.c.version,
+                                            self.c.board)):
             # a function that arrived with a later software version is one
             # this console has never heard of, which is the same answer.
             # Either half can say so: a code that came in with a feature,
@@ -1441,6 +1908,10 @@ class Handler:
                          f"[not in software {self.c.version}]")
             return self._eom(NOT_UNDERSTOOD, letter)
         with self.c.lock:
+            # the port has carried data, which is half of what 888 reports;
+            # the other half is what it was doing while it did, and a command
+            # arriving on the serial port is 888's own `06=RS232 REQUEST`.
+            self.c.note_comm(connect=RS232_REQUEST)
             if letter in "Ii":
                 out, note = self.inquire(tok, dev, code, data)
             elif letter in "Ss":
@@ -1479,6 +1950,8 @@ class Handler:
             answered = family(self, tok, dev, code, data)
             if answered is not None:
                 return answered
+        if tok in SERVICE_NOTICE:
+            return self._service_notice_read(tok, code)
         if tok == "101":
             recs = self.c.compute_alarms()
             note = (f"{len(recs)} alarm(s)" if recs
@@ -1544,8 +2017,12 @@ class Handler:
                             [r["aa"] + r["nn"] + r["tt"]])[0]["description"]
                         rows.append(f"     {desc.upper():<25s}"
                                     + _when(r["at"]))
-                if len(rows) == 1:
-                    rows.append("NO ALARM HISTORY")
+                # The title and nothing under it, which is what
+                # `tests/console_capture/raw/I20600.bin` is: a real console
+                # with no tank alarms answering `I20600` with the header
+                # block, TANK ALARM HISTORY and its trailing blank. The
+                # marker that used to stand here was W13's invented phrase.
+                # See FIDELITY S18.
                 return self._frame(code, SEP.join(rows)), "tank alarm history"
             body = ""
             for tank in tanks:
@@ -1560,7 +2037,7 @@ class Handler:
             # -- they answered with identical text until this was noticed.
             if not self.c.licensed("bir"):
                 return self._nine(code), "BIR not installed"
-            tanks = sorted(self.c.tank_level) or [1]
+            tanks = sorted(self.c.tank_level)
             previous = dev[-2:] == "02"
             if tok == "C04":
                 text = self.c.bir.column_report(tanks, kind="shift",
@@ -1575,7 +2052,7 @@ class Handler:
             if not self.c.licensed("bir"):
                 return self._nine(code), "BIR not installed"
             spec = recon.RECON[tok]
-            tanks = sorted(self.c.tank_level) or [1]
+            tanks = sorted(self.c.tank_level)
             previous = recon.previous_wanted(tok, data)
             if previous is None:
                 return self._nine(code), "REJECTED: no such report type"
@@ -1591,6 +2068,9 @@ class Handler:
             elif shape == "analysis":
                 text = bir.analysis_report(tanks, kind, previous, multi)
             else:
+                if not code[0].isupper():
+                    return (self._frame(code, self._recon_history_body(dev)),
+                            spec["note"])
                 text = self._recon_history(dev, data)
             if code[0].isupper():
                 return self._frame(code, text), spec["note"]
@@ -1601,7 +2081,7 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
-                     else sorted(self.c.tank_level) or [1])
+                     else sorted(self.c.tank_level))
             if tok == "251":
                 if code[0].isupper():
                     text = "\n" + self.c.csld.report(tanks) + "\n"
@@ -1611,7 +2091,7 @@ class Handler:
                 return self._frame(code, body), "CSLD results"
             # A55: CSLD Diagnostics, Leak Test Status
             rows = ["CSLD DIAGNOSTICS: LEAK TEST STATUS", "",
-                    "TANK       TEST STATUS DURATION"]
+                    wiretables.heading("A55")]
             body = []
             for tank in tanks:
                 run = self.c.leaks.active("tank", tank)
@@ -1625,7 +2105,10 @@ class Handler:
                     state, minutes = "00", 0.0
                 names = {"00": "NO TEST", "02": "TEST IN PROGRESS",
                          "05": "TEST PRE-DELAY"}
-                rows.append(f"{tank:5d}     {names[state]:20s}{minutes:6.1f}")
+                # p.515 puts the status at 18 and the duration right
+                # against 34, to one decimal
+                rows.append(wiretables.row("A55",
+                                           [tank, names[state], minutes]))
                 body.append(f"{tank:02d}{state}"
                             + packed.hexfloat(minutes))
             if code[0].isupper():
@@ -1636,6 +2119,35 @@ class Handler:
             return self._at_command(tok, dev, code)
         if tok in ("55E", "132", "642"):
             return self._fiscal_and_filter(tok, dev, code)
+        if tok == "61F":
+            # "Set Delivery Density ... t - Delivery Type (0=next, 1=last)".
+            # The delivery type is part of the ADDRESS on an inquiry and part
+            # of the DATA on a set, which is why this code needs its own
+            # branch either way. See FIDELITY O13.
+            if not self.c.has("probe"):
+                return self._nine(code), "no probe module fitted"
+            which = (data or "0")[:1]
+            if which not in ("0", "1"):
+                return self._nine(code), "REJECTED: delivery type is 0 or 1"
+            word = "NEXT" if which == "0" else "LAST"
+            tanks = self._tanks(dev)
+            if code[0].isupper():
+                rows = [f"{word} DELIVERY DENSITY", "",
+                        "TANK   PRODUCT LABEL               DENSITY"]
+                for tank in tanks:
+                    label = self.c.text("602", tank) or ""
+                    got = self.c.delivery_density_value(tank, which)
+                    rows.append(f"{tank:3d}     {label:<26.26s}{got:7.4f}")
+                # the manual echoes the delivery type on the display form
+                # and carries it in the DATA on the computer form:
+                # "<SOH> I61FTT0" against "i61FTTYYMMDDHHmmTTtFFFFFFFF"
+                return (self._frame(code + which, SEP.join(rows)),
+                        f"{word.lower()} delivery density")
+            body = "".join(
+                f"{tank:02d}{which}"
+                + packed.hexfloat(self.c.delivery_density_value(tank, which))
+                for tank in tanks)
+            return self._frame(code, body), f"{word.lower()} delivery density"
         if tok in ("B91", "B93", "B94"):
             # AccuChart Diagnostics, Status and Calibration History
             if not self.c.has("probe"):
@@ -1656,7 +2168,7 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
-                     else sorted(self.c.tank_level) or [1])
+                     else sorted(self.c.tank_level))
             text = self.c.deliveries.ticketed_report(tanks)
             if code[0].isupper():
                 return (self._frame(code, "\n" + text + "\n"),
@@ -1669,12 +2181,16 @@ class Handler:
                     self.c.configuration_lines())), "configuration")
             return (self._frame(code, self.c.configuration_records()),
                     "configuration")
-        if tok in ("113", "114", "115"):
+        if tok in ("113", "114", "115", "121"):
             # Three reports that look like one. 113 is what is standing now,
             # 114 is what has gone away, 115 is what Maintenance Tracker has
             # not had acknowledged -- and only 114 carries the state byte, so
             # its record is twenty characters where the other two are
             # eighteen. See alarmreports.py.
+            #
+            # 121 is a fourth, undocumented, and it answers as 113 does --
+            # see the note beside `REPORTS` above.
+            tok = "113" if tok == "121" else tok
             state = tok in alarmreports.HAS_STATE
             records = {"113": self.c.active_alarm_records,
                        "114": self.c.cleared_alarm_records,
@@ -1699,15 +2215,30 @@ class Handler:
             wide, wide_code, numeric = alarmreports.SERVICE_WIDTHS[tok]
             entries = self.c.service_log()
             if code[0].isupper():
-                rows = ["SERVICE REPORT"]
-                rows.append("DATE/TIME             LABEL     ID      LABEL"
-                            "              CODE" if tok == "11A"
-                            else "DATE/TIME             ID          CODE")
+                # p.56 and p.59's own columns. 11A carries two LABEL
+                # columns this console has nothing for -- the technician's
+                # name and the service description -- so they stand empty
+                # rather than being filled with something invented, and the
+                # ID and CODE sit where the page puts them.
+                rows = ["SERVICE REPORT", wiretables.heading(tok)]
+                if not entries:
+                    # And this report DOES mark an empty one. `I11600.bin` is
+                    # a real console printing the single word under the
+                    # heading, where its alarm-history neighbours print
+                    # nothing at all. See FIDELITY S18.
+                    rows.append("NONE")
                 for e in entries:
                     stamp = time.strptime(e["at"], "%y%m%d%H%M")
-                    rows.append(f"{clock_words(time.mktime(stamp)):22s}"
-                                f"{e['id']:<{wide + 2}.{wide}s}"
-                                f"{e['code']:<{wide_code}.{wide_code}s}")
+                    at = clock_words(time.mktime(stamp))
+                    if tok == "11A":
+                        rows.append(f"{at:43s}"
+                                    f"{e['id']:<7.{wide}s}"
+                                    f"{'':20s}"
+                                    f"{e['code']:<{wide_code}.{wide_code}s}")
+                    else:
+                        rows.append(f"{at:23s}"
+                                    f"{e['id']:<12.{wide}s}"
+                                    f"{e['code']:<{wide_code}.{wide_code}s}")
                 return self._frame(code, SEP.join(rows)), "service history"
             body = (self.c.station_header_field()
                     if tok in alarmreports.HEADERS else "")
@@ -1722,14 +2253,13 @@ class Handler:
             end = asked[6:12] if len(asked) >= 12 else None
             entries = self.c.maintenance_log(start, end)
             if code[0].isupper():
-                rows = ["MAINTENANCE HISTORY",
-                        "TYPE                DATE/TIME              "
-                        "DESCRIPTION"]
+                # p.57: TYPE at 0, the stamp at 20 and DESCRIPTION at 45
+                rows = ["MAINTENANCE HISTORY", wiretables.heading("119")]
                 for e in entries:
                     stamp = time.strptime(e["at"], "%y%m%d%H%M")
                     what = alarmreports.MAINTENANCE_TYPE.get(e["type"], "")
                     rows.append(f"{what:<20.20s}"
-                                f"{clock_words(time.mktime(stamp)):23s}"
+                                f"{clock_words(time.mktime(stamp)):25s}"
                                 f"{self._maintenance_words(e)}")
                 return self._frame(code, SEP.join(rows)), "maintenance history"
             body = alarmreports.count_field("119", len(entries))
@@ -1741,13 +2271,14 @@ class Handler:
             sessions = list(self.c.service_sessions)
             running = bool(sessions) and sessions[0].get("end") is None
             if code[0].isupper():
+                # p.60 puts END TIME at 26, not 24
                 rows = ["SERVICE NOTICE SESSION REPORT",
-                        "START TIME              END TIME"]
+                        wiretables.heading("11B")]
                 for one in sessions:
                     began = clock_words(one["start"])
                     ended = ("IN PROGRESS" if one.get("end") is None
                              else clock_words(one["end"]))
-                    rows.append(f"{began:24s}{ended}")
+                    rows.append(f"{began:26s}{ended}")
                 return self._frame(code, SEP.join(rows)), "service sessions"
             body = "1" if running else "0"
             body += (time.strftime("%y%m%d%H%M",
@@ -1907,17 +2438,29 @@ class Handler:
                 return self._nine(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = ["TANK PRODUCT LABEL     TYPE CODE LENGTH"
-                        " SERIAL NO. D/CODE"]
+                # p.489, off the word boxes. The header names only the five
+                # probe columns and is INDENTED past the tank and its label:
+                # TYPE at 31, CODE at 38, LENGTH at 45, SERIAL NO. at 54 and
+                # D/CODE at 66. There is no `TANK PRODUCT LABEL` over the
+                # first two columns -- this console invented one -- and no
+                # title line above it either, the block opening on the header
+                # the way 201's and 21A's do.
+                #
+                # The row is `TANK  1  REGULAR UNLEADED`, not a bare number:
+                # the word TANK at 0, the number right against 7, the label
+                # at 9. Every one of the seven columns was in the wrong place.
+                rows = [f"{'':31}{'TYPE':<7}{'CODE':<7}{'LENGTH':<9}"
+                        f"{'SERIAL NO.':<12}D/CODE"]
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(
-                        f"{tank:<4d} {label:<17.17s} "
-                        f"{self.c.probe_type_word(tank):<4s} "
-                        f"{self.c.probe_circuit_code(tank):<4s} "
-                        f"{self.c.probe_length(tank):6.2f} "
-                        f"{self.c.probe_serial(tank):>9s} "
-                        f"{self.c.probe_date_code(tank):>6s}")
+                    row = (f"TANK {tank:2d}  {label:<22.22s}"
+                           f"{self.c.probe_type_word(tank):<7s}"
+                           f"{self.c.probe_circuit_code(tank):<7s}"
+                           f"{self.c.probe_length(tank):>6.2f}")
+                    # the last two run to their own right edges, 62 and 71
+                    row += f"{self.c.probe_serial(tank):>11s}"
+                    row += f"{self.c.probe_date_code(tank):>9s}"
+                    rows.append(row)
                 return self._frame(code, SEP.join(rows)), "probe type and serial"
             # "TTpPPKKKKFFFFFFFFSSSSSScccc", once per tank
             body = ""
@@ -1951,14 +2494,16 @@ class Handler:
             if code[0].isupper():
                 rows = []
                 for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
                     word = self.c.probe_type_word(tank)
-                    head = f"TANK {tank} {label} {word}"
                     values = values_of(tank)
                     if word == "MAG" and tok in ("A02", "A03"):
-                        # "MAG GRADIENT= 178.1400" is the whole of that line
-                        rows.append(f"{head} GRADIENT={values[0]:10.4f}")
+                        # "MAG    GRADIENT= 178.1400" is the whole of
+                        # that line, and p.490 sets GRADIENT= at 38 with
+                        # its figure right against 56
+                        rows.append(self._probe_head(
+                            tank, f"GRADIENT={values[0]:9.4f}"))
                         continue
+                    head = self._probe_head(tank)
                     if not values:
                         # a Mag probe has no updated calibration and no
                         # ratios: the example prints the tank and stops
@@ -1998,9 +2543,8 @@ class Handler:
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     window, values = buffer_of(tank)
-                    rows.append(f"TANK {tank} {label} "
-                                f"{self.c.probe_type_word(tank)}"
-                                f" NUMBER OF SAMPLES={window:5d}")
+                    rows.append(self._probe_head(
+                        tank, f"NUMBER OF SAMPLES={window:5d}"))
                     for i in range(0, len(values), 8):
                         rows.append(" ".join(f"{v:8.3f}"
                                              for v in values[i:i + 8]))
@@ -2465,7 +3009,10 @@ class Handler:
                         f"GRADIENT= {self.c.probe_gradient(tank):.4f}",
                         "PROBE INIT:",
                         _stamp_words(self.c.probe_initialised(tank)),
-                        f"NUM SAMPLES= {self.c.probe_window(tank, 'standard')}",
+                        # p.505 holds these four counters right against
+                        # column 15 and 18
+                        f"{'NUM SAMPLES=':<12s}"
+                        f"{self.c.probe_window(tank, 'standard'):4d}",
                     ]
                     channels = self.c.probe_buffer(tank, 1)
                     for n in range(0, len(channels), 2):
@@ -2473,8 +3020,10 @@ class Handler:
                                        for i in range(2)
                                        if n + i < len(channels))
                         rows.append(pair.rstrip())
-                    rows += [f"SAMPLES READ= {read}", f"SAMPLES USED= {used}",
-                             f"LAST ERROR = {err}", "LAST SAMPLE ERROR TIME:",
+                    rows += [f"{'SAMPLES READ=':<13s}{read:6d}",
+                             f"{'SAMPLES USED=':<13s}{used:6d}",
+                             f"{'LAST ERROR  =':<13s}{err:6d}",
+                             "LAST SAMPLE ERROR TIME:",
                              _stamp_words(errtime), "TEMP SENSOR DATA"]
                     for i, t in enumerate(self.c.probe_temperatures(tank)):
                         rows.append(f"T{6 - i}: {t:.1f} F")
@@ -2517,10 +3066,13 @@ class Handler:
                 return self._nine(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = ["MAG PROBE OPTIONS TABLE", "TNK LOW", "NUM TEMP"]
+                # p.504 stacks a two word heading over columns at 0 and
+                # 5, with the tank held right against 3 and the flag at 7
+                rows = ["MAG PROBE OPTIONS TABLE", "TNK   LOW", "NUM  TEMP"]
                 for tank in tanks:
-                    rows.append(f"{tank:<4d}"
-                                f"{'YES' if self.c.probe_low_temp(tank) else 'NO'}")
+                    rows.append(
+                        f"{tank:4d}"
+                        f"{'YES' if self.c.probe_low_temp(tank) else 'NO':>5s}")
                 return self._frame(code, SEP.join(rows)), "mag probe options"
             body = "".join(f"{tank:02d}01"
                            f"{1 if self.c.probe_low_temp(tank) else 0}"
@@ -2541,8 +3093,7 @@ class Handler:
                 rows = []
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"TANK {tank} {label} "
-                                f"{self.c.probe_type_word(tank)} {title}")
+                    rows.append(self._probe_head(tank, title))
                     flags = self.c.probe_leak_flags(tank, which)
                     for rate in self.c.probe_leak_rates(tank, which):
                         head = ("GROSS LEAK TEST FLAGS:" if rate == "gross"
@@ -2569,22 +3120,24 @@ class Handler:
                 rows = []
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"TANK {tank} {label} "
-                                f"{self.c.probe_type_word(tank)}"
-                                f" LEAK TEST AVERAGING BUFFERS")
+                    rows.append(self._probe_head(
+                        tank, "LEAK TEST AVERAGING BUFFERS"))
                     for rate_key, shown in self.c.LEAK_BUFFERS:
                         rows.append(f"{shown} GAL/HR LEAK TEST BUFFER")
-                        rows.append("START TIME           HOURS VOLUME  RATE")
+                        # p.510: HOURS at 21, VOLUME at 28 and RATE at
+                        # 38, over figures held right against 25, 33 and 41
+                        rows.append("START TIME           HOURS  VOLUME"
+                                    "    RATE")
                         got = self.c.probe_leak_buffer(tank, rate_key)
                         for r in got:
                             rows.append(f"{clock_words(r.started):21s}"
-                                        f"{r.hours:5.1f}{r.volume:7.0f}"
-                                        f"{r.rate:7.3f}")
+                                        f"{r.hours:5.1f}{r.volume:8.0f}"
+                                        f"{r.rate:8.3f}")
                         if got:
                             n = len(got)
                             rows.append(f"{'AVERAGE':21s}"
                                         f"{sum(r.hours for r in got)/n:5.1f}"
-                                        f"{sum(r.volume for r in got)/n:7.0f}"
+                                        f"{sum(r.volume for r in got)/n:8.0f}"
                                         f"{sum(r.rate for r in got)/n:7.3f}")
                 return self._frame(code, SEP.join(rows)), "leak averaging buffers"
             body = ""
@@ -2617,13 +3170,20 @@ class Handler:
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     (d1, v1), (d2, v2) = self.c.probe_reference_distance(tank)
-                    rows.append(f"TANK {tank} {label} "
-                                f"{self.c.probe_type_word(tank)}")
+                    # A07 heads its tank with the Name Type, not the family
+                    # word: the manual's own example reads MAG7 where A01's
+                    # reads MAG, and a real console's chapter 9 printout
+                    # agrees. See console.probe_name_type.
+                    rows.append(self._probe_head(
+                        tank, word=self.c.probe_name_type(tank)))
+                    # p.495: the label at 0, the date at 20 and the
+                    # figure right against 37, which is where the
+                    # page's own `XXXXX.XX` placeholder ends
                     for what, when, value in (("ORIG", d1, v1),
                                               ("CURR", d2, v2)):
                         shown = f"{when[2:4]}/{when[4:6]}/{when[0:2]}"
-                        rows.append(f"{what} REF DISTANCE {shown}"
-                                    f" {value:9.2f}")
+                        rows.append(f"{what} REF DISTANCE".ljust(20)
+                                    + f"{shown} {value:8.2f}")
                 return self._frame(code, SEP.join(rows)), "reference distance"
             body = ""
             for tank in tanks:
@@ -2674,7 +3234,7 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
-                     else sorted(self.c.tank_level) or [1])
+                     else sorted(self.c.tank_level))
             recent = tok == "20C"
             title = "LAST DELIVERY REPORT" if recent else "DELIVERY REPORT"
             if code[0].isupper():
@@ -2687,7 +3247,7 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
-                     else sorted(self.c.programmed_tanks()) or [1])
+                     else sorted(self.c.programmed_tanks()))
             if tok == "219":
                 # Tank Chart Security Status
                 flag = "1" if self.c.chart_secured() else "0"
@@ -2715,13 +3275,22 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
-                     else sorted(self.c.programmed_tanks()) or [1])
+                     else sorted(self.c.programmed_tanks()))
             if code[0].isupper():
-                rows = ["TANK PROFILE", "", "TANK PRODUCT LABEL       PROFILE"]
+                # 576013-635 Rev AA p.81, measured off the word boxes: TANK
+                # at column 0, PRODUCT LABEL at 7 and PROFILE at 31, with the
+                # tank right against 2 and the profile right against 37.
+                # `wiretables.heading` has nothing for 217 -- the builder
+                # cannot shape a block whose title is followed by a DEVICE
+                # header before its heading -- so the line is written here,
+                # and it used to be missing entirely.
+                rows = ["TANK PROFILE", "",
+                        f"{'TANK':<7s}{'PRODUCT LABEL':<24s}PROFILE"]
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    name = self.c.PROFILE_NAME[self.c.tank_profile(tank)]
-                    rows.append(f"{tank:2d} {label:<22s}{name}")
+                    name = self.c.PROFILE_REPORT_NAME[
+                        self.c.tank_profile(tank)]
+                    rows.append(f"{tank:2d}     {label:<24.24s}{name:>6s}")
                 text = "\n" + "\n".join(rows) + "\n"
                 return self._frame(code, text), "tank profile"
             body = "".join(f"{t:02d}{self.c.tank_profile(t)}" for t in tanks)
@@ -2740,25 +3309,21 @@ class Handler:
             tanks = self._tanks(dev)
             record = ((data or "").strip()[:2] or "01") if tok == "2E2" else ""
             if code[0].isupper():
-                if tok == "214":
-                    rows = ["IN-TANK MASS/DENSITY INVENTORY",
-                            "TANK  PRODUCT           VOLUME  MASS   DENSITY"
-                            "  HEIGHT  WATER  TEMP"]
-                else:
-                    rows = ["TANK  PRODUCT           VOLUME  TC VOLUME"
-                            "  ULLAGE  HEIGHT  WATER  TEMP"]
+                # Both blocks' columns are 576013-635's own -- p.82 for 214
+                # and p.104 for 2E2 -- and 2E2's block was one this project
+                # could not see until the tool learned that a stored report
+                # answers with a SECOND stamp where a title would be.
+                rows = (["IN-TANK MASS/DENSITY INVENTORY", ""]
+                        if tok == "214" else [])
+                rows.append(wiretables.heading(tok))
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    if tok == "214":
-                        v = self._mass_floats(tank)
-                        rows.append(f"{tank:3d}   {label:<18.18s}"
-                                    f"{v[0]:8.0f}{v[1]:7.0f}{v[2]:9.4f}"
-                                    f"{v[3]:8.2f}{v[4]:7.2f}{v[5]:7.2f}")
-                    else:
-                        v = self._inventory(tank, "201")
-                        rows.append(f"{tank:3d}   {label:<18.18s}"
-                                    f"{v[0]:8.0f}{v[1]:10.0f}{v[2]:8.0f}"
-                                    f"{v[3]:8.2f}{v[4]:7.2f}{v[5]:7.2f}")
+                    v = (self._mass_floats(tank) if tok == "214"
+                         else self._inventory(tank, "201"))
+                    whole = (0, 1) if tok == "214" else (0, 1, 2)
+                    rows.append(wiretables.row(tok, [tank, label] + [
+                        f"{n:.0f}" if p in whole else n
+                        for p, n in enumerate(v)]))
                 return self._frame(code, SEP.join(rows)), "inventory"
             body = ""
             if tok == "2E2":
@@ -2819,30 +3384,33 @@ class Handler:
                 rows = ["TANK 50 POINT HEIGHTS, VOLUMES AND SLOPES"]
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    pairs = self.c.chart_points(tank)
+                    pairs = self.c.chart_report_rows(tank)
                     rows.append(f"T {tank}: {label}")
-                    rows.append("DIAMETER  FULL VOLUME  SLOPE")
+                    # p.84: DIAMETER at 7, FULL VOLUME at 19 and SLOPE
+                    # at 35 over figures held right against 14, 29 and 39,
+                    # then PAIR at 1, HEIGHT at 9, VOLUME at 24, SLOPE at 35
+                    rows.append("       DIAMETER    FULL VOLUME     SLOPE")
                     diameter = self.c.limit("607", tank) or 96.0
-                    full = self.c.limit("60A", tank) or 10000.0
+                    full = self.c.full_volume(tank)
                     slope = full / diameter if diameter else 0.0
-                    rows.append(f"{diameter:<10.2f}{full:<13.0f}{slope:.2f}")
-                    rows.append("PAIR  HEIGHT  VOLUME  SLOPE")
-                    for n, (height, volume) in enumerate(pairs, 1):
-                        rows.append(f"{n:<6d}{height:<8.2f}{volume:<8.0f}"
-                                    f"{slope:.2f}")
+                    rows.append(f"{diameter:15.2f}{full:15.0f}{slope:10.2f}")
+                    rows.append(" PAIR    HEIGHT         VOLUME     SLOPE")
+                    for n, (height, volume, rate) in enumerate(pairs, 1):
+                        rows.append(f"{n:4d}{height:11.2f}{volume:15.0f}"
+                                    f"{rate:10.2f}")
                 return self._frame(code, SEP.join(rows)), "tank chart"
             body = ""
             for tank in tanks:
-                pairs = self.c.chart_points(tank)
+                pairs = self.c.chart_report_rows(tank)
                 diameter = self.c.limit("607", tank) or 96.0
-                full = self.c.limit("60A", tank) or 10000.0
+                full = self.c.full_volume(tank)
                 slope = full / diameter if diameter else 0.0
                 body += (f"{tank:02d}" + packed.hexfloat(diameter)
                          + packed.hexfloat(full) + packed.hexfloat(slope)
                          + f"{len(pairs):02X}")
-                for height, volume in pairs:
+                for height, volume, rate in pairs:
                     body += (packed.hexfloat(height) + packed.hexfloat(volume)
-                             + packed.hexfloat(slope))
+                             + packed.hexfloat(rate))
             return self._frame(code, body), "tank chart"
         if tok in ("222", "225", "226", "227"):
             # The ticket/variance family. 222 carries a Bill of Lading number
@@ -2873,9 +3441,13 @@ class Handler:
                         rows.append("DELIVERY END DATE     NUMBER  VOLUME"
                                     "  VOLUME  VOLUME")
                     else:
-                        rows.append("                      TICKET  GAUGE"
-                                    "   VARIANCE")
-                        rows.append("                      VOLUME  VOLUME")
+                        # p.93: TICKET at 25, GAUGE at 41 and VARIANCE
+                        # at 55, over figures held right against 31, 46
+                        # and 61
+                        rows.append("                         TICKET      "
+                                    "    GAUGE         VARIANCE")
+                        rows.append("                         VOLUME      "
+                                    "    VOLUME")
                     total = [0.0, 0.0, 0.0]
                     for rec in self._deliveries_of(tank, 10):
                         stamp = clock_words(rec["end"])
@@ -2885,13 +3457,13 @@ class Handler:
                                         f"{tick:7.1f}{gauge:8.1f}"
                                         f"{rec['tc']:8.1f}")
                         else:
-                            rows.append(f"{stamp:22s}{tick:7.1f}"
-                                        f"{gauge:8.1f}{tick - gauge:9.1f}")
+                            rows.append(f"{stamp:22s}{tick:10.1f}"
+                                        f"{gauge:15.1f}{tick - gauge:15.1f}")
                         total[0] += tick
                         total[1] += gauge
                         total[2] += tick - gauge
                     if tok != "222":
-                        rows.append(f"{'TOTALS':22s}{total[0]:7.1f}"
+                        rows.append(f"{'TOTALS':22s}{total[0]:10.1f}"
                                     f"{total[1]:8.1f}{total[2]:9.1f}")
                         sales = self.c.bir.row(tank, kind)
                         sold = (sales or {}).get("sales", 0.0)
@@ -2979,12 +3551,13 @@ class Handler:
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     rows.append(f"T {tank}:{label}")
-                    rows.append("TIME STAMP  ENDTEMP  ENDVOL   SALES"
-                                "   STAT  HR VAR")
+                    rows.append(wiretables.heading(tok))
                     for one in self._hrm_hours(tank):
-                        rows.append(f"{one['stamp']:12s}{one['temp']:7.2f}"
-                                    f"{one['volume']:10.2f}{one['sales']:9.1f}"
-                                    f"{one['flag']:>5s}{one['variance']:9.3f}")
+                        # p.517 and p.519 draw the same six columns, and the
+                        # precision of four of them is on the page too
+                        rows.append(wiretables.row(tok, [
+                            one["stamp"], one["temp"], one["volume"],
+                            one["sales"], one["flag"], one["variance"]]))
                 return self._frame(code, SEP.join(rows)), "HRM diagnostic"
             body = ""
             for tank in tanks:
@@ -3013,13 +3586,15 @@ class Handler:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     rows.append(f"T {tank}:{label}")
                     rows.append("DAILY HRM HISTORY")
-                    rows.append("TIME/DATE   RECORDS  MIN     MAX"
-                                "    AVE     STATUS")
+                    # p.518: RECORDS at 17, MIN at 29, MAX at 40, AVE at
+                    # 51 and STATUS at 60, over figures held right against
+                    # 18, 32, 43 and 54
+                    rows.append(wiretables.heading("A62"))
                     for one in self._hrm_days(tank):
-                        rows.append(f"{one['stamp']:12s}{one['records']:<9d}"
-                                    f"{one['min']:8.3f}{one['max']:7.3f}"
-                                    f"{one['ave']:8.3f}  "
-                                    f"{hrmreports.HRM_DAILY[one['status']]}")
+                        rows.append(f"{one['stamp']:10s}{one['records']:9d}"
+                                    f"{one['min']:14.3f}{one['max']:11.3f}"
+                                    f"{one['ave']:11.3f}"
+                                    f"{hrmreports.HRM_DAILY[one['status']]:>11s}")
                 return self._frame(code, SEP.join(rows)), "HRM daily history"
             body = ""
             for tank in tanks:
@@ -3100,21 +3675,23 @@ class Handler:
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     rows.append(f"T {tank}:{label}")
-                    rows.append("INCREASE  DATE / TIME              "
-                                "FUEL VOLUME  WATER VOLUME  TEMP DEG F")
+                    # p.522: FUEL VOLUME at 39, WATER VOLUME at 54 and
+                    # TEMP DEG F at 69, over figures right against 49, 61
+                    # and 77
+                    rows.append(wiretables.heading("A91"))
                     for one in self._outages(tank):
-                        rows.append(f"POWER REMOVED:  "
+                        rows.append(f"{'POWER REMOVED:':<16s}"
                                     f"{clock_words(one['off']):24s}"
-                                    f"{one['off_volume']:6.0f}"
-                                    f"{one['off_water']:4.0f}"
-                                    f"{one['off_temp']:7.1f}")
-                        rows.append(f"POWER RESTORED: "
+                                    f"{one['off_volume']:10.0f}"
+                                    f"{one['off_water']:12.0f}"
+                                    f"{one['off_temp']:16.1f}")
+                        rows.append(f"{'POWER RESTORED:':<16s}"
                                     f"{clock_words(one['on']):24s}"
-                                    f"{one['on_volume']:6.0f}"
-                                    f"{one['on_water']:4.0f}"
-                                    f"{one['on_temp']:7.1f}")
-                        rows.append("GROSS VOLUME CHANGE: "
-                                    f"{one['change']:.0f}")
+                                    f"{one['on_volume']:10.0f}"
+                                    f"{one['on_water']:12.0f}"
+                                    f"{one['on_temp']:16.1f}")
+                        rows.append(f"{'GROSS VOLUME CHANGE:':<21s}"
+                                    f"{one['change']:28.0f}")
                 return self._frame(code, SEP.join(rows)), "power outage"
             body = ""
             for tank in tanks:
@@ -3136,26 +3713,46 @@ class Handler:
             if not self.c.has("smart"):
                 return self._nine(code), "no smart sensor module fitted"
             if tok == "B61":
-                sensors = self._devices_of("smart", dev)
+                # A VAPOR VALVE DIAGNOSTIC is a per-category report, and this
+                # walked every smart sensor on the card whatever it was --
+                # every position the cage could hold, configured or not -- so
+                # a mag sensor and a vacuum sensor each answered with a valve
+                # position and a battery invented for them. `_smart_devices`
+                # is the filter B33 has always used; category 08 is 723's own
+                # number for the valve. See FIDELITY L4.
+                sensors = wiresensors._smart_devices(
+                    self.c, dev, wiresensors.VALVE)
                 if code[0].isupper():
                     rows = ["VAPOR VALVE DIAGNOSTIC REPORT"]
                     for n in sensors:
                         label = self.c.text("722", n) or f"VAPOR VALVE {n}"
                         v = self._valve(n)
-                        rows += [f"s {n}:{label}",
-                                 "                VAPOR VALVE",
-                                 f"SERIAL NUMBER   {v['serial']}",
-                                 "VALVE POSITION: "
-                                 + hrmreports.VALVE_POSITION[v["position"]],
-                                 "BATTERY: " + hrmreports.BATTERY[v["battery"]],
-                                 "OPEN CAP:  "
-                                 + hrmreports.CAPACITOR[v["open_cap"]],
-                                 "CLOSE CAP: "
-                                 + hrmreports.CAPACITOR[v["close_cap"]],
-                                 f"AMBNT TEMP: {v['ambient']:.2f} F",
-                                 f"OUTLET TMP: {v['outlet']:.2f} F",
-                                 "SENSOR FAULTS:"]
-                        rows += (v["faults"] or ["NONE"])
+                        rows += ["", f"s {n}:{label}", "",
+                                 "VAPOR VALVE",
+                                 _valve_line("SERIAL NUMBER", v["serial"]),
+                                 _valve_line("VALVE POSITION:",
+                                             hrmreports.VALVE_POSITION[
+                                                 v["position"]])]
+                        # "BATTERY: ... (only if wireless)", and a wired valve
+                        # reports 0=Unknown. 577013-937 Figure 42 is a real
+                        # console's IB6100 for a wired valve and prints no
+                        # BATTERY line at all; the packed form below still
+                        # carries the byte, because its format always does.
+                        if v["battery"] != "0":
+                            rows.append(_valve_line(
+                                "BATTERY:", hrmreports.BATTERY[v["battery"]]))
+                        rows += [
+                            _valve_line("OPEN CAP:",
+                                        hrmreports.CAPACITOR[v["open_cap"]]),
+                            _valve_line("CLOSE CAP:",
+                                        hrmreports.CAPACITOR[v["close_cap"]]),
+                            _valve_line("AMBNT TEMP:",
+                                        f"{v['ambient']:.2f} F"),
+                            _valve_line("OUTLET TMP:", f"{v['outlet']:.2f} F"),
+                            "SENSOR FAULTS:"]
+                        # every fault name on p.540 carries one leading space,
+                        # and so does NONE
+                        rows += [" " + f for f in (v["faults"] or ["NONE"])]
                     return self._frame(code, SEP.join(rows)), "vapor valve"
                 body = ""
                 for n in sensors:
@@ -3172,16 +3769,20 @@ class Handler:
             # B62, whose sub alarm numbering is NOT B61's bit numbering
             history = self._valve_history()
             if code[0].isupper():
+                # p.546: ID right against 1, TYPE at 5, ALARM TYPE at 10,
+                # SUB ALARM at 31, STATE at 56 and the unpadded date and
+                # hour at 64 and 72
                 rows = ["SMART SENSOR SUB ALARM HISTORY",
-                        "ID TYPE ALARM TYPE          SUB ALARM"
-                        "               STATE DATE    TIME"]
+                        wiretables.heading("B62")]
                 for one in history:
                     stamp = time.strptime(one["at"], "%y%m%d%H%M")
-                    rows.append(f"{one['sensor']:<3d}14   "
-                                f"{'SENSOR FAULT ALARM':<20s}"
-                                f"{one['fault']:<24s}"
-                                f"{'CLEAR' if one['state'] == '00' else 'ALARM'}"
-                                f" {time.strftime('%m-%d-%y %I:%M%p', stamp)}")
+                    when, clock = console.alarm_report_stamp(stamp)
+                    rows.append(f"{one['sensor']:2d}"
+                                f"{14:5d}   "
+                                f"{'SENSOR FAULT ALARM':<21s}"
+                                f"{one['fault']:<25s}"
+                                f"{'CLEAR' if one['state'] == '00' else 'ALARM':<8s}"
+                                f"{when:>8s} {clock:>7s}")
                 return self._frame(code, SEP.join(rows)), "sub alarm history"
             body = f"{len(history):02X}"
             for one in history:
@@ -3255,35 +3856,41 @@ class Handler:
                 rows = []
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"TANK {tank} {label}")
+                    # p.146 and p.147 head a tank with the number held right
+                    # against column 6 and the label at 8, which is NOT how
+                    # p.64 and p.71 head one
+                    rows.append(f"TANK {tank:2d} {label}")
                     loads = self._loads_of(tank)
                     if tok == "391":
-                        rows.append("NO  START DATE/TIME   VOLUME  TEMP"
-                                    "  END DATE/TIME    VOLUME  TEMP  TOTAL")
+                        rows.append("NO START DATE/TIME VOLUME  TEMP   "
+                                    "END DATE/TIME VOLUME  TEMP  TOTAL")
                         for n, one in loads:
                             rows.append(
-                                f"{n:<4d}{clock_words(one['start']):18s}"
-                                f"{one['start_vol']:7.0f}{one['start_temp']:6.1f}"
-                                f"  {clock_words(one['end']):17s}"
-                                f"{one['end_vol']:7.0f}{one['end_temp']:6.1f}"
+                                f"{n:2d}  {self._tanker_stamp(one['start'])}"
+                                f"{one['start_vol']:7.0f}"
+                                f"{one['start_temp']:6.1f}  "
+                                f"{self._tanker_stamp(one['end'])}"
+                                f"{one['end_vol']:7.0f}"
+                                f"{one['end_temp']:6.1f}"
                                 f"{one['total']:7.0f}")
                     else:
-                        rows.append("NO         DATE/TIME       VOLUME  TEMP"
+                        rows.append("NO         DATE/TIME      VOLUME  TEMP"
                                     "  TC VOLUME")
                         for n, one in loads:
-                            rows.append(f"{n:<3d}START:  "
-                                        f"{clock_words(one['start']):16s}"
-                                        f"{one['start_vol']:7.0f}"
-                                        f"{one['start_temp']:6.1f}"
-                                        f"{one['start_tc']:9.0f}")
-                            rows.append(f"   END:    "
-                                        f"{clock_words(one['end']):16s}"
-                                        f"{one['end_vol']:7.0f}"
-                                        f"{one['end_temp']:6.1f}"
-                                        f"{one['end_tc']:9.0f}")
-                            rows.append(f"   TOTAL:  {'':16s}"
+                            rows.append(
+                                f"{n:2d}  START: "
+                                f"{self._tanker_stamp(one['start'])}"
+                                f"{one['start_vol']:7.0f}"
+                                f"{one['start_temp']:6.1f}"
+                                f"{one['start_tc']:11.0f}")
+                            rows.append(
+                                f"{'END:':>10s} {self._tanker_stamp(one['end'])}"
+                                f"{one['end_vol']:7.0f}"
+                                f"{one['end_temp']:6.1f}"
+                                f"{one['end_tc']:11.0f}")
+                            rows.append(f"{'TOTAL:':>10s} {'':14s}"
                                         f"{one['total']:7.0f}{'':6s}"
-                                        f"{one['total_tc']:9.0f}")
+                                        f"{one['total_tc']:11.0f}")
                 return self._frame(code, SEP.join(rows)), "tanker load"
             body = ""
             for tank in tanks:
@@ -3325,11 +3932,22 @@ class Handler:
                        else list(range(1, most + 1)))
             title = ("VMCI ALARM HISTORY REPORT" if tok == "411"
                      else "VMC ALARM HISTORY REPORT")
+            # 411 is the VMCI BOARD, which is alarm category 35; 412 is the
+            # VMC CONTROLLER, category 36. Both read the console's own alarm
+            # log rather than a store of their own, so the two reports, the
+            # two alarm histories and the status report cannot disagree about
+            # what happened. Both printed a header and no rows before -- the
+            # computer form said "00 incidents" for every device and the
+            # display form said nothing at all. See FIDELITY M12 and N1.
+            category = "35" if tok == "411" else "36"
             if code[0].isupper():
                 rows = [title, "DEVICE  ALARMS" if tok == "411"
-                        else "VMC  S/N     ALARMS"]
+                        else "VMC   S/N    ALARMS"]
+                rows += sumpreports.alarm_rows(
+                    self.c, category, devices, table,
+                    8 if tok == "411" else 13)
                 return self._frame(code, SEP.join(rows)), "vmc alarm history"
-            body = "".join(f"{n:02d}00" for n in devices)
+            body = sumpreports.alarm_records(self.c, category, devices)
             return self._frame(code, body), "vmc alarm history"
         if tok == "680":
             # "Computer format is not supported for this command" -- the only
@@ -3339,15 +3957,21 @@ class Handler:
             if not code[0].isupper():
                 return self._nine(code), "display format only"
             rows = ["FUEL MANAGEMENT SETUP",
-                    f"DELIVERY WARN DAYS: {self.c.limit('681', 0) or 3.5:.1f}",
-                    "AUTO PRINT: " + (self.c.text("682", 0) or "10:00 AM"),
+                    # p.314 holds the days right against 23 and the
+                    # auto print time at 16
+                    f"DELIVERY WARN DAYS:"
+                    f"{self.c.limit('681', 0) or 3.5:5.1f}",
+                    # p.314 holds the time right against 23, which is
+                    # where DELIVERY WARN DAYS's figure ends too
+                    f"{'AUTO PRINT:':<16s}"
+                    + (self.c.text("682", 0) or "10:00 AM"),
                     "FUEL MANAGEMENT AVERAGE SALES (GALLONS)"]
             for tank in self._tanks(dev):
                 label = self.c.text("602", tank) or f"TANK {tank}"
                 f = self.c.fuel_management(tank)
                 rows.append(f"{label} ( TANK {tank} )")
-                rows.append("SUN   MON   TUE   WED   THR   FRI   SAT")
-                rows.append(" ".join(f"{v:5.0f}" for v in f[3:10]))
+                rows.append("   SUN   MON   TUE   WED   THR   FRI   SAT")
+                rows.append("".join(f"{v:6.0f}" for v in f[3:10]))
             return self._frame(code, SEP.join(rows)), "fuel management setup"
         if tok == "790":
             # "Response is the same as display format" -- no packed template.
@@ -3357,13 +3981,17 @@ class Handler:
                     f"TD:{self.c.software_info()['created']}" for n in ports]
             return self._frame(code, SEP.join(rows)), "DIM software revision"
         if tok in ("888", "88D"):
+            # "PP - Communication Port Number (00=all)", and device 00
+            # answered for port 1 alone on a console with six positions.
             ports = ([int(dev)] if dev != "00" and dev.isdigit() and int(dev)
-                     else [1])
+                     else sorted(self.c.comm_positions()) or [1])
             if tok == "88D":
                 if code[0].isupper():
                     rows = ["COMMUNICATION DIAGNOSTIC"]
                     for n in ports:
-                        rows += [f"COMM BOARD : {n} S-LINK",
+                        # p.477 sets the colon at 12, the same column
+                        # 888 and 889 set theirs
+                        rows += [f"COMM BOARD  : {n} S-LINK",
                                  "MODEM TYPE : "
                                  + sumpreports.MODEM_TYPE["03"],
                                  "MODEM AUTO DETECTED: "
@@ -3374,24 +4002,59 @@ class Handler:
                                                   for n in ports)),
                         "SiteLink")
             if code[0].isupper():
-                rows = []
-                for n in ports:
-                    rows += [f"COMM BOARD : {n} (RS-232)", "CONNECTION : NONE"]
-                return self._frame(code, SEP.join(rows)), "comm status"
-            body = "00"
+                return (self._frame(code, SEP.join(self._comm_status(ports))),
+                        "comm status")
+            body = f"{sum(len(self.c.comm_errors.get(n) or ()) for n in ports):02d}"
             for n in ports:
-                body += f"{n:02d}00" + "00" + "00" + "00"
-                body += f"{9600:05d}" + "1" + "1" + "8"
-                body += time.strftime("%y%m%d%H%M", self.c.now()) * 2
+                errors = self.c.comm_errors.get(n) or ()
+                body += (f"{n:02d}{len(errors):02d}"
+                         + f"{int(self.c.comm_connect.get(n) or 0):02d}")
+                for one in errors:
+                    uart = one.get("uart") or self._port_uart(n)
+                    body += (f"{one.get('state', 0):02d}"
+                             f"{one.get('error', 0):02d}"
+                             f"{int(uart['baud']):05d}"
+                             f"{uart['parity']}{uart['stop']}{uart['data']}")
+                for which in ("comm_data_at", "comm_error_at"):
+                    when = getattr(self.c, which).get(n)
+                    body += (time.strftime("%y%m%d%H%M", time.localtime(when))
+                             if when else "0" * 10)
             return self._frame(code, body), "comm status"
+        if tok == "8A4":
+            # The Inquire form, which the manual gives in both formats and
+            # this console answered with an empty frame: "MAINTENANCE TRACKER
+            # BLOCK HARDWARE KEY / LABEL  ID". Same template as 8A3 and the
+            # opposite list, which is what makes blocking a key checkable
+            # from the wire. See FIDELITY D13.
+            if not self.c.has("mt"):
+                return self._nine(code), "no Maintenance Tracker fitted"
+            keys = self.c.blocked_tracker_keys()
+            if code[0].isupper():
+                rows = ["MAINTENANCE TRACKER BLOCK HARDWARE KEY",
+                        "LABEL" + " " * 15 + "ID"]
+                rows += [f"{name:<20.20s}{ident}" for ident, name in keys]
+                return self._frame(code, SEP.join(rows)), "blocked keys"
+            body = f"{len(keys):03d}"
+            for ident, name in keys:
+                body += f"{name:<17.17s}{ident:<6.6s}"
+            return self._frame(code, body), "blocked keys"
         if tok in ("8A2", "8A3"):
             if not self.c.has("mt"):
                 return self._nine(code), "no Maintenance Tracker fitted"
             if tok == "8A2":
                 entries = self.c.service_codes()
                 if code[0].isupper():
-                    rows = ["SERVICE CODE LIST", "STANDARD LABEL       CODE"]
-                    rows += [f"{name:<21.21s}{cc}" for cc, name in entries]
+                    # 576013-635 Rev AA's own sample: the label left in
+                    # twenty and the code at column 21, under a STANDARD
+                    # heading, then a blank and a USER DEFINED one. This
+                    # ran the code column one place right and printed no
+                    # second heading at all. See FIDELITY P1.
+                    rows = ["SERVICE CODE LIST", "STANDARD LABEL      CODE"]
+                    rows += [f"{name:<20.20s}{cc}"
+                             for cc, name in self.c.SERVICE_CODES]
+                    rows += ["", "USER DEFINED LABEL  CODE"]
+                    rows += [f"{name:<20.20s}{cc}"
+                             for cc, name in self.c.user_service_codes]
                     return self._frame(code, SEP.join(rows)), "service codes"
                 body = f"{len(entries):03d}"
                 for cc, name in entries:
@@ -3399,9 +4062,15 @@ class Handler:
                 return self._frame(code, body), "service codes"
             keys = self.c.tracker_keys()
             if code[0].isupper():
+                # The label runs left in TWENTY and the ID starts at column
+                # 21, measured off the rendered page rather than counted in
+                # an extraction: the sample's `LABEL` and `ID` sit at x=72
+                # and x=191.9 on a 6-point character, which is column 20.
+                # This was eighteen, and 8A2's list two screens away had the
+                # same fault -- see FIDELITY P1 and D13.
                 rows = ["MAINTENANCE TRACKER ACTIVE HARDWARE KEY LIST",
-                        "LABEL             ID"]
-                rows += [f"{name:<18.18s}{ident}" for ident, name in keys]
+                        "LABEL" + " " * 15 + "ID"]
+                rows += [f"{name:<20.20s}{ident}" for ident, name in keys]
                 return self._frame(code, SEP.join(rows)), "tracker keys"
             body = f"{len(keys):03d}"
             for ident, name in keys:
@@ -3410,20 +4079,50 @@ class Handler:
         if tok in ("901", "903"):
             if tok == "901":
                 if code[0].isupper():
+                    # p.487: the three headings at 23, 32 and 40, and
+                    # the results held right against 25, 34 and 43
                     return (self._frame(code, SEP.join(
-                        ["              I/O    RAM    PROM",
-                         "SYSTEM BOARD  PASS   PASS   PASS"])), "self test")
+                        [f"{'':23s}I/O      RAM     PROM",
+                         f"{'SYSTEM BOARD':<22s}PASS     PASS     PASS"])),
+                        "self test")
                 return self._frame(code, "000000"), "self test"
             info = self.c.software_info()
             if code[0].isupper():
-                rows = ["PC DIAGNOSTIC DATA", "PERIPHERAL CONTROLLER",
-                        "- " * 12,
+                # p.489: the title at 3, the sub-title at 2, the rule
+                # in two halves of six with two spaces between them, and the
+                # three counters held right against 21
+                # Twenty-four columns, every value held right against the
+                # last of them, and the label padded to fifteen with " ="
+                # after it -- which puts `PASSED` and a five-digit count in
+                # the same place. The two message counters break that rule
+                # and the console keeps them: `MC->PC COMMS =` is fourteen
+                # characters where the other five are seventeen.
+                #
+                # `tests/console_capture/raw/I90300.bin` is where all of that
+                # is measured, and it settles three things this report had
+                # wrong besides the spacing: the blank line under the
+                # checksum, the two MC/PC message counters, which were not
+                # drawn at all, and the counters themselves, which were
+                # literal zeros here while the PANEL's own screen for the
+                # same diagnostic had a reset count and both message counts.
+                # See FIDELITY S18.
+                n = self.c.pc_counters()
+                pad = (lambda label, value:
+                       f"{label:<15s} ={str(value):>7s}")
+                rows = ["   PC DIAGNOSTIC DATA", "  PERIPHERAL CONTROLLER",
+                        # Twenty-four columns exactly: six dashes, two
+                        # spaces, six dashes. This ran to twenty-five,
+                        # because "- " * 6 carries its own trailing space.
+                        ("- " * 6).strip() + "  " + ("- " * 6).strip(),
                         f"PC SWARE# {self.c.PC_SOFTWARE}",
                         f"CREATED - {info['created']}",
-                        "PC ROM CHECKSUM=PASSED",
-                        "PC RESET COUNTS=       0",
-                        "PC COMM ERRORS =       0",
-                        "MC CKSUM ERRS  =       0"]
+                        pad("PC ROM CHECKSUM", "PASSED"),
+                        "",
+                        pad("PC RESET COUNTS", n["resets"]),
+                        pad("PC COMM ERRORS", n["comm_errors"]),
+                        pad("MC CKSUM ERRS", n["cksum_errors"]),
+                        f"MC->PC COMMS ={n['to_pc']:>10d}",
+                        f"MC<-PC COMMS ={n['from_pc']:>10d}"]
                 return self._frame(code, SEP.join(rows)), "PC diagnostic"
             body = (f"{self.c.PC_SOFTWARE:<14.14s}"
                     f"{info['created']:<14.14s}" + "05"
@@ -3474,6 +4173,21 @@ class Handler:
                              f"{v['remain']:04X}")
             return self._frame(code, body), "VMC status"
         if tok in ("212",):
+            # 576013-635 Rev AA p.74 prints the SAME sample under 212 as p.65
+            # prints under 207, line for line: TANK LEAK TEST HISTORY, the
+            # LAST and FULLEST blocks and the monthly section. The two differ
+            # only in the COMPUTER format, where each of 212's records
+            # carries two more fields after the percentage:
+            #
+            #   zz        - Number of 8 Byte Fields to Follow (Hex)
+            #   mmmmmmmm  - In-Tank Leak Test Method (Hex),
+            #               00000000=Standard, 00000001=CSLD
+            #
+            # This was built as a separate report -- three LAST blocks and no
+            # FULLEST or monthly sections, a compressed header, a different
+            # row format, the report type and history number hardcoded, and
+            # the method byte hardcoded to Standard even on a CSLD tank,
+            # which is the one field 212 exists for. See FIDELITY H14.
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             tanks = self._tanks(dev)
@@ -3482,48 +4196,32 @@ class Handler:
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     rows.append(f"T {tank}:{label}")
-                    for name, kind in (("LAST GROSS TEST PASSED:", "gross"),
-                                       ("LAST ANNUAL TEST PASSED:", "annual"),
-                                       ("LAST PERIODIC TEST PASS:",
-                                        "periodic")):
-                        rows.append(name)
-                        got = self.c.probe_leak_buffer(tank, kind, most=1)
-                        if not got:
-                            rows.append("NO TEST PASSED")
-                            continue
-                        rows.append("TEST START TIME       HOURS VOLUME"
-                                    " % VOLUME TEST TYPE")
-                        r = got[0]
-                        full = self.c.limit("60A", tank) or 10000.0
-                        pct = (r.volume / full * 100.0) if full else 0.0
-                        rows.append(f"{clock_words(r.started):22s}"
-                                    f"{r.hours:5.0f}{r.volume:8.0f}"
-                                    f"{pct:8.1f}   STANDARD")
-                return self._frame(code, SEP.join(rows)), "leak history 2"
+                    rows += self.c.leak_history_lines(tank)
+                return self._frame(code, SEP.join(rows)), "leak test history"
             body = ""
             for tank in tanks:
-                got = []
-                for rr, kind in (("00", "gross"), ("00", "annual"),
-                                 ("00", "periodic")):
-                    got += [(rr, r) for r in
-                            self.c.probe_leak_buffer(tank, kind, most=1)]
-                body += f"{tank:02d}{len(got):02X}"
-                full = self.c.limit("60A", tank) or 10000.0
-                for rr, r in got:
-                    tt = {"gross": "02", "annual": "01",
-                          "periodic": "00"}[r.rate_key]
-                    pct = (r.volume / full * 100.0) if full else 0.0
-                    body += (rr + "01" + tt
+                records = self.c.leak_history_records(tank)
+                body += f"{tank:02d}{len(records):02X}"
+                full = self.c.full_volume(tank) or 0.0
+                for kind_code, number, result in records:
+                    pct = (result.volume / full * 100.0) if full else 0.0
+                    body += (kind_code + f"{number:02d}"
+                             + TEST_TYPE_CODE.get(result.rate_key, "00")
                              + time.strftime("%y%m%d%H%M",
-                                             time.localtime(r.started))
-                             + packed.hexfloat(r.hours)
-                             + packed.hexfloat(r.volume)
-                             + packed.hexfloat(pct)
-                             + "01" + "00000000")
-            return self._frame(code, body), "leak history 2"
+                                             time.localtime(result.started)))
+                    for value in (result.hours, result.volume, pct):
+                        body += packed.hexfloat(value)
+                    # one eight byte field follows, and it is the method --
+                    # per TEST, not per tank, the same rule the display
+                    # column follows
+                    body += "01" + (
+                        "00000001"
+                        if self.c.leak_test_method(tank, result.rate_key)
+                        == "CSLD" else "00000000")
+            return self._frame(code, body), "leak test history"
         if tok in ("203", "208"):
             devices = ([int(dev)] if dev != "00"
-                       else sorted(self.c.tank_level) or [1])
+                       else sorted(self.c.tank_level))
             text = (self.c.leaks_detect_report(devices) if tok == "203"
                     else self.c.leaks_results_report(devices))
             if code[0].isupper():
@@ -3560,32 +4258,627 @@ class Handler:
             return self._frame(code, body), "revision level report"
         if not self._module_present(tok):
             return self._nine(code), "no module fitted for this function"
+        if code[0].isupper():
+            # The manual answers a Display inquire with a titled TABLE, and
+            # its columns are read off the page rather than guessed. This
+            # has to come before the device-00 short-circuit below: a Display
+            # inquire for every tank is a table with a row per tank, not the
+            # computer aggregate in a display envelope. See FIDELITY S1.
+            answered = wiretables.display_answer(self, tok, dev, code)
+            if answered is not None:
+                return answered
+            # Before the "not programmed" turn below, because a group's
+            # values are other codes' and this one's own store is empty on a
+            # console nobody has been near. `I50500` answered a bare stamp
+            # for exactly that reason. See FIDELITY S17.
+            answered = self._group_answer(tok, code)
+            if answered is not None:
+                return answered
         if dev == "00" and self.c.is_multi(tok):
             return self._frame(code, self.c.aggregate(tok)), "device-00 aggregate"
         val = self.c.values.get(f"S{tok}{dev}")
-        if val is None:
+        if val is None and not (code[0].isupper()
+                                and (self.display_value(tok, dev)
+                                     or self._has_parts(tok))):
             return self._frame(code, ""), "not programmed"
         if code[0].isupper():
             # a few of these have their display line printed in the manual,
             # "BEEPER: ENABLED": and where it does, that is what comes back
             from .console import FIELDS
             field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+            if field is None:
+                answered = self._part_field_answer(tok, dev, val, code)
+                if answered is not None:
+                    return answered
             line = (field or {}).get("wire_line")
+            shown = self.display_value(tok, dev)
             if line:
-                shown = fieldio.decode(field, f"S{tok}{dev}", val)
-                # A float decodes with "%g" so that one rule serves a thermal
-                # coefficient and a full volume alike. Where the manual PRINTS
-                # the display line it also prints the precision and the unit --
-                # "OFFSET: 0.000%" -- and `wire_format` is that, for the
-                # display line only. The computer format is untouched.
-                fmt = (field or {}).get("wire_format")
-                if fmt:
-                    try:
-                        shown = fmt % float(shown)
-                    except (TypeError, ValueError):
-                        pass
-                return self._frame(code, f"{line} {shown}"), ""
+                # 502's line names the shift the inquire asked for --
+                # `SHIFT TIME 1 : DISABLED` is the sample's own shift, and
+                # `I50203` answers about the third. It is the only one of
+                # the twenty-four that carries a device. See FIDELITY N6a.
+                if "%d" in line:
+                    line = line.replace("%d", str(int(dev or "1") or 1))
+                head = self._comm_board_head(tok, dev)
+                body = f"{line} {shown}"
+                return self._frame(code, head + SEP + body if head
+                                   else body), ""
+            # No printed display line for this one, and no table either --
+            # `wiretables` was asked before the device-00 short-circuit and
+            # had nothing to draw. The manual still does not answer a Display
+            # inquire with the COMPUTER payload, which is what this used to
+            # do: I621TT came back `0144FA0000`, the ASCII hex IEEE float of
+            # the low product limit, where the manual's own response prints
+            # `1000`. The command formats say it plainly -- Display is
+            # `S621TTGGGGGG`, six decimal digits, and Computer is
+            # `S621TTFFFFFFFF` -- so the display side gets the decoded value
+            # under whatever title the manual gives the response.
+            if shown not in (None, ""):
+                entry = WIRE_TITLES.get(tok) or {}
+                title = self._comm_board_head(tok, dev) or entry.get("title")
+                if title and self._title_is_the_body(title, field):
+                    title = None
+                # The blank lines under a title are the block's own, and this
+                # path was the one place that ignored them. 530 is why: a
+                # real console answers I53000 with `SYSTEM BEEPER`, a blank
+                # line, and `ENABLED` under it, where the manual prints the
+                # single line `BEEPER: ENABLED`. See `tools/
+                # console_corrections.json`.
+                gap = SEP * (1 + max(int(entry.get("gap") or 0), 0))
+                # A label with its value on the line BELOW it, rather than
+                # after it. 518 draws `CODE PAGE SELECTED:` and ` WINDOWS`
+                # under it -- the manual's own sample and a real console
+                # both -- where `wire_line` puts the two on one line. The
+                # blank between them is the block's own `gap`, already
+                # measured off the page.
+                block = (field or {}).get("wire_block")
+                if block:
+                    shown = SEP.join(part.replace("{}", str(shown))
+                                     for part in block)
+                body = title + gap + str(shown) if title else str(shown)
+                return self._frame(code, body), "decoded for the display"
         return self._frame(code, val), ""
+
+    # `COMM BOARD  : 3 (FXMOD)` -- the two codes whose response opens with
+    # the comm position it is about rather than with a title.
+    _COMM_BOARD_TITLE = re.compile(r"^COMM BOARD\s*:\s*\d+\s*\(.*\)$")
+
+    def _comm_board_head(self, tok, dev):
+        """The `COMM BOARD  : n (TYPE)` line this code is answered under.
+
+        None for every code that has no such line, so the caller carries on.
+
+        887 and 889 both draw one and neither drew it. 887 printed the
+        manual's own sample board -- `COMM BOARD  : 3 (FXMOD)`, filed as the
+        report's TITLE by the generator, which is what it looks like -- for
+        whatever position was asked and whatever card was in it; 889 took the
+        `wire_line` path, which returns before a title is ever considered,
+        and printed `DTR NORMAL STATE: HIGH` with no header at all. The
+        manual draws the pair on both pages, p.473 and p.475, and the
+        console's own 888 report has drawn this header from
+        `comm_board_name` all along. See FIDELITY S15 and S18.
+        """
+        title = (WIRE_TITLES.get(tok) or {}).get("title") or ""
+        if not self._COMM_BOARD_TITLE.match(title):
+            return None
+        port = int(dev) if dev.isdigit() and int(dev) else 1
+        return f"COMM BOARD  : {port} ({self.c.comm_board_name(port)})"
+
+    @staticmethod
+    def _title_is_the_body(title, field):
+        """Is that "title" really the sample's one-line ANSWER?
+
+        `wiretitles.json` is read off the manual's own Display samples, and a
+        response whose whole body is one line gives the extractor nothing to
+        tell a title from a value. 529's sample is two lines -- the stamp and
+        `ALL PHONES` -- so ALL PHONES was filed as the report's title, and
+        the console answered it over the top of the value: `ALL PHONES` and
+        then `SINGLE PHONE`.
+
+        A body whose whole text is one of the field's own CHOICES is a body.
+        Narrow on purpose: seventy-four entries have a title and nothing
+        else, and almost all of them are `LABEL: VALUE` lines that a field's
+        `wire_line` already answers instead. See FIDELITY N6a.
+        """
+        want = str(title).strip().upper()
+        for choice in (field or {}).get("choices") or []:
+            seq = choice if isinstance(choice, (list, tuple)) else (choice,
+                                                                    choice)
+            if want in (str(seq[0]).upper(), str(seq[-1]).upper()):
+                return True
+        return False
+
+    def display_value(self, tok, dev):
+        """One device's setting, as the DISPLAY side writes it.
+
+        The two sides of the wire disagree about what a setting is and the
+        command formats say so: Display is `S621TTGGGGGG`, six decimal
+        digits, and Computer is `S621TTFFFFFFFF`, an ASCII hex IEEE float.
+        This is the decimal one. None where nothing is programmed, or where
+        the code holds only part fields and has no bare field of its own.
+        """
+        from .console import FIELDS
+        from .screens import shown as panel_shows
+        key = f"S{tok}{dev}"
+        val = self.c.values.get(key)
+        if val is None and tok in self.c.SHARED_STORE:
+            # Two names for one value: 604 and 60A for a full volume, and the
+            # six Version 4 test-warning codes for their Version 15 twins. A
+            # console programmed through either answers both -- see
+            # `Console.SHARED_CODES` and `wiretables._value_keys`.
+            other = self.c.SHARED_STORE[tok]
+            val = self.c.values.get(f"S{other}{dev}")
+            if val is not None:
+                key = f"S{other}{dev}"
+        field = FIELDS.get(key) or FIELDS.get(f"S{tok}01")
+        if field is None:
+            return None
+        if val is None:
+            # Nothing is stored for a setting nobody has changed, and the
+            # console is not blank there: the panel reads ENGLISH, U.S.,
+            # DISABLED, 1200 baud, +0.000 offset. `screens.shown` is the
+            # rule, and the wire did not follow it -- 27 codes carrying a
+            # documented default answered a bare stamp. See FIDELITY S9.
+            shown = panel_shows(self.c, field, "")
+            if not shown:
+                return None
+            # And a NUMBER the panel shows is still a number. `screens.shown`
+            # answers in the panel's own MASK -- 634's reconciliation warning
+            # limit reads `000003` on a 24-column display, which is what the
+            # mask `000000` is for -- and that string reached the GALLONS
+            # column of `I63400` with its leading zeros still on, where the
+            # captured console prints a bare right-aligned decimal like every
+            # other number on the shelf. Only the four fields whose default
+            # is written in mask form were affected; a stored value has gone
+            # through `fieldio.decode` all along. See FIDELITY S18.
+            shown = self._unmasked_number(field, shown)
+        else:
+            shown = fieldio.decode(field, key, val, self.c)
+        # A float decodes with "%g" so that one rule serves a thermal
+        # coefficient and a full volume alike. Where the manual PRINTS the
+        # display line it also prints the precision and the unit --
+        # "OFFSET: 0.000%" -- and `wire_format` is that, for the display line
+        # only. The computer format is untouched.
+        fmt = field.get("wire_format")
+        if fmt:
+            try:
+                shown = fmt % float(shown)
+            except (TypeError, ValueError):
+                pass
+        return shown
+
+    @staticmethod
+    def _unmasked_number(field, shown):
+        """A numeric default without the panel mask's leading zeros."""
+        if field.get("kind") not in ("float", "int", "number"):
+            return shown
+        text = str(shown).strip()
+        if not text.isdigit() or not text.startswith("0") or len(text) == 1:
+            return shown
+        return str(int(text))
+
+    # Fifteen function codes have no bare field at all, because two or more
+    # panel prompts share one function's data and `consoledata.json` holds
+    # only the PARTS: `S50100.date` and `S50100.time`, never `S50100`. That is
+    # the part-field mechanism working as designed, and the Display inquire
+    # path walked straight into it -- `fieldio.decode(None, ...)` raised out of
+    # `Handler.handle`, and `_session` catches only OSError, so the connection
+    # dropped. Fourteen of the fifteen have an Inquire and four are in the
+    # tape's own backup, so restoring a real site and asking for the time was
+    # enough to do it. See FIDELITY S7.
+    #
+    # 501's answer IS the frame's own stamp. 576013-635 Rev AA p.152 prints
+    # the whole response and there is no line under the title:
+    #
+    #     <SOH> I50100 JAN 22, 1996  3:11 PM
+    #           SYSTEM DATE AND TIME <ETX>
+    #
+    # so it gets the title alone and the other thirteen get their parts.
+    STAMP_IS_THE_ANSWER = {"501"}
+
+    # ---- a report whose rows are label OVER value, and whose values are not
+    # all the code's own ------------------------------------------------------
+    #
+    # `I50500` and `I51700` come back from a real console with the same six
+    # lines to the character, one minute apart -- see
+    # `tests/console_capture/raw/`. 576013-635 Rev AA p.156 draws the same
+    # six, and its own note 1 says why there are two codes for one setting:
+    # "For all languages beyond Finnish (L=9), use command S51700." 505
+    # carries a one-digit language and 517 a two-digit one; the setting is
+    # the same setting, so the store is 517's and 505 reads and writes it.
+    #
+    # Two things about the shape, both off the capture. The value sits on the
+    # line BELOW its label, which is 518's shape and what `wire_block`
+    # describes for a single field; and the THIRD row is not this code's
+    # value at all -- the date/time format is 50F's field. So the body is a
+    # list of (label, field, indent) rather than anything either code holds
+    # on its own. The third row's value carries no leading space where the
+    # first two do, which is the console's, not a transcription slip: the
+    # capture puts ` U.S.` and ` ENGLISH` one column in and
+    # `MON DD YYYY HH:MM:SS xM` hard against the margin.
+    #
+    # See FIDELITY S17, whose reading of 505 as "a group inquiry rather than
+    # 517's older name" was half right: it is both.
+    GROUP_ROWS = {
+        "517": (("SYSTEM UNITS", "S51700.units", " "),
+                ("SYSTEM LANGUAGE", "S51700.lang", " "),
+                ("SYSTEM DATE/TIME FORMAT", "S50F00", "")),
+    }
+    #: {the older name: the code whose report and store it shares}
+    GROUP_ALIAS = {"505": "517"}
+
+    def _group_answer(self, tok, code):
+        """The Display answer for a code whose body is label-over-value rows.
+
+        None if this is not one of them, so the caller carries on.
+        """
+        from .console import FIELDS
+        rows = self.GROUP_ROWS.get(self.GROUP_ALIAS.get(tok, tok))
+        if not rows:
+            return None
+        entry = WIRE_TITLES.get(self.GROUP_ALIAS.get(tok, tok)) or {}
+        out = [entry.get("title") or ""]
+        out.append("")                       # the blank the capture draws
+        for label, key, indent in rows:
+            field = FIELDS.get(key)
+            if field is None:
+                continue
+            owner = field.get("code") or key.split(".")[0]
+            shown = self._part_shown(field, owner, self.c.values.get(owner))
+            if shown in (None, ""):
+                continue
+            out.append(label)
+            out.append(f"{indent}{shown}")
+        return self._frame(code, SEP.join(out)), "a label-over-value group"
+
+    def _head_gap(self, tok):
+        """Blank lines between the frame and the first line of the body.
+
+        **Not the constant this console took it for.** 512 of the manual's
+        541 Display samples leave one and 29 leave none -- 613, 614, 902,
+        903, 905 and 881 among them -- and a real console agrees with the
+        page on every one of those that was captured. `build_wire_titles.py`
+        measures it off the word boxes the same way it measures a column
+        position, and it is `head_gap` in `wiretitles.json`. A code the
+        manual does not draw keeps the commoner answer. See FIDELITY S6.
+        """
+        entry = WIRE_TITLES.get(wiretables.SHOWN_AS.get(tok, tok))
+        if entry is None or entry.get("head_gap") is None:
+            return 1
+        return max(int(entry["head_gap"]), 0)
+
+    @staticmethod
+    def _has_parts(tok):
+        """Whether this code exists only as part fields."""
+        from .console import FIELDS
+        return any(key.startswith(f"S{tok}") and "." in key for key in FIELDS)
+
+    def _part_shown(self, part, key, val):
+        """One part field's value, or the default the panel shows for it.
+
+        881 holds a port's baud rate, parity, stop bits and data length as
+        parts of one record, and a port nobody has been near still runs at
+        1200, none, one and eight -- which is what the panel reads and what
+        the wire owed. See FIDELITY S9.
+
+        `wire_default` is for the one place the two surfaces disagree about
+        what "nothing programmed" looks like. A port with no RS-232 security
+        code prints `CODE : DISABLED` on the setup report -- real paper, and
+        the panel screen behind it -- and `000000` in the SECURITY CODE
+        column of `I50400`, beside a STATUS column that says DISABLED. Same
+        console, same state, two surfaces. See FIDELITY S14.
+        """
+        from .screens import shown as panel_shows
+        if val is None:
+            if part.get("wire_default") is not None:
+                return part["wire_default"]
+            return panel_shows(self.c, part, "")
+        return fieldio.decode(part, key, val)
+
+    def _part_field_answer(self, tok, dev, val, code):
+        """The Display answer for a code that exists only as part fields.
+
+        None if this is not one of them, so the caller carries on.
+        """
+        from .console import FIELDS, SETUP_MENU
+        if not any(key.startswith(f"S{tok}") and "." in key for key in FIELDS):
+            return None
+        title = (WIRE_TITLES.get(tok) or {}).get("title") or ""
+        rows = [title] if title else []
+        if tok not in self.STAMP_IS_THE_ANSWER:
+            device = int(dev) if dev.isdigit() and dev != "00" else 1
+            for step in self._steps_for(tok):
+                # The panel's own rules decide which parts apply. 611 holds
+                # four mutually exclusive schedules at the same offset -- the
+                # `611schedule` alt group -- and only the one the test method
+                # selects is real; listing all four would report a monthly
+                # schedule on a console testing annually. `visible()` is what
+                # the panel walks, so the wire and the panel cannot drift.
+                if not self.c.visible(step, device):
+                    continue
+                part = FIELDS.get(step.get("field") or "")
+                if not part:
+                    continue
+                shown = self._part_shown(part, f"S{tok}{dev}", val)
+                if shown in (None, ""):
+                    continue
+                # The console's own name for the screen. What the manual
+                # prints instead is a column heading over a table, and its
+                # spacing cannot be recovered from the text extraction -- the
+                # same reason the `heading` in WIRE_TITLES is unused. See
+                # FIDELITY S1, which is where that geometry is tracked.
+                name = step.get("setup_scope") or part.get("label") or ""
+                rows.append(f"{name.upper()}: {shown}")
+            if len(rows) == bool(title):
+                # No panel step claimed a part -- 551's two parts have no
+                # setup screen at all, and 51B's and 532's are gated on a
+                # feature this console has switched off. The value is
+                # programmed either way and the wire is entitled to it, so
+                # fall back to the parts themselves rather than answer a
+                # bare title.
+                for key, part in sorted(FIELDS.items()):
+                    if not (key.startswith(f"S{tok}") and "." in key and part):
+                        continue
+                    shown = self._part_shown(part, f"S{tok}{dev}", val)
+                    if shown not in (None, ""):
+                        rows.append(f"{part.get('label', key).upper()}: "
+                                    f"{shown}")
+        return (self._frame(code, chr(10).join(rows)),
+                "decoded from the part fields")
+
+    @staticmethod
+    def _steps_for(tok):
+        """The setup steps that write parts of one function's data, in the
+        order the panel asks for them."""
+        from .console import SETUP_MENU
+        out = []
+        for fn in SETUP_MENU:
+            for step in fn.get("steps", []):
+                field = step.get("field") or ""
+                if field.startswith(f"S{tok}") and "." in field:
+                    out.append(step)
+        return out
+
+    # ---- Set Ticketed Delivery and Set BOL, 7B5 and 7B6 ---------------------
+    #
+    # These two are the only codes on this shelf that document a RESULT code,
+    # and every rejection used to come back as the generic `9999`, which the
+    # manual defines as "a function code that it does not recognize". The
+    # console recognised it perfectly well; it would not say what was wrong
+    # with the data. See FIDELITY S2.
+    #
+    # "RR - Result code - if an error occurs, just error code will be
+    # returned", 576013-635 Rev AA p.439 and p.441. 7B5 has eleven of them
+    # and 7B6 has nine: the last two are about a VOLUME, which 7B6 does not
+    # carry, so its list stops at 08. Two tables, not one.
+    TICKET_RESULTS = {
+        "ok": "00", "no_bir": "01", "bad_tank": "02", "no_stamp": "03",
+        "not_numeric": "04", "bad_date": "05", "bad_time": "06",
+        "out_of_period": "07", "no_match": "08", "bad_volume": "09",
+        "already_gauged": "10",
+    }
+    VOLUME_RESULTS = ("bad_volume", "already_gauged")
+
+    # p.438's own report, counted off the rendered page at six points a
+    # character: TICKET at 25, GAUGE at 41, VARIANCE at 55, with the values
+    # right-aligning to 31, 47 and 61.
+    TICKET_HEAD = (" " * 25 + "TICKET" + " " * 10 + "GAUGE" + " " * 9
+                   + "VARIANCE",
+                   " " * 25 + "VOLUME" + " " * 10 + "VOLUME")
+    # and p.440's, which is a different report with different columns: BOL at
+    # 24, TICKET at 37, GAUGE at 49, TC GAUGE at 57, values to 28, 42, 53, 63.
+    BOL_HEAD = (" " * 24 + "BOL" + " " * 10 + "TICKET" + " " * 6 + "GAUGE"
+                + " " * 3 + "TC GAUGE",
+                "DELIVERY END DATE" + " " * 7 + "NUMBER" + " " * 7 + "VOLUME"
+                + " " * 5 + "VOLUME" + " " * 4 + "VOLUME")
+
+    def _ticket_fault(self, tok, dev, edit, stamp, rest, computer):
+        """Which of the manual's result codes this command earns, or None.
+
+        In the manual's own order, which is also the order a console would
+        have to check them in: what it is set up for, then who it is
+        addressed to, then whether the data is there, then whether it parses,
+        then whether it means anything.
+        """
+        if not self.c.licensed("bir"):
+            return "no_bir"
+        tank = int(dev) if dev.isdigit() else 0
+        if not tank or tank not in self.c.tank_level:
+            return "bad_tank"
+        if len(stamp) < 10:
+            return "no_stamp"
+        if not stamp.isdigit():
+            return "not_numeric"
+        try:
+            when = time.mktime(time.strptime(stamp, "%y%m%d%H%M"))
+        except ValueError:
+            # 05 and 06 are separate codes, so which half of the stamp is
+            # wrong decides which one comes back
+            month, day = stamp[2:4], stamp[4:6]
+            if not ("01" <= month <= "12" and "01" <= day <= "31"):
+                return "bad_date"
+            return "bad_time"
+        if when > time.mktime(self.c.now()):
+            # "Date out of range of period (curr & prev via BIR)": a delivery
+            # that has not happened yet is in no period at all
+            return "out_of_period"
+        record = self.c.deliveries.find(tank, stamp)
+        if edit == "01" and record is None:
+            return "no_match"
+        if tok == "7B6":
+            return None
+        if edit == "02" and record is not None:
+            return "already_gauged"
+        try:
+            (packed.unhexfloat(rest) if computer and len(rest) == 8
+             else float(rest or 0))
+        except ValueError:
+            return "bad_volume"
+        return None
+
+    def _set_ticket(self, tok, dev, data, code):
+        """7B5 and 7B6: edit or insert a ticket against a gauged delivery."""
+        if not self.c.has("probe"):
+            return self._nine(code), "no probe module fitted"
+        computer = code[0].islower()
+        edit, stamp, rest = data[:2], data[2:12], data[12:]
+        fault = self._ticket_fault(tok, dev, edit, stamp, rest, computer)
+        if fault:
+            return (self._ticket_reply(tok, dev, code, fault, None),
+                    f"REJECTED: {self.TICKET_RESULTS[fault]} {fault}")
+        tank = int(dev)
+        volume = None
+        if tok == "7B5":
+            # The two forms carry the volume differently and the command
+            # format says so: Display is "GGGGGG", six decimal digits, and
+            # Computer is "FFFFFFFF", an ASCII hex IEEE float. This read both
+            # with float(), which throws on every well-formed computer
+            # message, so a host could not set a ticketed delivery at all.
+            volume = (packed.unhexfloat(rest)
+                      if computer and len(rest) == 8 else float(rest or 0))
+        record = self.c.deliveries.find(tank, stamp)
+        if record is None:
+            when = time.mktime(time.strptime(stamp, "%y%m%d%H%M"))
+            record = self.c.deliveries.insert(
+                tank, when, 0 if volume is None else volume)
+        if tok == "7B6":
+            record.bol = rest.strip()[:20]
+        else:
+            record.ticket = volume
+        self.c.save()
+        return (self._ticket_reply(tok, dev, code, "ok", record),
+                "ticketed delivery stored")
+
+    def _ticket_reply(self, tok, dev, code, result, record):
+        """The response, which is a REPORT on the display side and a record
+        on the computer side -- and on the computer side an error is the
+        result code and nothing after it."""
+        tank = int(dev) if dev.isdigit() and int(dev) else 1
+        rr = self.TICKET_RESULTS[result]
+        if code[0].islower():
+            body = (f"{tank:02d}{(self.c.text('603', tank) or ' ')[:1] or ' '}"
+                    f"{self.c.probe_type_code(tank)}{rr}")
+            if record is None:
+                return self._frame(code, body)
+            body += time.strftime("%y%m%d%H%M",
+                                  time.localtime(record.end["at"]))
+            if tok == "7B6":
+                bol = record.bol or ""
+                body += f"{len(bol):02X}" + bol
+                body += packed.hexfloats([record.ticket or 0.0,
+                                          record.amount, record.tc_amount])
+            else:
+                body += packed.hexfloats([record.ticket or 0.0, record.amount,
+                                          (record.variance() or 0.0)])
+            return self._frame(code, body)
+        if record is None:
+            # No error form is drawn for the display side anywhere on this
+            # shelf -- the result code is a field of the COMPUTER response --
+            # so the display side says what went wrong in the manual's own
+            # words rather than inventing a report shape for it.
+            return self._frame(code, SEP.join(
+                ["SET TICKETED DELIVERY" + (" BOL NUMBER" if tok == "7B6"
+                                            else ""),
+                 f"RESULT CODE {rr}: {result.replace('_', ' ').upper()}"]))
+        label = self.c.text("602", tank) or f"TANK {tank}"
+        stamp = clock_words(record.end["at"])
+        if tok == "7B6":
+            rows = ["SET TICKETED DELIVERY BOL NUMBER"]
+            rows += list(self.BOL_HEAD)
+            rows.append(f"{stamp:21.21s}  {(record.bol or ''):<12.12s}"
+                        f"{record.ticket or 0.0:>7.1f}"
+                        f"{record.amount:>11.1f}"
+                        f"{record.tc_amount:>10.1f}")
+        else:
+            rows = ["SET TICKETED DELIVERY",
+                    "VOLUMES ARE " + ("TC" if (self.c.values.get("S51D00")
+                                               or "").strip().endswith("1")
+                                      else "STANDARD"),
+                    f"T {tank}:{label}"]
+            rows += list(self.TICKET_HEAD)
+            rows.append(f"{stamp:21.21s}{record.ticket or 0.0:>11.1f}"
+                        f"{record.amount:>16.1f}"
+                        f"{(record.variance() or 0.0):>14.1f}")
+        return self._frame(code, SEP.join(rows))
+
+    # ---- the Service Notice block, 566 to 569 -------------------------------
+    def _service_notice_read(self, tok, code):
+        """567, 568 and 569, whose values are not in `values`.
+
+        The manual prints all three display lines, so they are quotations
+        rather than readings: "SERVICE NOTICE DELIVERY OVERRIDE: DISABLED",
+        "SERVICE NOTICE SESSION: DISABLED", "SERVICE NOTICE SESSION DURATION:
+        2 HOURS". 576013-635 Rev AA pp.234-236.
+        """
+        c = self.c
+        display = code[0].isupper()
+        if tok == "567":
+            on = c.delivery_override()
+            if display:
+                return (self._frame(code, "SERVICE NOTICE DELIVERY OVERRIDE: "
+                                    + ("ENABLED" if on else "DISABLED")),
+                        "service notice delivery override")
+            return self._frame(code, "1" if on else "0"), "delivery override"
+        if tok == "568":
+            # Not a stored value: the session either is open or it is not,
+            # and asking the console is the only answer that cannot disagree
+            # with 11B's own report of the same thing.
+            on = c.service_session() is not None
+            if display:
+                return (self._frame(code, "SERVICE NOTICE SESSION: "
+                                    + ("ENABLED" if on else "DISABLED")),
+                        "service notice session")
+            return self._frame(code, "1" if on else "0"), "service session"
+        hours = c.service_session_hours()
+        if display:
+            return (self._frame(code,
+                                f"SERVICE NOTICE SESSION DURATION: "
+                                f"{hours} HOURS"), "session duration")
+        return self._frame(code, f"{hours:02d}"), "session duration"
+
+    def _service_notice_set(self, tok, code, data):
+        """The three Sets, and 566's, which all carry a LEADING 149.
+
+        `VERIFIED` strips a TRAILING verification code -- `S53000x149` -- and
+        this block's is at the front, `S56600149f`, so it cannot serve them.
+        566 had no template at all and no leading-149 handling either, so the
+        one Service Notice code that DID read back could not be written.
+        """
+        c = self.c
+        if tok != "569":
+            if not data.startswith("149"):
+                return (self._nine(code),
+                        f"REJECTED: {tok} wants a leading 149")
+            flag = data[3:4]
+            if flag not in ("0", "1"):
+                return self._nine(code), "REJECTED: 1=ENABLED, 0=DISABLED"
+            if tok == "566":
+                c.values["S56600"] = flag
+                c.save()
+                return self._frame(code), f"service notice {_ON_OFF[flag]}"
+            if tok == "567":
+                c.set_setting("delivery_override",
+                              "ENABLED" if flag == "1" else "DISABLED", 0)
+                c.save()
+                return (self._frame(code),
+                        f"delivery override {_ON_OFF[flag]}")
+            if not c.service_notice():
+                # "Only appears if Service Notice feature has been enabled":
+                # there is no session to open on a console whose feature
+                # switch is off.
+                return self._nine(code), "REJECTED: service notice is off"
+            said = (c.start_service_session() if flag == "1"
+                    else c.end_service_session())
+            if said.startswith("DISABLED DEL"):
+                return self._nine(code), "REJECTED: delivery in progress"
+            return self._frame(code), f"service session {said.lower()}"
+        # 569, "hh - Service Notice Session Duration in Hours (Decimal)"
+        lo, hi = self.c.SESSION_HOURS
+        if not data.isdigit() or not lo <= int(data) <= hi:
+            return self._nine(code), f"REJECTED: {lo} to {hi} hours"
+        c.set_setting("service_duration", str(int(data)), 0)
+        c.save()
+        return self._frame(code), f"session duration {int(data)} hours"
 
     # ---- write -------------------------------------------------------------
     def set_(self, tok, dev, data, code):
@@ -3607,12 +4900,20 @@ class Handler:
         # `formats` checks the SHAPE against it: the length and the character
         # class, never the range. Checked here, before the 149 is stripped,
         # because several of these templates include the 149.
+        if tok in TICKET_CODES:
+            # 7B5 and 7B6 answer the manual's own RESULT CODE for exactly the
+            # failures this check would refuse with 9999 -- 03 missing
+            # time/date, 04 not numeric, 09 invalid volume -- so the generic
+            # shape check must not get there first. See FIDELITY S2.
+            return self._set_ticket(tok, dev, data, code)
         if tok in SETTABLE and not formats.valid(
                 tok, data,
                 aggregate=(dev == "00" and self.c.is_multi(tok)),
                 computer=code[0].islower()):
             return (self._nine(code),
                     f"REJECTED: does not fit {tok}'s data format")
+        if tok in SERVICE_NOTICE or tok == "566":
+            return self._service_notice_set(tok, code, data)
         verify = VERIFIED.get(tok)
         if verify:
             if not data.endswith(verify):
@@ -3690,6 +4991,10 @@ class Handler:
             if test not in dict(isd.SERVICE_TESTS):
                 return self._nine(code), "REJECTED: no such test type"
             stamp = time.strftime("%y%m%d", self.c.now())
+            # 577013-819 Rev F Table 2 is a THREE column map and this wrote
+            # the third: the date. The alarms the selection clears are the
+            # second column. See FIDELITY I4.
+            self.c.clear_isd_test(test)
             if test != isd.COLLECTION:
                 self.c.values[f"SV85{test}"] = stamp
             elif fp == "00":
@@ -3819,30 +5124,6 @@ class Handler:
         if tok == "63B" and self.c.chart_secured():
             # "Set command is only valid if Tank Chart Security is disabled"
             return self._nine(code), "REJECTED: tank chart security enabled"
-        if tok in ("7B5", "7B6"):
-            # Set Ticketed Delivery / Set BOL number: ee, the delivery's end
-            # date and time, then the volume or the number
-            if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
-            if len(data) < 12:
-                return self._nine(code), "REJECTED: short command"
-            tank = int(dev) if dev != "00" else 1
-            edit, stamp, rest = data[:2], data[2:12], data[12:]
-            record = self.c.deliveries.find(tank, stamp)
-            if edit == "02" and record is None:
-                when = time.mktime(time.strptime(stamp, "%y%m%d%H%M"))
-                record = self.c.deliveries.insert(tank, when, rest or 0)
-            if record is None:
-                return self._nine(code), "REJECTED: no such delivery"
-            if tok == "7B6":
-                record.bol = rest.strip()[:20]
-            else:
-                try:
-                    record.ticket = float(rest or 0)
-                except ValueError:
-                    return self._nine(code), "REJECTED: bad volume"
-            self.c.save()
-            return self._frame(code), "ticketed delivery stored"
         if tok in ("55E", "642"):
             value = (data or "").strip()[-1:]
             if tok == "55E":
@@ -3924,7 +5205,8 @@ class Handler:
                 return self._nine(code), "REJECTED: no such test type"
             lines = self._devices_of(kind, dev)
             for number in lines:
-                self.c.leaks.start(kind, number, controls.TEST_TYPE[want])
+                self.c.leaks.start(kind, number, controls.TEST_TYPE[want],
+                                   origin="wire")
             first = self.c.lines.line(kind, lines[0] if lines else 1)
             # The two status tables are NOT the same table, see controls.py
             table = (controls.PLLD_TEST_STATUS if tok == "087"
@@ -3988,7 +5270,8 @@ class Handler:
                        else sorted(self.c.tank_level))
             for tank in devices:
                 if tok == "052":
-                    self.c.leaks.start("tank", tank, "periodic", hours=2.0)
+                    self.c.leaks.start("tank", tank, "periodic", hours=2.0,
+                                       origin="wire")
                 else:
                     self.c.leaks.stop("tank", tank)
             running = "1" if self.c.leaks.active("tank", devices[0] if devices
@@ -4008,7 +5291,7 @@ class Handler:
                     # "Start Pressure Line Leak Test (3.00 GPH only in V18)":
                     # 3.0 is the one every version has, and the sequence runs
                     # on from it to whatever else is scheduled
-                    self.c.leaks.start(kind, number, "gross")
+                    self.c.leaks.start(kind, number, "gross", origin="wire")
                 else:
                     self.c.leaks.stop(kind, number)
             first = self.c.lines.line(kind, lines[0] if lines else 1)
@@ -4023,6 +5306,24 @@ class Handler:
             return (self._frame(code, f"{first.number:02d}{first.status_code()}"),
                     "line leak test " + ("started" if tok in ("081", "083")
                                          else "stopped"))
+        if tok == "61F":
+            # "S61FTTtdd.ddddd", where t is the delivery type and the rest is
+            # the density AS ENTERED -- "relative, actual or API". The value
+            # is kept the way it arrived, which is what the console reports
+            # back on an inquiry. See FIDELITY O13.
+            if not self.c.has("probe"):
+                return self._nine(code), "no probe module fitted"
+            which, rest = (data or "")[:1], (data or "")[1:]
+            if which not in ("0", "1"):
+                return self._nine(code), "REJECTED: delivery type is 0 or 1"
+            try:
+                value = (packed.unhexfloat(rest) if code[0].islower()
+                         else float(rest))
+            except (ValueError, TypeError):
+                return self._nine(code), "REJECTED: not a density"
+            for tank in self._tanks(dev):
+                self.c.set_delivery_density(tank, which, value)
+            return self._frame(code), "delivery density stored"
         if not data:
             # Hardware-confirmed on a real console: a Set with no data field
             # just acks with the date/time and leaves the value alone.
@@ -4032,6 +5333,14 @@ class Handler:
         value = self._canonical(tok, dev, data, code)
         if value is None:
             return self._nine(code), "REJECTED: value out of range"
+        # An older name writes the store its newer one owns, or the console
+        # answers the report it has just been programmed through with the
+        # value it had before. 505's language is one digit and 517's is two
+        # -- 576013-635 Rev AA p.156 note 1 -- so the narrow one widens on
+        # the way in rather than sitting in a key nothing reads.
+        if tok in self.GROUP_ALIAS:
+            tok = self.GROUP_ALIAS[tok]
+            value = value[:1] + value[1:].rjust(2, "0")
         self.c.values[f"S{tok}{dev}"] = self._with_prefix(tok, dev, value)
         if tok == "501":
             # Set Time of Day sets the CLOCK, not just the stored string.
@@ -4148,16 +5457,27 @@ class Handler:
         # is tank 1, Pd = 95% -- so the prefix comes off before the value is
         # checked and goes back on after. Without this, every prefixed field
         # whose kind this function knows would refuse its own correct form.
-        from .console import DEVICE_PREFIXED
+        #
+        # WHICH two characters those are is decided by the manual's own field
+        # width, not by whether the value happens to begin with the device
+        # number. `S624TTII.t` is the high water limit on tank TT, four
+        # characters wide -- so `S6240101.5` is tank 1 at 1.5 inches, and
+        # reading the leading `01` as a prefix stored 0.5. `_without_prefix`
+        # below settled the same question the same way for the store side
+        # and this path went on guessing. See FIDELITY R17.
+        from .console import DECIMAL_WIDTHS, DEVICE_PREFIXED
         pfx = ""
         try:
             prefixed = int(tok, 16) in DEVICE_PREFIXED
         except ValueError:
             prefixed = False
+        width = DECIMAL_WIDTHS.get(tok)
         if prefixed and dev != "00" and text.startswith(dev) and len(text) > 2:
-            pfx, text = text[:2], text[2:]
+            if width is None or len(text) == width + 2:
+                pfx, text = text[:2], text[2:]
         try:
-            return pfx + fieldio.encode_value(field, text)
+            return pfx + fieldio.encode_value(field, text,
+                                              self.c.metric(), self.c)
         except ValueError:
             return None
 
@@ -4174,6 +5494,13 @@ class Handler:
         except ValueError:
             return True
         c = self.c
+        if fn == 0x889:
+            # "DTR Normal State for Serial Satellite Boards" is 576013-635's
+            # own Function Type for this code, and its display format draws
+            # the setting under `COMM BOARD  : 1 (S-SAT )` -- one screen, two
+            # lines, the same pairing the tape prints. It answered on a
+            # console with no satellite in it. See FIDELITY S7a.
+            return c.has("ssat") or c.has("asat")
         if 0x601 <= fn <= 0x6FF:
             return c.has("probe")
         if 0x721 <= fn <= 0x72C:
@@ -4284,11 +5611,20 @@ def echo_for(data):
     return bytes(out)
 
 
-def serve(console, host, port, verbose=True, log=None):
+def serve(console, host, port, verbose=True, log=None, on_socket=None):
+    """Answer the console's serial protocol on a TCP port.
+
+    `on_socket` is handed the listening socket once it is up. The card's
+    network supervisor keeps it so it can close it and move the tunnel when
+    the address or the port programmed into the card changes -- which is
+    what a real card does when you save a new port and it reboots.
+    """
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen(5)
+    if on_socket:
+        on_socket(srv)
     if verbose:
         print(f"[sim] TLS-350 listening on {host}:{port}")
     handler = Handler(console, verbose, log)

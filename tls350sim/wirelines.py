@@ -98,6 +98,7 @@ from . import packed
 from . import leaktest
 from . import pressure
 from . import readings
+from . import wiretables
 from .clock import clock_words
 from .console import describe_alarms
 
@@ -247,10 +248,9 @@ def _display(handler, code, rows, tok):
     """The display format, with the station header where the manual shows one."""
     text = SEP.join(rows)
     if tok in HEADED:
-        header = [t for t in (handler.c.text("503", n) for n in range(1, 5))
-                  if t]
-        if header:
-            text = SEP.join(header) + SEP + text
+        # all four, programmed or not; see FIDELITY W5
+        header = [handler.c.text("503", n) or "" for n in range(1, 5)]
+        text = SEP.join(header) + SEP + text
     return handler._frame(code, text)
 
 
@@ -330,8 +330,11 @@ def _line_row(console, ln, kind, number):
             f"{'ON' if ln.handle else 'OFF'}")
 
 
-LINE_HEADER = (f"{'LINE':<25s}{'DISPENSING':<12s}{'TEST STATUS':<22s}"
-               f"{'PUMP':<6s}HANDLE")
+# 576013-635 Rev AA p.134 and p.556: LINE at 0, DISPENSING at 26, TEST
+# STATUS at 38, PUMP at 61 and HANDLE at 69. Both reports draw it and both
+# were a column or more out.
+LINE_HEADER = (f"{'LINE':<26s}{'DISPENSING':<12s}{'TEST STATUS':<23s}"
+               f"{'PUMP':<8s}HANDLE")
 
 
 def _no_vent(ln):
@@ -406,19 +409,22 @@ def _vlld_results(handler, code, kind, lines, tok):
         periodic = _recent(c, number, "periodic")
         annual = _recent(c, number, "annual")
         rows.append(_head(c, "vlld", number))
-        rows.append(f"{'3.0 GAL/HR TEST':<27s}{'LINE':>5s}{'SELF':>6s}"
-                    f"{'PUMP':>6s}")
+        # p.127 indents each rate's heading two and its rows five, with
+        # the three counts held right against 26, 33 and 40 and the result
+        # of a dated test at 35
+        rows.append(f"  {'3.0 GAL/HR TEST':<21s}{'LINE':>4s}{'SELF':>7s}"
+                    f"{'PUMP':>7s}")
         for name, (line, self_, pump) in zip(("PREV 24 HOURS",
                                               "SINCE MIDNIGHT"), counts):
-            rows.append(f"           {name:<16s}{line:5d}{self_:6d}{pump:6d}")
+            rows.append(f"     {name:<18s}{line:4d}{self_:7d}{pump:7d}")
         for name, results in (("0.2 GAL/HR TEST", periodic),
                               ("0.1 GAL/HR TEST", annual)):
-            rows.append(name)
+            rows.append("  " + name)
             for r in results:
-                rows.append(f"           {clock_words(r.started):<24s}"
+                rows.append(f"     {clock_words(r.started):<30s}"
                             f"{r.result}")
             if not results:
-                rows.append("           NO TEST DATA AVAILABLE")
+                rows.append("     NO TEST DATA AVAILABLE")
         body += f"{number:02d}"
         for line, self_, pump in counts:
             body += f"{min(line, 255):02X}{min(self_, 255):02X}" \
@@ -465,13 +471,15 @@ def _line_alarm_history(handler, code, kind, lines, tok):
 def _vlld_pump_status(handler, code, kind, lines, tok):
     """353: "aaaa - Line Status: 0001=Enabled, 0002=Disabled"."""
     c = handler.c
-    rows = [f"{'LINE':<11s}{'LOCATION':<22s}STATUS"]
+    # p.130's columns, not a hand count: LINE right to 3, LOCATION at 8 and
+    # STATUS at 31, which is the sensor family's own layout a column over.
+    rows = [wiretables.heading(tok)]
     body = ""
     for number in lines:
         down = ("vlld", number) in c.leaks.disabled
         label = c.text(LABEL["vlld"], number) or ""
-        rows.append(f"{number:5d}      {label:<22.22s}"
-                    + ("DISABLED" if down else "ENABLED"))
+        rows.append(wiretables.row(tok, [
+            number, label, "DISABLED" if down else "ENABLED"]))
         body += f"{number:02d}" + ("0002" if down else "0001")
     if code[0].isupper():
         return _display(handler, code, rows, tok), "line pump status"
@@ -519,7 +527,10 @@ def _pressure_results(handler, code, kind, lines, tok):
         gross = c.leaks.result(kind, number, "gross")
         day = _passes(c, kind, number, "gross", now - 86400.0)
         since = _passes(c, kind, number, "gross", _midnight(c))
-        rows += [_head(c, kind, number), "", "3.0 GAL/HR RESULTS:", "",
+        # p.131 hangs the 3.0 heading one column in, where the two
+        # precision rates start at nought -- the manual's own way of lining
+        # up a one digit rate with a two digit one
+        rows += [_head(c, kind, number), "", " 3.0 GAL/HR RESULTS:", "",
                  "LAST TEST:", _result_word(gross), "",
                  "NUMBER OF TESTS PASSED", f"   PREV 24 HOURS : {day}", "",
                  f" SINCE MIDNIGHT : {since}", ""]
@@ -565,14 +576,14 @@ def _pressure_history(handler, code, kind, lines, tok):
         last = c.leaks.last_pass(kind, number, "gross")
         rows += [_head(c, kind, number), "",
                  f"{'LAST 3.0 PASS:':<28s}"
-                 + (clock_words(last) if last else "NO PASS RECORDED"), ""]
+                 + (clock_words(last) if last else "NO TEST PASSED"), ""]
         body += f"{number:02d}{_stamp(last)}00"
         for rate_key in RESULT_RATES[tok]:
             months = c.leaks.first_pass_each_month(kind, number, rate_key)
             head = f"FIRST {RATE_NAME[rate_key]} PASS EACH MONTH:"
             rows.append(f"{head:<28s}"
                         + (clock_words(months[0]) if months
-                           else "NO PASS RECORDED"))
+                           else "NO TEST PASSED"))
             for when in months[1:]:
                 rows.append(" " * 28 + clock_words(when))
             rows.append("")
@@ -655,13 +666,14 @@ def _vlld_status(handler, code, kind, lines, tok):
     for number in lines:
         s = _vlld_switches(c, number)
         rows.append(_head(c, "vlld", number))
-        rows.append(f"   PMP IN={_on(s['pump_in'])} "
+        # p.541 sets both halves at 2 and 15, not 3 and one space apart
+        rows.append(f"  PMP IN={_on(s['pump_in'])}   "
                     f"PMP OUT={_on(s['pump_out'])}")
-        rows.append(f"   PRS SW={_on(s['pressure'])} "
+        rows.append(f"  PRS SW={_on(s['pressure'])}   "
                     f"EQU VLV={_on(s['equalise'])}")
-        rows.append(f"   FIN SW={_on(s['final'])} "
+        rows.append(f"  FIN SW={_on(s['final'])}   "
                     f"TST VLV={_on(s['test'])}")
-        rows.append(f"   STR SW={_on(s['start'])} "
+        rows.append(f"  STR SW={_on(s['start'])}   "
                     f"DISABLE={_on(s['disable'])}")
         rows.append("")
         body += f"{number:02d}"
@@ -711,8 +723,11 @@ def _vlld_diag_history(handler, code, kind, lines, tok):
     """
     c = handler.c
     wanted = ("gross",) if tok == "B51" else ("periodic", "annual")
-    header = (f"{'DATE/TIME':<22s}{'TYP':>3s}{'GRND':>7s}{'TANK':>7s}"
-              f"{'DELY':>6s}{'LGTH':>8s}{'RSET':>7s}{'TEST':>8s}  RSLT")
+    # p.542 and p.543 indent the whole block two, and put TYP at 24,
+    # GRND at 29, TANK at 35, DELY at 41, LGTH at 48, RSET at 55, TEST at 62
+    # and RSLT at 68
+    header = (f"  {'DATE/TIME':<22s}{'TYP':>3s}{'GRND':>6s}{'TANK':>6s}"
+              f"{'DELY':>6s}{'LGTH':>7s}{'RSET':>7s}{'TEST':>7s}  RSLT")
     rows, body = [], ""
     for number in lines:
         log = [r for r in reversed(c.leaks.history.get(("vlld", number)) or [])
@@ -828,7 +843,12 @@ def _offset_test(handler, code, kind, lines, tok):
     never run has no measurement to report.
     """
     c = handler.c
-    title = ("WPLLD LINE LEAK PRESSURE OFFSET TEST" if kind == "wplld"
+    # p.553 sets four spaces after WPLLD -- 24.00 points at this manual's 6.0
+    # per character, against 6.02 for every other gap on the line, so it is
+    # the page's own and not the extraction rounding. Its sibling on p.555
+    # puts the same four spaces in a DIFFERENT place; both are reproduced
+    # where they fall. The PLLD forms carry no gap at all.
+    title = ("WPLLD    LINE LEAK PRESSURE OFFSET TEST" if kind == "wplld"
              else "PRESSURE LINE LEAK PRESSURE OFFSET TEST")
     rows, body = [title, ""], ""
     for number in lines:
@@ -861,7 +881,9 @@ def _offset_monitor(handler, code, kind, lines, tok):
     prints 21 and 51 days for them.
     """
     c = handler.c
-    title = ("WPLLD LINE LEAK PRESSURE OFFSET MONITORS REPORT"
+    # p.555, and the four spaces fall before PRESSURE here where p.553 puts
+    # them after WPLLD. See `_offset_test` above.
+    title = ("WPLLD LINE LEAK    PRESSURE OFFSET MONITORS REPORT"
              if kind == "wplld"
              else "PRESSURE LINE LEAK PRESSURE OFFSET MONITORS REPORT")
     rows, body = [title, ""], ""
@@ -869,9 +891,7 @@ def _offset_monitor(handler, code, kind, lines, tok):
         ln = c.lines.line(kind, number)
         # Pd Ref is "locked into" the pump's own pressure at startup, so it is
         # this line's nominal, and Pd is what the pump is reading now.
-        reference = c.limit("7B7", number) or readings.fixed(
-            pressure.PUMP_PSI - 4.0, pressure.PUMP_PSI + 6.5,
-            "pump", kind, number)
+        reference = c.lines.nominal_psi(kind, number)
         pd = c.lines.pump_psi(kind, number)
         last = (ln.readings["gross"] or [None])[-1]
         pv = last.p2 if last else 0.0
@@ -881,16 +901,19 @@ def _offset_monitor(handler, code, kind, lines, tok):
                    else readings.integer(0, 60, "pddays", kind, number))
         pd_ok = pd_days <= PD_DAYS
         pv_ok = not (pv > PV_LIMIT and pd > PD_LIMIT)
+        # 576013-635 Rev AA p.554: each monitor's verdict at 2 and its
+        # detail lines at 4, with LAST UPDATE's day count held right against
+        # 19 and every PSI figure right against 15
         rows += [_head(c, kind, number),
-                 "   P0: PASS",
-                 f"       LAST UPDATE: {p0_days}     DAYS",
-                 "   Pd: " + ("PASS" if pd_ok else "FAIL"),
-                 f"       LAST UPDATE: {pd_days}     DAYS",
-                 f"       Pd= {pd:.1f} PSI",
-                 f"       Pd Ref={reference:.1f} PSI",
-                 "   Pv: " + ("PASS" if pv_ok else "FAIL"),
-                 f"       Pv ={pv:.1f} PSI",
-                 f"       Pon={pon:.1f} PSI",
+                 "  P0: PASS",
+                 f"    LAST UPDATE:{p0_days:4d} DAYS",
+                 "  Pd: " + ("PASS" if pd_ok else "FAIL"),
+                 f"    LAST UPDATE:{pd_days:4d} DAYS",
+                 f"    Pd={pd:8.1f} PSI",
+                 f"    Pd Ref={reference:.1f} PSI",
+                 "  Pv: " + ("PASS" if pv_ok else "FAIL"),
+                 f"    Pv ={pv:.1f} PSI",
+                 f"    Pon={pon:.1f} PSI",
                  f"       Pd ={pd:.1f} PSI", ""]
         body += (f"{number:02d}01{min(p0_days, 0xFFFF):04X}"
                  + ("01" if pd_ok else "00")
@@ -1021,22 +1044,27 @@ def _pumpoff_diagnostic(handler, code, kind, lines, tok):
     """
     c = handler.c
     which = PUMPOFF_WHICH[tok]
-    name = "3.0" if which == "gross" else "MID"
+    # p.560 heads a rate " 3.0 TEST PASSES" and p.561 heads the mid test
+    # "MID TEST PASSES" with no indent: a RATE is held right in four, so
+    # that 3.0 lines up with the 0.20 and 0.10 of its neighbours, and a word
+    # is not a rate.
+    name = " 3.0" if which == "gross" else "MID"
     title = ("WPLLD LINE LEAK DIAGNOSTIC REPORT" if kind == "wplld"
              else "PRESSURE LINE LEAK DIAGNOSTIC REPORT")
-    header = (f"{'DATE/TIME':<24s}{'PUMP ON':>9s}{'FIRST READ':>13s}"
+    # p.560: PUMP ON at 29, FIRST READ at 44 and SECOND READ at 60
+    header = (f"{'DATE/TIME':<29s}{'PUMP ON':<15s}{'FIRST READ':<14s}"
               f"{'SECOND READ':>13s}")
     rows, body = [title, ""], ""
     for number in lines:
         ln = c.lines.line(kind, number)
         held = ln.readings[which][-30:]
-        blocks = [(DIAG_PASS, f" {name} TEST PASSES",
+        blocks = [(DIAG_PASS, f"{name} TEST PASSES",
                    [r for r in held if r.passed and not r.high]),
-                  (DIAG_FAIL, f" {name} TEST FAILS",
+                  (DIAG_FAIL, f"{name} TEST FAILS",
                    [r for r in held if r.passed is False and not r.high])]
         if which == "gross":
             # "High Pressure Event Thresholds: Pon > 50 psi"
-            blocks.append((DIAG_HIGH, f" {name} HI PRESSURE EVENTS",
+            blocks.append((DIAG_HIGH, f"{name} HI PRESSURE EVENTS",
                            [r for r in held if r.high]))
         rows.append(_head(c, kind, number))
         body += f"{number:02d}"
@@ -1085,8 +1113,10 @@ def _precision_diagnostic(handler, code, kind, lines, tok):
         pump_on = ("PMID" if _pipe_key(c, kind, number) == USER_DEFINED
                    else "PUMP ON")
         rows += [_head(c, kind, number), f"{rate} TEST RESULTS",
-                 f"{'DATE/TIME':<22s}{pump_on:>9s}{'RATIO':>8s}"
-                 f"{'DURATION':>10s}  RESULTS"]
+                 # p.562: the pump column at 27, RATIO at 41,
+                 # DURATION at 51 and RESULTS at 64
+                 f"{'DATE/TIME':<27s}{pump_on:<14s}{'RATIO':<10s}"
+                 f"{'DURATION':<13s}RESULTS"]
         for r in held:
             rows.append(f"{clock_words(r.when):<22s}{r.pon:5.1f} PSI"
                         f"{r.ratio:8.2f}{r.minutes:10d}  "

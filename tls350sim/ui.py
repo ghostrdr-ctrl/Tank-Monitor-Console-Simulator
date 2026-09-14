@@ -17,29 +17,36 @@ calculator or gauge display recognisable. The keys are the console's two
 12-key pads: operating keys left, alphanumeric right, dark faces with light
 legends, laid out in the manual's order.
 
-I could not photograph a real console from here: the manual's figures are
-vector art, not images, so the LAYOUT is taken from the manual's Figure 2-1
-and its key descriptions, and the finish follows what a TLS-350 looks like.
-Tell me what is off and it is a few constants at the top of this file.
+The LAYOUT follows the manual's Figure 2-1 and its key descriptions. The
+finish and the proportions are measured off two photographs of a real
+console, a running one and the maker's own product shot, which agree with
+each other: see the notes over the colours below. Tell me what is off and
+it is a few constants at the top of this file.
 """
+import sys
 import time
 
 import tkinter as tk
 from tkinter import font as tkfont
+from .facepanel import CURSOR, DotMatrixLCD, KeyCap, blend
 from tkinter import ttk
 
 from . import APP_NAME, DISCLAIMER, PUBLISHER, __version__
 from . import fieldio, masks
 from . import bench, paths, update, updateui, xport
-from .clock import clock_hhmm, clock_words
+from .clock import clock_date, clock_hhmm, clock_words
 from . import presets
 from . import printer
 from . import screens
+from . import traffic as _traffic
 from . import versions
+from . import wirelists
 from .console import (BAY_NAME, BAY_SLOTS, DEVICE_WORD, FUNCTION_REQUIRES,
                       MODULE_BAY, MODULE_CAPACITY, MODULE_LABEL, MODULE_PART,
-                      MODULES, SLOT_POSITIONS, SOFTWARE_MODULES,
-                      SOFTWARE_NAME, describe_alarms)
+                      MODULES, MODULE_SHORT, SLOT_POSITIONS,
+                      COMM_PORTS as CONSOLE_COMM_PORTS, SOFTWARE_MODULES,
+                      SOFTWARE_NAME, describe_alarms,
+                      front_panel_indicator)
 
 # The display is 24 characters by 2 lines: the console's own status screen
 # reads "JAN 29, 2003 11:05:14 AM" across the top line, which is 24.
@@ -56,6 +63,11 @@ MODE_SCREEN = -2     # the mode's own screen, before any function
 CONT_STEP = "PRESS <STEP> TO CONTINUE"
 CONT_FUNCTION = "PRESS <FUNCTION> TO CONT"
 
+# MODIFY TANK/METER MAP's row, which the paper draws as well as the glass.
+# See `screens.MAP_CELLS`.
+MAP_CELLS = screens.MAP_CELLS
+MAP_BLANK = screens.MAP_BLANK
+
 # ---- finish -----------------------------------------------------------------
 # The dimensions and colours below were measured from a photograph of a real
 # console; the drawing itself is original. Every element is a Tk canvas
@@ -66,19 +78,31 @@ CONT_FUNCTION = "PRESS <FUNCTION> TO CONT"
 # the keys are WHITE with black legends on a black grid, not dark keys with
 # light legends. An earlier pass measured a dark, inverted rendering and got
 # all three of those backwards.
+#
+# The display is a monochrome character LCD, two lines of twenty-four, each
+# character a 5 x 7 dot matrix. It is the reflective STN kind: a pale
+# grey-green glass, dark indigo characters, and every cell a faint block
+# standing off the glass, with the unlit dots only just there inside it.
+# It is not a VFD, it is not light characters on dark glass, and it is not
+# the yellow-green of a backlit module; passes before this one drew both.
+# The colours are sampled from a photograph of a running console.
 CASE = "#ececea"          # off-white enclosure
 CASE_EDGE = "#c9c9c5"
 BLUE = "#1c3f91"          # base pinstripes
 LABEL = "#1a1a1a"         # the black legends beside the indicators
-VFD_BG = "#0e1a10"        # dark glass
-VFD_GHOST = "#1d3320"     # unlit segments
-VFD_INK = "#6dfb8a"       # green characters
+LCD_LIT = {"glass": "#a7af9f",   # the glass between the cells
+           "cell": "#9ca59b",    # the block each character sits in
+           "ghost": "#949e94",   # the dots that are not on
+           "ink": "#1f2456"}     # the dots that are
+LCD_DEAD = {"glass": "#a3a99b", "cell": "#999f96", "ghost": "#929991",
+            "ink": "#929991"}    # no power: the same glass, nothing on it
 
 # The strip across the top of the panel where a real console carries its
 # maker's branding. Left bare here, but it keeps its height so that every
 # dimension below it is unchanged.
 BRAND_PLATE_H = 34
-VFD_EDGE = "#8f9490"
+LCD_RIM = "#8f918a"       # the edge of the cut-out the glass sits in
+LCD_SHADE = "#4c4e48"     # and the shadow its lip casts along the top
 KEYPAD_BG = "#101010"     # the black grid the keys sit in
 KEYPAD_EDGE = "#101010"
 KEY_FACE = "#f6f6f4"      # white keys
@@ -111,6 +135,22 @@ DOOR_SHARE = 0.36         # and the share of the window it takes after that
 DOOR_RATIO = 0.80         # width over height, off the photograph
 
 MODES = ["NORMAL", "SETUP", "DIAGNOSTIC", "RECONCILIATION"]
+
+# **What each mode calls itself on the glass**, which is not its name here
+# with " MODE" after it. `DIAG MODE` is fifteen drawings across five
+# documents -- 576013-818 Rev AA p.1-3 and its Figure 6-2, 576013-610 Rev
+# AC p.27-1 and ch.33, 576013-818 Rev AB, 577013-819 Rev F and 577013-937
+# Rev J -- against a single `DIAGNOSTIC MODE`, which is a prose section
+# heading in 576013-610 p.2-6 and not a screen. The other three are their
+# full names, so deriving the word from the list got two right by accident
+# and this one wrong for as long as it was derived.
+#
+# It matters more than a word: step 1 of every troubleshooting procedure in
+# those guides is literally "press the MODE key until the front panel
+# display reads DIAG MODE". See FIDELITY U10.
+MODE_SCREEN_NAME = {"NORMAL": "MODE", "SETUP": "SETUP MODE",
+                    "DIAGNOSTIC": "DIAG MODE",
+                    "RECONCILIATION": "RECONCILIATION MODE"}
 # Table 2-1, Character Assignments for Numeric Keys. The Setup Manual walks it
 # in words: "to enter an 'A' in a station header ... you press the key once.
 # Push the key again to change the character to a 'B', again to enter a 'C',
@@ -127,9 +167,90 @@ LETTERS = {"1": "QZ.1", "2": "ABC2", "3": "DEF3", "4": "GHI4", "5": "JKL5",
 MODEM_EXTRA = {"1": "&", "2": "=", "3": "%"}
 MODEM_STRING_CODE = "886"
 
+def enable_dpi_awareness():
+    """Ask Windows to stop pretending the screen is 96 DPI.
+
+    Without this the process is DPI-unaware: Windows hands it a 96 DPI
+    screen, draws the window at that size and then stretches the result to
+    fit the real one. Everything is soft, and -- worse -- the window is
+    sized against a screen that reports 1280 when it is really 1920, so a
+    console face that fits perfectly well gets clamped and the right-hand
+    keys are cut off.
+
+    Must be called before the first window exists. Per-monitor v2 is what
+    we want (the scale follows the window between monitors); the two older
+    calls are the fallbacks on Windows 8.1 and 7. Every one of them fails
+    harmlessly if the awareness is already set, which is what happens when
+    a test builds a second SimApp in the same process.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+    except ImportError:                                # pragma: no cover
+        return
+    try:
+        # -4 is DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(-4):
+            return
+    except (AttributeError, OSError):                  # pragma: no cover
+        pass
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # per-monitor
+        return
+    except (AttributeError, OSError):                  # pragma: no cover
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()       # system-wide
+    except (AttributeError, OSError):                  # pragma: no cover
+        pass
+
+
+def claim_taskbar_identity():
+    """Tell Windows this process is its own application.
+
+    A process that does not set an Application User Model ID inherits the
+    one belonging to whatever launched it, and the taskbar groups and
+    ICONS by that ID. Run from a source tree that host is `python.exe`, so
+    the taskbar button showed Python's logo however good the window's own
+    icon was -- and pinning the button pinned Python.
+
+    Must be called before the first window exists, like the DPI call above,
+    and it is harmless to call twice.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+    except ImportError:                                # pragma: no cover
+        return
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            f"{PUBLISHER}.{APP_NAME}".replace(" ", ""))
+    except (AttributeError, OSError):                  # pragma: no cover
+        pass
+
+
 class SimApp(tk.Tk):
     def __init__(self, console, port=10001):
+        enable_dpi_awareness()
+        claim_taskbar_identity()
         super().__init__()
+        self._set_icon()
+        # What one of the pixel dimensions in this file is worth on this
+        # screen. They were all measured at 96 DPI, which is what Windows
+        # reports to a program that has not asked otherwise; now that the
+        # window is drawn at the screen's real resolution, they have to be
+        # multiplied up or the whole face comes out a third of the size.
+        # Type is not scaled here: it is given in points, and Tk's own
+        # scaling below turns those into the right number of pixels.
+        self.px = self.winfo_fpixels("1i") / 96.0
+        self.tk.call("tk", "scaling", self.winfo_fpixels("1i") / 72.0)
+        # The bench's own dimensions were measured at 96 DPI too, and the
+        # bench had no way to know it was not on one. It has to be told
+        # before a single tile is built, because a tile takes its size in
+        # its constructor. See `bench.set_scale`.
+        bench.set_scale(self.px)
         self.console = console
         self.port = port
         self.title(f"{APP_NAME}  --  serial on 127.0.0.1:{port}")
@@ -140,12 +261,24 @@ class SimApp(tk.Tk):
         # children, so it must be sized BEFORE the window asks itself how
         # tall to be -- measured first, the door is a 1px sliver and the
         # window opens too short to show the console's own face.
+        self.update_idletasks()
+        # what the console face needs, before the door is given anything
+        self._panel_req = self._panel.winfo_reqwidth()
         self._fit_door()
         self.update_idletasks()
-        want_h = min(self.winfo_reqheight(), self.winfo_screenheight() - 90)
-        want_w = min(max(self.winfo_reqwidth(), 900), self.winfo_screenwidth() - 60)
-        self.geometry(f"{want_w}x{want_h}+40+30")
-        self.minsize(880, 460)
+        want_h = min(self.winfo_reqheight(),
+                     self.winfo_screenheight() - self.S(90))
+        # Wide enough that the panel keeps every pixel it asked for AND
+        # the printer door still gets its share of the window: the door is
+        # a fraction of the width, so the panel is what is left of the
+        # rest, and solving for the width is what stops the door opening
+        # at its minimum on a screen with room to spare.
+        chrome = self.winfo_reqwidth() - self._doors.winfo_reqwidth()
+        roomy = int((self._panel_req + chrome) / (1.0 - DOOR_SHARE))
+        want_w = min(max(self.winfo_reqwidth(), roomy, self.S(900)),
+                     self.winfo_screenwidth() - self.S(60))
+        self.geometry(f"{want_w}x{want_h}+{self.S(40)}+{self.S(30)}")
+        self.minsize(self.S(880), self.S(460))
         self._fit_door()
         self._render()
         self._place_bench_window()
@@ -177,7 +310,7 @@ class SimApp(tk.Tk):
         self.device = 1
         self.confirm = None       # the PRESS <STEP> TO CONTINUE screen
         self.slot = 0             # which position the config screen is on
-        self.sub = None           # the diagnostic screen ENTER descended into
+        self.subs = []            # the screens ENTER descended into, a path
         self.locked = False       # waiting for the System Security Code
         self.armed = False        # an archive answer toggled to YES
         self._profile_pending = None   # a tank profile waiting to be confirmed
@@ -187,6 +320,14 @@ class SimApp(tk.Tk):
         self.chart_open = False   # the tank chart passcode, once given
         self.sure = False         # and the ARE YOU SURE? screen after it
         self.boot_restore = None  # the cold-start RESTORE SETUP DATA prompt
+        # The `ARE YOU SURE?` a disabled beeper is asked, and the line it
+        # is asked under. None until a step with `sure` is answered its own
+        # way. See SU11 and `k_step`.
+        self._sure_head = None
+        # Where the REMOVE VMC SERIAL NUMBER walk has got to: 576013-623
+        # Rev AN p.27-2 draws six screens for it and the last of them is
+        # the parent again. One of "no", "yes", "sure_no", "sure_yes".
+        self.vmc_remove = "no"
         self.isd_override = None  # the shutdown-override confirmation walk
         self.isdflow = None       # the grade-hose mapping flows of 577013-800
         self._alarm_presses = 0   # ALARM/TEST x3 reaches the override
@@ -209,10 +350,22 @@ class SimApp(tk.Tk):
         # on the twelve hour clock the screen shows, so the half of the day
         # is a field of its own beside the digits.
         self.meridiem = ""
+        # Which side of a clock field the cursor is on. A real console walks
+        # one cursor along the digits and then onto AM and onto PM; the arrows
+        # moving it between the two halves IS the selection. See _clock_text.
+        self.on_meridiem = False
         self.msg = ""
         self._tap = None
         self._cycle = 0
-        self.mt_key = False       # Contractor's ID key in the MT Comm card
+        # 576013-610 ch.33's own sequence, which the blue key starts:
+        # None, "prompt" (MAINTENANCE TRACKER / DISABLED or ENABLED),
+        # "insert" (INSERT KEY IN PORT / PRESS <ENTER>), or the second line
+        # of the answer -- LOGGED IN XXXXXX, or one of the four refusals.
+        self.mt_login = None
+        self.mt_asked = None      # console time the insert prompt went up
+        self.mt_ever = False      # DISABLED the first time, ENABLED after
+        self.maint_report = False  # the white key's MAINTENANCE REPORT screen
+        self.relay_setup_due = False   # `ON - PRESS ANY KEY`, owed a printout
         self._posted = set()      # alarms the printer has already reported
         self._last_key = time.time()   # for the 15 minute return to Operating
         # what the START/STOP LEAK TEST steps are set to, which is a front
@@ -226,10 +379,77 @@ class SimApp(tk.Tk):
                     # for the current period, which is what the
                     # manual's first screen of each function shows
                     "report_type": "SHIFT", "variance_period": "DAILY",
-                    "which": "CURRENT", "adjust_type": "SHIFT"}
+                    "which": "CURRENT", "adjust_type": "SHIFT",
+                    # the day typed on SELECT DAY, where a date can be typed
+                    # rather than toggled -- None is the day in progress
+                    "day": None}
         self._blink = False
         # whether STEP has been pressed off the Operating Mode status display
         self._entered = False
+
+    def _set_icon(self, window=None):
+        """A window's own icon, which is also its taskbar button's.
+
+        **Nothing set one.** `assets/icon.ico` reached the EXE's resource
+        and the installer's `SetupIconFile` and never the window, so the
+        program ran under Tk's default feather -- in the title bar, in
+        Alt-Tab and on the taskbar. `wm iconbitmap` came back empty on a
+        live window, which is the whole diagnosis.
+
+        **Both forms, and the order matters.** Measured with `WM_GETICON`
+        on the real toplevel, on this Tk and this Windows:
+
+            bare                     small=None  big=None
+            iconbitmap(default=...)  small=None  big=None    <- no effect
+            iconbitmap(...)          small=HICON big=HICON
+            iconphoto(True, png)     small=None  big=None    <- no effect
+
+        `default=` is documented as the one that covers the whole
+        application, and on Windows it only reaches toplevels created
+        AFTER it -- the root window already exists by the time `__init__`
+        can call anything, so on its own it leaves the very window the
+        taskbar is showing without an icon. The plain call is what sends
+        `WM_SETICON`. So: the plain form for this window, `default=` for
+        the bench window and the dialogs that come later.
+
+        The `.ico` carries six sizes and Windows picks the one it wants;
+        `iconphoto` with the PNG sets nothing at all here and is kept only
+        as the path for a platform where `iconbitmap` wants an XBM.
+        """
+        window = self if window is None else window
+        try:
+            ico = paths.asset("icon.ico")
+            window.iconbitmap(ico)                     # this window
+            window.iconbitmap(default=ico)             # and, in theory, the
+            return                                     # ones after it
+        except Exception:
+            pass
+        try:
+            # kept on the instance: Tk does not own the image, and a
+            # PhotoImage that goes out of scope takes the icon with it
+            self._icon = tk.PhotoImage(file=paths.asset("icon.png"))
+            window.iconphoto(True, self._icon)
+        except Exception:                              # pragma: no cover
+            # An icon is not worth failing to start over.
+            pass
+
+    @property
+    def sub(self):
+        """The screen ENTER descended into, or None at the top level.
+
+        A branch can hold a branch. 576013-623 Rev AN p.6-5 descends from
+        `AUTO TRANSMIT SETUP` / `PRESS <ENTER>` to `TRANSMIT MESSAGE SETUP`
+        / `PRESS <ENTER>` and from there again to the twelve
+        `AUTO ... LIMIT` screens, so where the panel is standing is a PATH
+        and not one index. `self.subs` is that path, deepest last; `sub` is
+        its last element, which is what a caller that knows only one level
+        -- every caller in Diagnostic Mode, where no figure nests -- means.
+        """
+        return self.subs[-1] if self.subs else None
+
+    @sub.setter
+    def sub(self, value):
+        self.subs = [] if value is None else [value]
 
     def _build(self):
         self._build_menu()
@@ -254,6 +474,10 @@ class SimApp(tk.Tk):
         """
         win = tk.Toplevel(self)
         self.bench_win = win
+        # Its own, explicitly: `iconbitmap(default=...)` is documented as
+        # covering every later toplevel and this one is later and does not
+        # get it. Measured, like the rest of `_set_icon`.
+        self._set_icon(win)
         win.title(f"Site Bench  --  {APP_NAME}")
         win.configure(bg=bench.BG)
         win.minsize(560, 380)
@@ -341,6 +565,11 @@ class SimApp(tk.Tk):
         benm.add_checkbutton(label="Printer out of paper",
                              variable=self.no_paper,
                              command=self._set_paper)
+        self.lever_down = tk.BooleanVar(
+            value=self.console.printer_lever_open)
+        benm.add_checkbutton(label="Printer feed release lever down",
+                             variable=self.lever_down,
+                             command=self._set_lever)
         benm.add_command(label="Tear off the slip", command=self.cut_paper)
         bar.add_cascade(label="Bench", menu=benm)
 
@@ -379,6 +608,11 @@ class SimApp(tk.Tk):
         swm.add_checkbutton(label="DIP SW2-3: display off",
                             variable=self._sw_display,
                             command=self._set_display_blank)
+        self._sw_fiscal = tk.BooleanVar(
+            value=self.console.fiscal_height_switch)
+        swm.add_checkbutton(label="DIP SW2-4: fiscal height security",
+                            variable=self._sw_fiscal,
+                            command=self._set_fiscal_height)
         bar.add_cascade(label="Switches", menu=swm)
 
         helpm = tk.Menu(bar, tearoff=0)
@@ -418,7 +652,7 @@ class SimApp(tk.Tk):
     def _build_console(self, parent):
         """The console face.
 
-        Off-white box, a bare brand plate, green display,
+        Off-white box, a bare brand plate, a backlit monochrome LCD,
         the ALARM / WARNING / POWER column, then the two keypads: white keys with
         black legends on a black grid, with the red ALARM TEST key at the top
         left of the operating pad and two unlabelled positions beside it.
@@ -432,20 +666,22 @@ class SimApp(tk.Tk):
         # photograph.
         doors = tk.Frame(case, bg=CASE)
         doors.pack(fill="x")
-        bay = tk.Frame(doors, bg=CASE, width=DOOR_W)
+        self._doors = doors
+        bay = tk.Frame(doors, bg=CASE, width=self.S(DOOR_W))
         bay.pack(side="left", fill="y")
         bay.pack_propagate(False)
         self._build_printer(bay)
         panel = tk.Frame(doors, bg=CASE)
         panel.pack(side="left", fill="both", expand=True)
+        self._panel = panel
 
         # ---- the brand plate, left bare ----
         # A real console carries its maker's wordmark and a model flash across
         # this strip. Both are trademarks, and neither one teaches anything
         # about operating the console, so this simulator draws neither. The
         # plate keeps its full height, so the face below it is unchanged.
-        head = tk.Frame(panel, bg=CASE, height=BRAND_PLATE_H)
-        head.pack(fill="x", padx=18, pady=(10, 2))
+        head = tk.Frame(panel, bg=CASE, height=self.S(BRAND_PLATE_H))
+        head.pack(fill="x", padx=self.S(18), pady=(self.S(10), self.S(2)))
         head.pack_propagate(False)
 
         # ---- the display over the indicator column and the two keypads ----
@@ -456,28 +692,57 @@ class SimApp(tk.Tk):
         # and the type is sized afterwards from how wide the keypads came
         # out: 24 characters across the width of the keys, and no wider.
         stack = tk.Frame(panel, bg=CASE)
-        stack.pack(padx=18, pady=(2, 4), expand=True)
+        stack.pack(padx=self.S(18), pady=(self.S(2), self.S(4)), expand=True)
         row = tk.Frame(stack, bg=CASE)
-        row.pack(side="bottom")
+        row.pack(side="bottom", anchor="e")
 
+        # Everything on the row is laid out in key widths, measured off two
+        # photographs of the console (a running one, and the maker's own
+        # product shot) that agree with each other:
+        #   the keys are square, and the two pads stand a fifth of a pad
+        #   apart; the indicator lamps are domes half a key across, a fifth
+        #   of a pad to the left of the operating pad, their centres a key
+        #   pitch apart and the first one just over a pitch below the top
+        #   of the pad; their legends are plain capitals about a key wide,
+        #   nearly half a key clear of the lamps.
+        kw, kh = self._key_size()
+        pitch = kh + self.S(6)
+        opsw = 3 * (kw + self.S(6))
         leds = tk.Frame(row, bg=CASE)
-        leds.grid(row=0, column=0, padx=(0, 16), sticky="n")
-        self.led = {}
-        for key, text, colour in (("alarm", "ALARM", "#e01b1b"),
-                                  ("warn", "WARNING", "#f2d029"),
-                                  ("power", "POWER", "#3fbf55")):
+        leds.grid(row=0, column=0, padx=(0, int(opsw * 0.20)), sticky="n")
+        leds.grid_rowconfigure(0, minsize=int(pitch * 0.575))
+        lamp = int(kw * 0.5)
+        legend = tkfont.Font(family="Segoe UI", size=8)
+        for size in range(14, 6, -1):
+            legend.configure(size=size)
+            if legend.measure("ALARM") <= kw * 1.05:
+                break
+        self.led, self._glint = {}, {}
+        for i, (key, text, colour) in enumerate((("alarm", "ALARM", "#e01b1b"),
+                                                 ("warn", "WARNING", "#f2d029"),
+                                                 ("power", "POWER", "#3fbf55"))):
+            leds.grid_rowconfigure(i + 1, minsize=int(pitch * 1.05))
             h = tk.Frame(leds, bg=CASE)
-            h.pack(anchor="e", pady=9)
+            h.grid(row=i + 1, column=0, sticky="e")
             tk.Label(h, text=text, bg=CASE, fg=LABEL,
-                     font=("Segoe UI", 8, "bold")).pack(side="left", padx=(0, 7))
-            cv = tk.Canvas(h, width=17, height=17, bg=CASE, highlightthickness=0)
-            oval = cv.create_oval(2, 2, 15, 15, fill=LED_OFF, outline="#3a3a38")
+                     font=legend).pack(side="left", padx=(0, int(kw * 0.4)))
+            cv = tk.Canvas(h, width=lamp, height=lamp, bg=CASE,
+                           highlightthickness=0)
+            oval = cv.create_oval(1, 1, lamp - 2, lamp - 2, fill=LED_OFF,
+                                  outline="#3a3a38")
+            # the glint on the dome, up and to the left: a small spot a
+            # little lighter than whatever the lamp is showing
+            g = max(1, lamp // 9)
+            self._glint[key] = cv.create_oval(
+                lamp * 0.32 - g, lamp * 0.32 - g, lamp * 0.32 + g,
+                lamp * 0.32 + g, fill=blend(LED_OFF, "#ffffff", 0.45),
+                outline="")
             cv.pack(side="left")
             self.led[key] = (cv, oval, colour)
 
         NL = chr(10)
         ops = tk.Frame(row, bg=KEYPAD_BG)
-        ops.grid(row=0, column=1, padx=(0, 16), sticky="n")
+        ops.grid(row=0, column=1, padx=(0, int(opsw * 0.20)), sticky="n")
         # exactly as photographed, left to right and top to bottom
         # All twelve positions are keys. The two beside ALARM TEST carry no
         # printed legend on the photographed unit, but they are not blanks,
@@ -500,78 +765,92 @@ class SimApp(tk.Tk):
                 face, txt = KEY_ALARM, "#ffffff"
             elif cmd is self.k_blue:
                 face, txt = KEY_MAINT, "#ffffff"
-            self._key(ops, label, cmd, i, face, txt, w=7)
+            key = self._key(ops, label, cmd, i, face, txt)
+            if label.startswith("ALARM"):
+                # 577013-814's TLS-3xx Audible and Visual Test Procedure is a
+                # HOLD, not a press: "Press and Hold Alarm Test button for a
+                # minimum 3 seconds." So the button needs press and release,
+                # not just its command.
+                key.bind("<ButtonPress-1>", self._alarm_held_start, add="+")
+                key.bind("<ButtonRelease-1>", self._alarm_held_stop, add="+")
 
         alpha = tk.Frame(row, bg=KEYPAD_BG)
         alpha.grid(row=0, column=2, sticky="n")
-        keys = [("QZ." + NL + "1", "1"), ("ABC" + NL + "2", "2"), ("DEF" + NL + "3", "3"),
-                ("GHI" + NL + "4", "4"), ("JKL" + NL + "5", "5"), ("MNO" + NL + "6", "6"),
-                ("PRS" + NL + "7", "7"), ("TUV" + NL + "8", "8"), ("WXY" + NL + "9", "9"),
-                (chr(0x2190) + NL + "+/-", "+"), ("0", "0"), (chr(0x2192) + NL + ".", ",")]
-        for i, (label, k) in enumerate(keys):
+        # the third of each pair is the line set in the larger type: the
+        # digit, which is under its letters on the number keys and over
+        # its shifted characters on the three at the bottom
+        keys = [("QZ." + NL + "1", "1", 1), ("ABC" + NL + "2", "2", 1),
+                ("DEF" + NL + "3", "3", 1), ("GHI" + NL + "4", "4", 1),
+                ("JKL" + NL + "5", "5", 1), ("MNO" + NL + "6", "6", 1),
+                ("PRS" + NL + "7", "7", 1), ("TUV" + NL + "8", "8", 1),
+                ("WXY" + NL + "9", "9", 1),
+                (chr(0x2190) + NL + "+/-", "+", 0),
+                # the 0 key carries its three shifted characters over the
+                # digit, the space drawn as an open box, the way the key
+                # itself is printed: space, hyphen, comma, then 0
+                (chr(0x25a1) + "-," + NL + "0", "0", 1),
+                (chr(0x2192) + NL + chr(0x2022), ",", 0)]
+        for i, (label, k, big) in enumerate(keys):
             self._key(alpha, label, lambda kk=k: self.k_alnum(kk), i,
-                      KEY_FACE, KEY_TEXT, w=6)
+                      KEY_FACE, KEY_TEXT, big=big)
 
-        # Now the display, measured off reference_console.png. On a right-hand
-        # door 546 pixels wide in that photograph the glass runs x 655..926
-        # and the two keypads run 700..926: the display's RIGHT edge finishes
-        # exactly level with the right edge of the alphanumeric pad, and its
-        # left edge stands out past the keys by about a fifth of their width,
-        # over the indicator lights. So it is right-aligned to the keys and
-        # sized at 1.2 times their width, and the type is whatever fills that.
+        # Now the display, measured off a straight-on photograph of the
+        # whole face, 1200 pixels wide:
+        #
+        #   glass          x 640..977   (337 wide, 45 high)
+        #   operating pad  x 697..824   (127)
+        #   number pad     x 849..976   (127)
+        #
+        # So the glass is 1.21 times the span of the two pads, 697..976;
+        # its RIGHT edge finishes LEVEL with the right edge of the number
+        # pad, one pixel in three hundred, not past it; and all of the
+        # overhang is on the LEFT, where it reaches back over the indicator
+        # lamps at x 649..672 and stops short of the operating pad. So the
+        # keys are hung off the right of the block, the glass is sized from
+        # their span, and the dots are whatever fills the width.
         wrap = tk.Frame(stack, bg=CASE)
-        wrap.pack(side="top", anchor="e", pady=(0, 15))
-        bezel = tk.Frame(wrap, bg=VFD_EDGE)
-        bezel.pack()
-        pad = 3
+        wrap.pack(side="top", anchor="e", pady=(0, int(pitch * 0.7)))
+        # the glass sits back in a cut-out of the case: no bezel, just the
+        # thin dark edge of the opening, and the shadow the glass draws
+        # itself along its top and left
+        rim = tk.Frame(wrap, bg=LCD_RIM)
+        rim.pack()
+        # the shadow lies OUTSIDE the glass, along its top and left: drawn
+        # on the glass it fell across the top row of dots and clipped them
+        shade = tk.Frame(rim, bg=LCD_SHADE)
+        shade.pack(padx=self.S(1), pady=self.S(1))
         # Tk works out what a frame of gridded keys asks for lazily, and an
         # unmeasured keypad reports one pixel, so make it settle first.
         self.update_idletasks()
-        room = int((ops.winfo_reqwidth() + alpha.winfo_reqwidth() + 16) * 1.20)
-        lcd_font = tkfont.Font(family="Consolas", size=20, weight="bold")
-        for size in range(20, 7, -1):
-            lcd_font.configure(size=size)
-            if lcd_font.measure("0") * COLS + pad * 2 <= room:
-                break
-        # The glass in the photograph is 271 x 40 for its 24 x 2 characters:
-        # a cell 11.3 wide by 20 tall, and a strip nearly seven times wider
-        # than it is high. Tk's own line spacing is looser than that, so the
-        # rows are set from the character width instead and the bezel is kept
-        # thin, which is what makes it read as a two-line LCD rather than as
-        # a text box.
-        cw = lcd_font.measure("0")
-        # (nothing on this display has a descender: it is capitals, digits
-        # and punctuation, so the rows can sit as close as the ascent)
-        ch = max(int(cw * 1.60), lcd_font.metrics("ascent") + 2)
-        self.lcd = tk.Canvas(bezel, width=cw * COLS + pad * 2,
-                             height=ch * ROWS + pad * 2, bg=VFD_BG,
-                             highlightthickness=0, bd=0)
-        self.lcd.pack(padx=2, pady=2)
-        self._ghost_ids, self._text_ids = [], []
-        for r in range(ROWS):
-            y = pad + r * ch
-            self._ghost_ids.append(self.lcd.create_text(
-                pad, y, anchor="nw", font=lcd_font, fill=VFD_GHOST,
-                text=chr(0x2588) * COLS))
-            self._text_ids.append(self.lcd.create_text(
-                pad, y, anchor="nw", font=lcd_font, fill=VFD_INK, text=""))
+        span = ops.winfo_reqwidth() + alpha.winfo_reqwidth() + int(opsw * 0.20)
+        room = int(span * 1.21)
+        # (the rim is two pixels, and the glass is packed two in from it)
+        edge = self.S(2)
+        self.lcd = DotMatrixLCD(shade, COLS, ROWS, room - edge * 2,
+                                lit=LCD_LIT, dead=LCD_DEAD)
+        self.lcd.pack(padx=(edge, 0), pady=(edge, 0))
+        # the rows are addressed by index; kept as a list so the render path
+        # reads as it did when these were canvas text items
+        self._text_ids = list(range(ROWS))
 
         # ---- navy pinstripes across the base ----
-        stripes = tk.Canvas(panel, height=52, bg=CASE, highlightthickness=0)
-        stripes.pack(fill="x", padx=18, pady=(6, 8))
+        stripes = tk.Canvas(panel, height=self.S(52), bg=CASE,
+                            highlightthickness=0)
+        stripes.pack(fill="x", padx=self.S(18), pady=(self.S(6), self.S(8)))
 
         def draw_stripes(_e=None):
             stripes.delete("all")
-            w = stripes.winfo_width() or 900
+            w = stripes.winfo_width() or self.S(900)
             for i in range(9):
-                y = 2 + i * 5
-                stripes.create_line(0, y, w, y, fill=BLUE, width=1 + (i // 4))
+                y = self.S(2) + i * self.S(5)
+                stripes.create_line(0, y, w, y, fill=BLUE,
+                                    width=self.S(1 + (i // 4)))
 
         stripes.bind("<Configure>", draw_stripes)
 
         self.hint = tk.Label(panel, text="", bg=CASE, fg="#4a4a48",
                              font=("Segoe UI", 8), justify="left", wraplength=820)
-        self.hint.pack(anchor="w", padx=18, pady=(0, 8))
+        self.hint.pack(anchor="w", padx=self.S(18), pady=(0, self.S(8)))
 
     # =====================================================================
     # the printer, behind the left-hand door
@@ -769,21 +1048,23 @@ class SimApp(tk.Tk):
         self.slip_text = tk.Text(body, width=PAPER_COLS, height=6, bg=PAPER,
                                  fg=PAPER_INK, font=self.slip_font,
                                  wrap="none", relief="flat", bd=0,
-                                 padx=SLIP_PAD, pady=5, cursor="arrow",
+                                 padx=self.S(SLIP_PAD), pady=self.S(5),
+                                 cursor="arrow",
                                  highlightthickness=0)
         self.slip_text.configure(yscrollcommand=self._slip_scrolled)
         self.slip_text.pack(fill="both", expand=True)
         # No scrollbar beside it: the paper is the width of the cutout and
         # nothing else may be. A thumb is drawn ON the paper's right margin
         # instead, and the wheel and a drag both wind it.
-        self.slip_thumb = tk.Canvas(body, width=5, bg=PAPER, bd=0,
+        self.slip_thumb = tk.Canvas(body, width=self.S(5), bg=PAPER, bd=0,
                                     highlightthickness=0)
         for widget in (self.slip_text, self.slip_thumb):
             widget.bind("<MouseWheel>", self._slip_wheel)
         self.slip_thumb.bind("<B1-Motion>", self._slip_drag)
         self.slip_thumb.bind("<Button-1>", self._slip_drag)
         # the torn bottom edge, and the cut button sitting on the paper
-        self.slip_tear = tk.Canvas(slip, height=SLIP_TEAR, width=10,
+        self.slip_tear = tk.Canvas(slip, height=self.S(SLIP_TEAR),
+                                   width=self.S(10),
                                    bg=PANEL_BG, highlightthickness=0, bd=0)
         self.slip_tear.pack(side="top", fill="x")
         self.slip_tear.bind("<Configure>", lambda _e: self._draw_tear())
@@ -803,13 +1084,24 @@ class SimApp(tk.Tk):
 
         The roll does not change width when the window does, it is still
         forty characters, so what changes is how big those characters are.
+
+        The search starts lower than it once did. A character's advance is
+        a whole number of pixels, and rounding it bites harder at small
+        sizes: the same six-point type that measured four pixels a
+        character on a screen the program thought was 96 DPI measures
+        seven on the real one, which is 1.75 times the width for 1.5 times
+        the screen. Six points stopped fitting the slot, and a floor that
+        does not fit is not a floor, it is a clipped report.
         """
-        best = 6
-        for size in range(6, 15):
+        best = None
+        for size in range(4, 15):
             self.slip_font.configure(size=size)
-            if self.slip_font.measure("0") * PAPER_COLS > width - SLIP_PAD * 2:
+            if (self.slip_font.measure("0") * PAPER_COLS
+                    > width - self.S(SLIP_PAD) * 2):
                 break
             best = size
+        if best is None:
+            best = 4
         self.slip_font.configure(size=best)
         self._slip_row = self.slip_font.metrics("linespace")
         return best
@@ -846,7 +1138,7 @@ class SimApp(tk.Tk):
         cv = self.slip_tear
         cv.delete("all")
         w = cv.winfo_width() or 260
-        h = SLIP_TEAR
+        h = self.S(SLIP_TEAR)
         teeth, x, up = [0, 0], 0, True
         while x <= w:
             teeth += [x, h - 7 if up else h - 1]
@@ -873,7 +1165,7 @@ class SimApp(tk.Tk):
             self._slip_type(width)
             top = self.printer.winfo_rooty() - self.winfo_rooty() + y
             left = self.printer.winfo_rootx() - self.winfo_rootx() + cut1
-            trim = SLIP_TEAR + 12            # the torn edge and the borders
+            trim = self.S(SLIP_TEAR) + self.S(12)   # torn edge and borders
             row = self._slip_row
             clear = self.printer.winfo_height() - y + 6      # past the case
             least = max(2, (clear + row - 1) // row)
@@ -892,11 +1184,25 @@ class SimApp(tk.Tk):
         held to a share of the window between what a 40 column roll needs and
         what would start to crowd the panel.
         """
-        want = max(300, min(520, int(self.winfo_width() * DOOR_SHARE)))
+        # The panel beside it has a width it cannot go under -- the keys
+        # and the glass -- and the door is what is left over. Without this
+        # the door grows on the first <Configure>, after the window has
+        # already been sized to the face, and pushes the right-hand column
+        # of keys off the edge of the window.
+        # measured on the frame that actually holds the two doors, not on
+        # the window: between them stand a border and a margin, and sharing
+        # out the window's width instead leaves the panel some twenty
+        # pixels short -- exactly enough to cut the last column of keys off.
+        held = getattr(self, "_doors", None)
+        room = held.winfo_width() if held else self.winfo_width()
+        spare = room - getattr(self, "_panel_req", 0)
+        want = max(self.S(300), min(self.S(520),
+                                    int(self.winfo_width() * DOOR_SHARE),
+                                    max(self.S(300), spare)))
         # ...and it is taller than it is wide, which on the real console is
         # what gives the printer door its shape. The panel beside it does not
         # need the height, so the door sets it and the panel spreads into it.
-        tall = max(int(want / DOOR_RATIO), 430)
+        tall = max(int(want / DOOR_RATIO), self.S(430))
         if (want, tall) != (self.printer_bay.winfo_reqwidth(),
                             self.printer_bay.winfo_reqheight()):
             self.printer_bay.configure(width=want, height=tall)
@@ -936,14 +1242,79 @@ class SimApp(tk.Tk):
             self.slip.place_forget()
         self.log("-- paper cut")
 
-    def _key(self, parent, label, cmd, i, face, txt, w):
+    def S(self, n):
+        """One of this file's measured pixel dimensions, on this screen."""
+        return max(1, round(n * self.px))
+
+    # The legends on a real console are set in a neo-grotesque of the
+    # Helvetica school -- circular O, horizontal terminals, an M with
+    # upright stems -- in a regular weight, not bold. Arial is metrically
+    # Helvetica and is on every Windows machine; the rest of the list is
+    # for everywhere else, ending at whatever Tk would have picked anyway.
+    KEY_FAMILIES = ("Arial", "Helvetica", "Liberation Sans", "Nimbus Sans",
+                    "DejaVu Sans", "TkDefaultFont")
+    # A number key's digit stands about twice as tall as the three letters
+    # over it, and is set heavier than they are. Measured down the DEF/3
+    # key of the photographed console: the letters are five pixels of cap
+    # height, the digit eleven.
+    DIGIT_SCALE = 2.1
+    DIGIT_WEIGHT = "bold"
+
+    def _key_family(self):
+        if not getattr(self, "_keyfamily", None):
+            have = set(tkfont.families())
+            self._keyfamily = next(
+                (f for f in self.KEY_FAMILIES if f in have), "TkDefaultFont")
+        return self._keyfamily
+
+    def _key_font(self):
+        if not getattr(self, "_keyfont", None):
+            self._keyfont = tkfont.Font(family=self._key_family(), size=7)
+        return self._keyfont
+
+    def _key_big_font(self):
+        """The larger of the two sizes: a number key's digit."""
+        if not getattr(self, "_keybigfont", None):
+            small = self._key_font()
+            self._keybigfont = tkfont.Font(
+                family=self._key_family(),
+                size=max(8, round(abs(small.cget("size")) * self.DIGIT_SCALE)),
+                weight=self.DIGIT_WEIGHT)
+        return self._keybigfont
+
+    # the longest legend any key carries; every key is cut to clear it
+    WIDEST_LEGEND = "SENSOR"
+    # ...with room to spare, because a real key is a good deal bigger than
+    # its legend: measured off the photograph, the word CHANGE runs 22 of
+    # the 38 pixels its keycap is wide, so the legend takes a shade under
+    # three fifths of the face and the rest is blank moulding.
+    LEGEND_SHARE = 0.58
+
+    def _key_size(self):
+        """What one key measures. Every key on the console is the same
+        square -- the operating keys and the number keys alike, as
+        photographed -- so there is one size, taken from the longest legend
+        any of them carries. Sized from the legend's own type, so the keys
+        scale with the screen the way the Tk buttons before them did."""
+        font = self._key_font()
+        wide = font.measure(self.WIDEST_LEGEND)
+        side = max(round(wide / self.LEGEND_SHARE),
+                   wide + self.S(KeyCap.BEVEL) * 2 + self.S(8))
+        return side, side
+
+    def _key(self, parent, label, cmd, i, face, txt, w=None, big=None):
+        """One moulded keycap on the black grid: a flat top on four sloped
+        sides, that sinks when pressed. Every key is the same square, so
+        `w` is accepted and ignored. `big` is the line of the legend that
+        is set in the larger type, if any."""
         cmd = self._guard(cmd)
-        b = tk.Button(parent, text=label, command=cmd, width=w, height=2,
-                      bg=face, fg=txt, activebackground="#33343a",
-                      activeforeground=txt, relief="raised", bd=1,
-                      highlightbackground=CASE_EDGE,
-                      font=("Segoe UI", 7, "bold"))
-        b.grid(row=i // 3, column=i % 3, padx=3, pady=3)
+        width, height = self._key_size()
+        # the moulded edge is a share of the key, not a fixed few pixels
+        b = KeyCap(parent, label, cmd, face, txt, width=width, height=height,
+                   grid=KEYPAD_BG, font=self._key_font(),
+                   bevel=max(2, round(width * 0.13)),
+                   big_font=self._key_big_font(), big_line=big)
+        b.grid(row=i // 3, column=i % 3, padx=self.S(3), pady=self.S(3))
         return b
 
     # ---- the bench, in the same window ----
@@ -1017,11 +1388,13 @@ class SimApp(tk.Tk):
         holder = tk.Frame(parent, bg=bench.BG)
         holder.pack(fill="both", expand=True)
         self.tab_site = tk.Frame(holder, bg=bench.BG)
+        self.tab_traffic = tk.Frame(holder, bg=bench.BG)
         self.tab_mod = tk.Frame(holder, bg=bench.BG)
         self.tab_log = tk.Frame(holder, bg=bench.BG)
         self.tab_paper = tk.Frame(holder, bg=bench.BG)
         self.tab_net = tk.Frame(holder, bg=bench.BG)
-        self._views = {"Site": self.tab_site, "Modules": self.tab_mod,
+        self._views = {"Site": self.tab_site, "Traffic": self.tab_traffic,
+                       "Modules": self.tab_mod,
                        "Network": self.tab_net, "Serial log": self.tab_log,
                        "Printer": self.tab_paper}
         self._switch = bench.Segmented(holder, list(self._views),
@@ -1039,6 +1412,7 @@ class SimApp(tk.Tk):
                                   font=("Consolas", 9), padx=10, pady=6)
         self.alarm_lbl.pack(fill="x")
         self._build_site(self._scrollable(self.tab_site))
+        self._build_traffic(self._scrollable(self.tab_traffic))
         self._build_modules(self._scrollable(self.tab_mod))
         self._build_log(self.tab_log)
         self._build_paper_tab(self.tab_paper)
@@ -1047,6 +1421,7 @@ class SimApp(tk.Tk):
         # The old bench opened this view empty and waited for a rescan,
         # which read as broken every time.
         self._refresh_site()
+        self.refresh_traffic()
         self._switch.select("Site")
 
     def _show_view(self, name):
@@ -1139,7 +1514,9 @@ class SimApp(tk.Tk):
         for key, label in (("mac", "MAC address"), ("ip", "IP address"),
                            ("port", "Serial tunnel port"),
                            ("setup", "Setup menu"),
-                           ("discovery", "DeviceInstaller")):
+                           ("web", "Web manager"),
+                           ("discovery", "DeviceInstaller"),
+                           ("reach", "Reachable at")):
             row = tk.Frame(inner, bg=bench.CARD)
             row.pack(fill="x", padx=10, pady=3)
             tk.Label(row, text=label, bg=bench.CARD, fg=bench.MUTED,
@@ -1158,6 +1535,11 @@ class SimApp(tk.Tk):
                                      activebackground="#4a6d4a",
                                      activeforeground=bench.INK)
         self._net_button.pack(side="left")
+        tk.Button(bar, text="Reset card", command=self._reset_card,
+                  bg="#5c3c3c", fg="#f0e8e8", relief="flat",
+                  font=bench.FONT_HEAD, padx=14, pady=4,
+                  activebackground="#6d4a4a",
+                  activeforeground=bench.INK).pack(side="left", padx=(8, 0))
         bench.info_dot(
             bar, "Once started, point PuTTY or telnet at this machine on "
             "port 9999 to walk the setup menu, or run Lantronix "
@@ -1176,7 +1558,7 @@ class SimApp(tk.Tk):
                 "this simulator does not have, so the databases are the "
                 "emulation; the framing is not invented.")
             self._ifsf_on = tk.BooleanVar(
-                value=bool(self.console.setting("ifsf_platform", 0, True)))
+                value=bool(self.console.setting("ifsf_platform", 0, False)))
             rowi = tk.Frame(tab, bg=bench.BG)
             rowi.pack(fill="x", pady=(0, 6))
             tk.Checkbutton(
@@ -1211,6 +1593,8 @@ class SimApp(tk.Tk):
             bg=bench.BG, fg=bench.BODY, selectcolor=bench.CARD,
             activebackground=bench.BG, activeforeground=bench.INK,
             font=bench.FONT).pack(side="left")
+
+        self._build_comm_errors(tab)
 
         self._dial_answers = tk.BooleanVar(
             value=self.console.autodial.answers)
@@ -1252,27 +1636,70 @@ class SimApp(tk.Tk):
         it did not, exactly as the hardware behaves."""
         if not self._sw_breaker.get():
             self.console.breaker_off()
-            held = "battery holding RAM" if self.console.battery_backup()                 else "NO battery backup: RAM is already gone"
+            held = ("battery holding RAM" if self.console.battery_backup()
+                    else "NO battery backup: RAM is already gone")
             self.log(f"-- MAIN BREAKER OFF ({held})")
         else:
             kind = self.console.breaker_on()
             if kind == "cold":
                 self.log("-- MAIN BREAKER ON: cold boot, programming lost")
                 self._after_console_change()
-                self._boot_sequence()
+                self._boot_sequence("cold")
                 return
             self.log("-- MAIN BREAKER ON: warm boot, everything kept")
+            # A warm boot has screens of its own, and this showed none: it
+            # wrote one log line and re-rendered, so the technician who has
+            # just swapped a board saw nothing where the manual promises
+            # three screens. FIDELITY M11.
+            self._boot_sequence("warm")
+            return
         self._render()
 
-    def _boot_sequence(self):
-        """What a cold-started console shows, 576013-637 pp.12-13:
-        CLEARING ALL RAM, SYSTEM COLD START, SYSTEM SELF TEST, SYSTEM
-        STARTUP COMPLETE, then *** SYSTEM RESET *** on the printer -- and
-        then, on a console with an archive in its E2 chip, the restore
-        offer comes up on its own; nobody has to go looking for it.
-        """
-        screens = ["CLEARING ALL RAM", "SYSTEM COLD START",
-                   "SYSTEM SELF TEST", "SYSTEM STARTUP COMPLETE"]
+    # The two power-up sequences, 576013-637 and 576013-623.
+    #
+    # A COLD boot, 637 pp.12-13: CLEARING ALL RAM, SYSTEM COLD START, SYSTEM
+    # SELF TEST, SYSTEM STARTUP COMPLETE, then *** SYSTEM RESET *** on the
+    # printer -- and then, on a console with an archive in its E2 chip, the
+    # restore offer comes up on its own; nobody has to go looking for it.
+    #
+    # A WARM boot, 637 p.16 verbatim, after replacing the setup storage
+    # device with the battery left on: "The display will cycle through the
+    # following warm boot screens: SYSTEM WARM START / SYSTEM SELF TEST /
+    # SYSTEM STARTUP COMPLETE. At this point front panel display reads: MMM
+    # DD, YYYY HH:MM:SS XM / ALL FUNCTIONS NORMAL."
+    #
+    # No CLEARING ALL RAM, no SYSTEM RESET printout, no restore offer and no
+    # BATTERY IS OFF alarm: nothing was cleared, so there is nothing to
+    # announce and nothing to offer to put back. 528 p.11 step 10 says the
+    # same from the other end -- after a same-part-number swap the console
+    # simply "has warm booted" and is ready.
+    BOOT_SCREENS = {
+        "cold": ["CLEARING ALL RAM", "SYSTEM COLD START", "SYSTEM SELF TEST",
+                 "SYSTEM STARTUP COMPLETE"],
+        "warm": ["SYSTEM WARM START", "SYSTEM SELF TEST",
+                 "SYSTEM STARTUP COMPLETE"],
+    }
+
+    # 623 p.33 draws a fifth cold screen between the self test and the
+    # startup, captioned "The display below appears only if you have one of
+    # the modem modules or WPLLD installed"; 577013-528 p.8 draws the same
+    # screen and says "This messsage only appears if a SiteFax or SiteLink
+    # module is installed" (the manual's own spelling). It is the modem
+    # initialising, so the two captions name the same set of cards between
+    # them. The manual's own indentation of these figures is the FIGURE's --
+    # its four screens are indented 7, 6, 7 and 6 -- so the two lines are
+    # centred in the console's twenty four columns rather than counted off
+    # the page.
+    MODEM_CARDS = ("modem", "slink", "wplld", "wplldcom")
+    WORKING_SCREEN = ("WORKING".center(COLS).rstrip() + chr(10)
+                      + ("*" * 20).center(COLS).rstrip())
+
+    def _boot_sequence(self, kind="cold"):
+        """The power-up screens, and what follows them on a cold start."""
+        screens = list(self.BOOT_SCREENS[kind])
+        if kind == "cold" and any(self.console.has(card)
+                                  for card in self.MODEM_CARDS):
+            screens.insert(-1, self.WORKING_SCREEN)
         self.console.booting = True
         self.busy_until = time.time() + len(screens) * 1.2
 
@@ -1285,11 +1712,12 @@ class SimApp(tk.Tk):
             self.msg = ""
             self.busy_until = 0.0
             self.console.booting = False
-            self.paper_out(["*** SYSTEM RESET ***"])
-            self.log("-- PRINT: *** SYSTEM RESET ***")
-            if self.console.archive_exists():
-                self.boot_restore = "ask"
-                self.log("-- archive found: RESTORE SETUP DATA offered")
+            if kind == "cold":
+                self.paper_out(["*** SYSTEM RESET ***"])
+                self.log("-- PRINT: *** SYSTEM RESET ***")
+                if self.console.archive_exists():
+                    self.boot_restore = "ask"
+                    self.log("-- archive found: RESTORE SETUP DATA offered")
             self._render()
 
         show(0)
@@ -1319,7 +1747,8 @@ class SimApp(tk.Tk):
 
     def _set_display_blank(self):
         self.console.display_blanked = self._sw_display.get()
-        state = "closed (display off)" if self.console.display_blanked             else "open (display on)"
+        state = ("closed (display off)" if self.console.display_blanked
+                 else "open (display on)")
         self.log(f"-- DIP SW2-3 {state}")
         self._render()
 
@@ -1329,6 +1758,14 @@ class SimApp(tk.Tk):
                  if self.console.cover_open else "fitted")
         self.log(f"-- power area cover {state}")
 
+    def _set_fiscal_height(self):
+        """Position 4: what the hardware allows, against the flag somebody
+        programmed. I132 prints both, and until now only one could move.
+        See FIDELITY M13 and BENCH.md P5."""
+        self.console.fiscal_height_switch = self._sw_fiscal.get()
+        state = "ON" if self.console.fiscal_height_switch else "OFF"
+        self.log(f"-- DIP SW2-4 fiscal height security {state}")
+
     def _set_rs232_security(self):
         self.console.rs232_security = self._rs232_sec.get()
         code = self.console.security_code()
@@ -1336,11 +1773,95 @@ class SimApp(tk.Tk):
         note = "" if code else " (no code set, so no effect yet)"
         self.log(f"-- RS-232 security DIP {state}{note}")
 
-    def _set_dim_link(self):
-        self.console.dim_fault = not self._dim_ok.get()
-        state = ("DOWN (DIM Communication Alarm posts, meter data stops)"
-                 if self.console.dim_fault else "up")
-        self.log(f"-- DIM link {state}")
+    def _dim_boards(self):
+        """[(name, bus, slot)] for every DIM board in the cage: the EDIMs
+        on the comm bus, then the MDIM on the power bus."""
+        c = self.console
+        out = [(f"EDIM {i}", 3, i) for i in range(1, c.count("edim") + 1)]
+        if c.has("mdim"):
+            out.append(("MDIM", 2, 1))
+        if not out:
+            out.append(("EDIM 1", 3, 1))
+        return out
+
+    def _pick_dim(self, name):
+        for board, bus, slot in self._dim_boards():
+            if board == name:
+                self._dim_choice = (bus, slot)
+                self.log(f"-- dispensers: showing the meters on {name} "
+                         f"(bus {bus}, slot {slot})")
+                self._refresh_site()
+                self.refresh_traffic()
+                return
+
+    def _set_dim_port(self, port):
+        down = not self._dim_ok[port].get()
+        self.console.set_dim_port(port, down)
+        state = ("DOWN (DIM Communication Alarm posts, its meters stop "
+                 "reporting)" if down else "up")
+        self.log(f"-- DIM port {port} link {state}")
+
+    def _build_comm_errors(self, tab):
+        """A UART or modem error on a comm port, which 888 reports and
+        nothing here could suffer by itself. BENCH.md P9."""
+        from . import wire
+        bench.section(
+            tab, "Comm port errors",
+            "888's COMM STATUS report lists, per position, the last error "
+            "the port had and when: a UART settings error, a modem that "
+            "timed out, a lost carrier. No port on this bench can suffer one "
+            "on its own, so this puts one on the record, with the port's own "
+            "UART settings under it.")
+        row = tk.Frame(tab, bg=bench.BG)
+        row.pack(fill="x", pady=(0, 6))
+        tk.Label(row, text="port", bg=bench.BG, fg=bench.FAINT,
+                 font=bench.FONT_SM).pack(side="left")
+        ports = sorted(self.console.comm_positions()) or [1]
+        self._err_port = tk.StringVar(value=str(ports[0]))
+        pm = tk.OptionMenu(row, self._err_port, *[str(p) for p in ports])
+        pm.config(bg="#24262b", fg=bench.INK, font=bench.MONO_SM,
+                  relief="flat", highlightthickness=0,
+                  activebackground=bench.CARD_EDGE, anchor="w", padx=4,
+                  pady=0)
+        pm["menu"].config(bg="#24262b", fg=bench.INK, font=bench.MONO_SM)
+        pm.pack(side="left", padx=(4, 10))
+        tk.Label(row, text="error", bg=bench.BG, fg=bench.FAINT,
+                 font=bench.FONT_SM).pack(side="left")
+        words = [f"{n:2d} {name}" for n, name in
+                 sorted(wire.Handler.COMM_ERROR.items())]
+        self._err_word = tk.StringVar(value=words[0])
+        em = tk.OptionMenu(row, self._err_word, *words)
+        em.config(bg="#24262b", fg=bench.INK, font=bench.MONO_SM,
+                  relief="flat", highlightthickness=0,
+                  activebackground=bench.CARD_EDGE, anchor="w", padx=4,
+                  pady=0, width=26)
+        em["menu"].config(bg="#24262b", fg=bench.INK, font=bench.MONO_SM)
+        em.pack(side="left", padx=(4, 10))
+        log = tk.Label(row, text="LOG ERROR", bg="#24262b", fg=bench.ACCENT,
+                       font=("Segoe UI", 8, "bold"), padx=8, pady=1,
+                       cursor="hand2")
+        log.pack(side="left")
+        log.bind("<Button-1>", lambda _e: self._log_comm_error())
+        clear = tk.Label(row, text="CLEAR", bg="#24262b", fg=bench.FAINT,
+                         font=("Segoe UI", 8, "bold"), padx=8, pady=1,
+                         cursor="hand2")
+        clear.pack(side="left", padx=(6, 0))
+        clear.bind("<Button-1>", lambda _e: self._clear_comm_errors())
+        bench.Tip(log, "Put this error on the port's record, stamped now. "
+                       "I888 prints it under the port with its UART "
+                       "settings, and TIME OF LAST COMM ERROR moves.")
+
+    def _log_comm_error(self):
+        port = int(self._err_port.get())
+        number = int(self._err_word.get().split()[0])
+        self.console.fault_comm(port, number)
+        self.log(f"-- comm {port}: {self._err_word.get().strip()[3:]} "
+                 "logged (888 reports it)")
+
+    def _clear_comm_errors(self):
+        port = int(self._err_port.get())
+        self.console.clear_comm_errors(port)
+        self.log(f"-- comm {port}: error record cleared")
 
     def _set_rdu_link(self):
         self.console.rdu_fault = not self._rdu_ok.get()
@@ -1356,31 +1877,82 @@ class SimApp(tk.Tk):
 
     def _set_dial_answers(self):
         self.console.autodial.answers = self._dial_answers.get()
-        state = "answers" if self.console.autodial.answers else             "does NOT answer (retries, then AUTODIAL FAILURE)"
+        state = ("answers" if self.console.autodial.answers
+                 else "does NOT answer (retries, then AUTODIAL FAILURE)")
         self.log(f"-- auto-dial receiver {state}")
+
+    def attach_card(self, cfg, net):
+        """Adopt a card the launcher has already brought up."""
+        self.xport = cfg
+        self._card_net = net
+        self._xport_started = True
+        self._sync_network()
+        self._watch_card()
+
+    def _watch_card(self):
+        """Follow the card's address, because programming it moves it."""
+        try:
+            self._sync_network()
+        except tk.TclError:
+            return
+        self.after(1000, self._watch_card)
 
     def _start_xport(self):
         if self._xport_started:
             return
-        import threading
-        self.xport.port = self.port
-        threading.Thread(target=xport.serve, args=(self.xport, "0.0.0.0",
-                                                   self.log),
-                         kwargs={"powered":
-                                 lambda: self.console.powered},
-                         daemon=True).start()
+        from . import xportnet
+        if not self.xport.assigned():
+            self.xport.reset_card()
+        net = xportnet.CardNetwork(self.console, self.xport, log=self.log,
+                                   powered=lambda: self.console.powered)
+        net.start()
+        self._card_net = net
         self._xport_started = True
         self.log("-- XPort networking started")
+        self._sync_network()
+        self._watch_card()
+
+    def _reset_card(self):
+        """Put the card back where it can be found again.
+
+        A real card's own "7 Defaults" keeps the address it was given, which
+        is right on a site and unhelpful on a bench: a trainee who has
+        programmed an address they cannot reach has no way back. This clears
+        the address too, so there is always one place to look.
+        """
+        self.xport.reset_card()
+        self.log("-- card reset: address %s, tunnel port %d, 9600 8N1"
+                 % (self.xport.ip, self.xport.port))
         self._sync_network()
 
     def _sync_network(self):
         rows, c = self._net_rows, self.xport
+        net = getattr(self, "_card_net", None)
         rows["mac"].config(text=xport.mac_hex(c.mac, "-"))
         rows["ip"].config(text=(c.ip if c.assigned()
                                 else f"0.0.0.0  (not set; reachable via "
                                 f"AutoIP {c.autoip()})"))
-        rows["port"].config(text=str(self.port))
+        rows["port"].config(text=str(c.port))
         on = self._xport_started
+        rows["web"].config(
+            text=("tcp/%d  -- listening" % c.http_port) if on
+            else ("tcp/%d  -- stopped" % c.http_port),
+            fg=bench.OK if on else bench.MUTED)
+        if on and net:
+            host, note = net.bind_host()
+            if note:
+                rows["reach"].config(text=note, fg=bench.MUTED)
+            else:
+                rows["reach"].config(
+                    text="%s:%d  -- inventory, 9999 setup, %d web"
+                         % (host, c.port, c.http_port), fg=bench.OK)
+        else:
+            rows["reach"].config(text="not started", fg=bench.MUTED)
+        if on:
+            # The address in the title bar is the one to connect to, so it
+            # is never a guess which of several windows is which card.
+            self.title(f"{APP_NAME}  --  card at "
+                       f"{c.effective_ip()}:{c.port}")
         rows["setup"].config(
             text="tcp/9999  -- listening" if on else "tcp/9999  -- stopped",
             fg=bench.OK if on else bench.MUTED)
@@ -1416,6 +1988,7 @@ class SimApp(tk.Tk):
             "card its program has never heard of. Loading an example "
             "site (Console menu) brings its own board with it.")
         self._build_version(tab)
+        self._build_identity(tab)
         self.module_vars = {}
         self.module_rows = {}
         self.bay_labels = {}
@@ -1432,6 +2005,10 @@ class SimApp(tk.Tk):
                 if mbay != bay:
                     continue
                 self._module_row(box, key, name, part, wires, most)
+                if key == "smart":
+                    self._build_smart_press(box)
+            if bay == "comm":
+                self._build_comm_slots(box)
         box = tk.LabelFrame(tab, bg=bench.BG, fg=bench.INK,
                             font=("Segoe UI", 8, "bold"),
                             text="Software Modules (the S-Module's keys)")
@@ -1460,6 +2037,37 @@ class SimApp(tk.Tk):
             self.software_rows[key] = (tick, label, note)
         self._sync_bays()
         self._sync_version()
+
+    def _build_identity(self, tab):
+        """The console's identity plate, which the Weights and Measures
+        chart and audit reports print and an archive restore alone could
+        fill. BENCH.md P11."""
+        box = tk.LabelFrame(tab, bg=bench.BG, fg=bench.INK,
+                            font=("Segoe UI", 8, "bold"),
+                            text="Identity plate (Weights and Measures)")
+        box.pack(anchor="w", fill="x", padx=8, pady=(4, 2))
+        row = tk.Frame(box, bg=bench.BG)
+        row.pack(anchor="w", fill="x", padx=6, pady=(2, 4))
+        self.serial_var = tk.StringVar(value=self.console.serial_number)
+        self.wm_var = tk.StringVar(value=self.console.wm_office)
+        for text, var, width in (("serial number", self.serial_var, 14),
+                                 ("W&M office", self.wm_var, 24)):
+            tk.Label(row, text=f"{text} ", bg=bench.BG, fg="#8f948b",
+                     font=("Segoe UI", 8)).pack(side="left")
+            e = tk.Entry(row, textvariable=var, width=width, bg="#2a2d31",
+                         fg="#e8eae4", insertbackground="#e8eae4",
+                         font=("Consolas", 8))
+            e.pack(side="left", padx=(0, 10))
+            e.bind("<KeyRelease>", lambda _e: self._set_identity())
+        bench.Tip(row, "What the secured tank chart and its audit trail "
+                       "print: CONSOLE SERIAL NUMBER and WEIGHTS AND "
+                       "MEASURES, off the console's own label. IFSF's device "
+                       "id reads the serial too.")
+
+    def _set_identity(self):
+        self.console.serial_number = self.serial_var.get().strip()[:20]
+        self.console.wm_office = self.wm_var.get().strip()[:40]
+        self.console.save()
 
     def _build_version(self, tab):
         """The CPU board and the software on it, which is the gate under the
@@ -1525,9 +2133,8 @@ class SimApp(tk.Tk):
             return
         self._after_console_change()
         info = self.console.software_info()
-        self.log(f"-- software V{self.console.version} ({info['number']})")
-        self._flash(f"VERSION {info['version']}"[:COLS] + chr(10)
-                    + f"SOFTWARE# {info['number']}"[:COLS])
+        self._bench_say(f"software V{self.console.version}, version "
+                        f"{info['version']}, SOFTWARE# {info['number']}")
 
     def _set_board(self):
         """Change the CPU board, which is the other half of the same question."""
@@ -1536,9 +2143,9 @@ class SimApp(tk.Tk):
             self.board_var.set(self._board_label())
             return
         self._after_console_change()
-        self.log(f"-- CPU board {wanted} ({versions.board_name(wanted)})")
-        self._flash(versions.board_name(wanted)[:COLS] + chr(10)
-                    + f"SOFTWARE# {self.console.software_info()['number']}"[:COLS])
+        self._bench_say(
+            f"CPU board {wanted} ({versions.board_name(wanted)}), "
+            f"SOFTWARE# {self.console.software_info()['number']}")
 
     def _sync_version(self):
         """Say what this console is, and grey what it cannot drive."""
@@ -1568,9 +2175,7 @@ class SimApp(tk.Tk):
             spin.config(state="normal" if known else "disabled",
                         to=self.console.most(key))
             label.config(fg="#e2e5de" if known else "#6f746c")
-            note_label.config(
-                text=wires if known else
-                f"not until V{versions.arrived_in(versions.MODULE_FEATURE[key])}")
+            note_label.config(text=wires if known else self._not_yet(key))
         for key, (tick, label, note_label) in self.software_rows.items():
             known = self.console.knows_option(key)
             tick.config(state="normal" if known else "disabled")
@@ -1578,6 +2183,52 @@ class SimApp(tk.Tk):
             note_label.config(
                 text="" if known else
                 f"not until V{versions.arrived_in(versions.SOFTWARE_FEATURE[key])}")
+
+    def _not_yet(self, key):
+        """Why the bench will not let this card be fitted on this software.
+
+        Two kinds of gate, because two documents state them: a feature row
+        in Tables 3-1 to 3-5, and a card whose own installation manual has
+        one those tables carry no row for -- the slot-4 multiport wants "an
+        ECPU2 board, a NVMEM203 memory module and software version 24 or
+        higher". See FIDELITY M5.
+        """
+        feature = versions.MODULE_FEATURE.get(key)
+        if feature:
+            gone = versions.withdrawn_in(feature)
+            if gone is not None and self.console.version >= gone:
+                return f"discontinued at V{gone}"
+            return f"not until V{versions.arrived_in(feature)}"
+        least, _boards = versions.MODULE_MINIMUM[key]
+        return f"not until V{least}, on an ECPU2 with an NVMEM203"
+
+    # How long a line test really takes, in console minutes. "Fifteen
+    # minutes after a Gross test has completed the Periodic test starts with
+    # the measurement of leak rate LR1. After another 15 minute waiting
+    # period LR2 is measured", and the Annual needs a third.
+    TEST_MINUTES = {"gross": 1, "periodic": 32, "annual": 47}
+
+    def _say_how_long(self, kind, rate_key, said):
+        """Warn the bench when a test is going to outlast its patience.
+
+        A 0.20 line test is two fifteen-minute cycles at least, so on a
+        console clock running at x1 the panel sits on TEST 0.20 for over
+        half an hour. That is exactly what a real console does and it reads
+        as hung -- the user reported it as one. The console's own screens
+        cannot say more than the state they are documented to show, so the
+        BENCH says it, and points at the control that fixes it.
+        See FIDELITY U3.
+        """
+        minutes = self.TEST_MINUTES.get(rate_key, 0)
+        if said != "TEST STARTED" or minutes < 5:
+            return
+        speed = self.console.clock_speed or 1.0
+        wall = minutes * 60.0 / speed
+        if wall < 120.0:
+            return
+        self.log(f"-- that is a {minutes} minute test on the console's "
+                 f"clock, which at x{speed:g} is {wall / 60.0:.0f} minutes "
+                 f"of sitting here. Bench > Console clock runs it faster.")
 
     def _set_clock_speed(self):
         self.console.clock_speed = self._speeds.get(self.speed.get(), 1.0)
@@ -1602,17 +2253,25 @@ class SimApp(tk.Tk):
         self.console.reset(keep_clock=True)
         self._after_console_change()
         self.log("-- console reset")
-        self._flash("CONSOLE RESET" + chr(10) + "NOTHING PROGRAMMED")
+        self._bench_say("console reset: nothing programmed")
 
     def _load_preset(self):
         """Drop a whole example site in, cards and programming and fuel."""
         name = self.preset.get()
-        if not presets.load(self.console, name):
-            self._flash("NO SUCH PRESET")
+        # The card goes with the site: each example is programmed with its
+        # own address, so switching site means going to find the new card,
+        # as it would mean driving to the next forecourt.
+        if not presets.load(self.console, name, card=self.xport):
+            self._bench_say("no such preset")
             return
         self._after_console_change()
         self.log(f"-- loaded preset: {name}")
-        self._flash("SITE LOADED" + chr(10) + name.upper()[:COLS])
+        card = presets.card_of(name)
+        if card:
+            self.log("-- this site's card is at %s, tunnel port %s"
+                     % (card.get("ip"), card.get("port")))
+        self._sync_network()
+        self._bench_say(f"site loaded: {name}")
 
     def _after_console_change(self):
         """Put the panel and the bench back in step with the console."""
@@ -1629,25 +2288,30 @@ class SimApp(tk.Tk):
         self._sync_bays()
         self._sync_version()
         self._refresh_site()
+        self.refresh_traffic()
 
     def _set_software(self, key):
         """A feature the S-Module does not carry is not on the menu."""
         if not self.console.knows_option(key):
             self.software_vars[key].set(False)
-            self._flash("NOT IN THIS CONSOLE" + chr(10)
-                        + f"VERSION {self.console.software_info()['version']}"[:COLS])
+            self._bench_say(
+                "not in this console at version "
+                + self.console.software_info()["version"])
             return
         self.console.software[key] = bool(self.software_vars[key].get())
         self.console.save()
         self.func, self.step, self.device = 0, HEADER, 1
         self._refresh_site()
+        self.refresh_traffic()
         state = "ENABLED" if self.console.licensed(key) else "NOT INSTALLED"
-        self._flash(SOFTWARE_NAME[key][:COLS] + chr(10) + state)
+        self._bench_say(f"{SOFTWARE_NAME[key]} {state}")
 
     def _module_row(self, parent, key, name, part, wires, most):
         row = tk.Frame(parent, bg=bench.BG)
         row.pack(anchor="w", fill="x", padx=6, pady=1)
-        var = tk.StringVar(value=str(self.console.count(key)))
+        # the CARDS in the bay, which for a comm card is not the number of
+        # positions it answers on: a dual-port module is one card and two.
+        var = tk.StringVar(value=str(self.console.fitted(key)))
         self.module_vars[key] = var
         spin = tk.Spinbox(row, from_=0, to=most, width=2, textvariable=var,
                           bg="#2a2d31", fg="#e8eae4", font=("Consolas", 8),
@@ -1667,6 +2331,220 @@ class SimApp(tk.Tk):
         self.module_rows[key] = (spin, label, note,
                                  f"{wires} per card" if wires else "")
 
+    def _build_smart_press(self, box):
+        """Which of the smart sensor family's two cards is in the cage.
+
+        "When Smart Sensor Interface Modules (8 inputs) or Smart Sensor /
+        Press Modules (7 inputs) are installed" -- one console fits one kind,
+        and the seven-input one is seven because its eighth channel is the
+        atmospheric pressure sensor a Vac Sensor site needs. See FIDELITY M2.
+        """
+        self.smart_press_var = tk.BooleanVar(value=self.console.smart_press)
+        tick = tk.Checkbutton(
+            box, variable=self.smart_press_var,
+            text=("  the seven-input Smart Sensor/Press Module instead "
+                  "(332250-001, on-board ATMP sensor)"),
+            bg=bench.BG, fg="#8f948b", selectcolor="#22242a",
+            activebackground=bench.BG, activeforeground="#e2e5de",
+            font=("Segoe UI", 8), anchor="w",
+            command=self._set_smart_press)
+        tick.pack(anchor="w", padx=22)
+
+    def _set_smart_press(self):
+        self.console.smart_press = bool(self.smart_press_var.get())
+        self.console.save()
+        label, part, _ohms = self.console.card("smart")
+        row = self.module_rows.get("smart")
+        if row:
+            _spin, name, note, _text = row
+            name.config(text=f" {label}")
+            note.config(text=f"{self.console.wires('smart')} per card")
+        self.func, self.step, self.device = 0, HEADER, 1
+        self._refresh_site()
+        self.refresh_traffic()
+        self._bench_say(f"{part} {label}")
+
+    def _build_comm_slots(self, box):
+        """Which of the four slots each comm card is in.
+
+        The bay is four SLOTS and six POSITIONS: 577013-528 Rev G puts
+        single-port modules in slots 1, 2 or 3 and dual-port ones in slot 4,
+        and a dual-port module answers on two positions. Where a card sits
+        is a fault of its own -- 576013-818 Table 7-2, "System will not
+        communicate via RS-232 Module -- RS-232 Module in slot 4 of Comm Bay
+        card cage -- Move Module to Comm Cage slots 1, 2, or 3" -- so the
+        bench has to be able to put one in the wrong slot and move it back.
+        See FIDELITY M7.
+        """
+        tk.Label(box, text="  Which slot each card is in. Slots 1 to 3 take "
+                           "single-port modules and slot 4 takes a dual-port "
+                           "one, which answers on two positions.",
+                 bg=bench.BG, fg=bench.MUTED, font=("Segoe UI", 8),
+                 anchor="w", justify="left").pack(anchor="w", padx=6,
+                                                  pady=(6, 0))
+        row = tk.Frame(box, bg=bench.BG)
+        row.pack(anchor="w", fill="x", padx=6, pady=(2, 0))
+        self.comm_slot_vars = {}
+        self.comm_slot_menus = {}
+        for slot in sorted(CONSOLE_COMM_PORTS):
+            cell = tk.Frame(row, bg=bench.BG)
+            cell.pack(side="left", padx=(0, 10))
+            tk.Label(cell, text=f"slot {slot}", bg=bench.BG, fg="#8f948b",
+                     font=("Consolas", 8)).pack(anchor="w")
+            var = tk.StringVar(value=self.EMPTY_SLOT)
+            self.comm_slot_vars[slot] = var
+            menu = tk.OptionMenu(cell, var, self.EMPTY_SLOT,
+                                 command=lambda _v, s=slot: self._place_comm(s))
+            menu.config(bg="#2a2d31", fg="#e8eae4", font=("Segoe UI", 8),
+                        highlightthickness=0, activebackground="#3a3d43",
+                        width=16, anchor="w")
+            menu["menu"].config(bg="#2a2d31", fg="#e8eae4",
+                                font=("Segoe UI", 8))
+            menu.pack(anchor="w")
+            self.comm_slot_menus[slot] = menu
+        harness = tk.Frame(box, bg=bench.BG)
+        harness.pack(anchor="w", fill="x", padx=6, pady=(2, 4))
+        self.harness_var = tk.BooleanVar(value=self.console.dual_harness)
+        self.double_harness_var = tk.BooleanVar(
+            value=self.console.double_harness)
+        for var, text, command in (
+                (self.harness_var,
+                 "Dual-port harness connected (4-pin to J4, 8-pin to J6)",
+                 self._set_harness),
+                (self.double_harness_var,
+                 "Double dual-port harness 332609-001 (a second dual-port "
+                 "module, in slot 3)", self._set_double_harness)):
+            tick = tk.Checkbutton(harness, variable=var, text=" " + text,
+                                  bg=bench.BG, fg="#e2e5de",
+                                  selectcolor="#22242a",
+                                  activebackground=bench.BG,
+                                  activeforeground="#e2e5de",
+                                  font=("Segoe UI", 8), anchor="w",
+                                  command=command)
+            tick.pack(anchor="w")
+        self.comm_slot_note = tk.Label(box, text="", bg=bench.BG,
+                                       fg="#8f948b", font=("Consolas", 8),
+                                       anchor="w", justify="left")
+        self.comm_slot_note.pack(anchor="w", padx=6, pady=(0, 4))
+        self._build_mt_key(box)
+
+    def _build_mt_key(self, box):
+        """The Contractor's ID key in your hand.
+
+        "You should have your ID key ready to plug into the MT Comm card in
+        the Comm Bay of the TLS-350", 576013-610 ch.33 -- so this is where it
+        goes. The blue key on the panel runs the log-in: STEP asks for the
+        key, ENTER reads whatever is in the port, and what the console makes
+        of it is the manual's own four answers. A key that is accepted is on
+        8A3's active list afterwards, which is where that list comes from.
+        See FIDELITY D13.
+        """
+        tk.Label(box, text="  The Contractor's ID key in the MT Comm card. "
+                           "The blue key on the panel logs it in.",
+                 bg=bench.BG, fg=bench.MUTED, font=("Segoe UI", 8),
+                 anchor="w").pack(anchor="w", padx=6, pady=(4, 0))
+        row = tk.Frame(box, bg=bench.BG)
+        row.pack(anchor="w", fill="x", padx=6, pady=(0, 6))
+        self.key_id = tk.StringVar(value="A12345")
+        self.key_label = tk.StringVar(value="J SMYTHE")
+        self.key_expired = tk.BooleanVar(value=False)
+        for text, var, width in (("ID", self.key_id, 8),
+                                 ("label", self.key_label, 20)):
+            tk.Label(row, text=f"{text} ", bg=bench.BG, fg="#8f948b",
+                     font=("Segoe UI", 8)).pack(side="left")
+            tk.Entry(row, textvariable=var, width=width, bg="#2a2d31",
+                     fg="#e8eae4", insertbackground="#e8eae4",
+                     font=("Consolas", 8)).pack(side="left", padx=(0, 10))
+        tk.Checkbutton(row, variable=self.key_expired,
+                       text=" certification expired", bg=bench.BG,
+                       fg="#e2e5de", selectcolor="#22242a",
+                       activebackground=bench.BG,
+                       activeforeground="#e2e5de",
+                       font=("Segoe UI", 8)).pack(side="left")
+        # and what the technician came to do: a service code from
+        # 577013-874's list, logged against the key in the box. 116 and 11A
+        # are the record of these, and nothing wrote one. BENCH.md P10.
+        visit = tk.Frame(box, bg=bench.BG)
+        visit.pack(anchor="w", fill="x", padx=6, pady=(0, 6))
+        tk.Label(visit, text="service code ", bg=bench.BG, fg="#8f948b",
+                 font=("Segoe UI", 8)).pack(side="left")
+        codes = [f"{code} {name}" for code, name in self.console.service_codes()]
+        self.service_var = tk.StringVar(value=codes[0] if codes else "")
+        sm = tk.OptionMenu(visit, self.service_var, *(codes or ["--"]))
+        sm.config(bg="#2a2d31", fg="#e8eae4", font=("Segoe UI", 8),
+                  highlightthickness=0, activebackground="#3a3d43",
+                  width=30, anchor="w")
+        sm["menu"].config(bg="#2a2d31", fg="#e8eae4", font=("Segoe UI", 8))
+        sm.pack(side="left", padx=(0, 10))
+        visit_btn = tk.Label(visit, text="LOG VISIT", bg="#24262b",
+                             fg=bench.ACCENT, font=("Segoe UI", 8, "bold"),
+                             padx=8, pady=1, cursor="hand2")
+        visit_btn.pack(side="left")
+        visit_btn.bind("<Button-1>", lambda _e: self._log_visit())
+        bench.Tip(visit_btn, "Log a service entry under the key's ID: what "
+                             "the technician did, from the Maintenance "
+                             "Service Codes list (577013-874). The Service "
+                             "Report History, 116 and 11A, is the record of "
+                             "these.")
+
+    EMPTY_SLOT = "-- empty --"
+
+    def _comm_card_names(self):
+        """{label: key} for the comm cards actually in the cage."""
+        out = {}
+        for key, name, part, bay, _w, _m in MODULES:
+            if bay == "comm" and self.console.fitted(key):
+                out[f"{MODULE_SHORT.get(key, name)}  {part or ''}".strip()] = key
+        return out
+
+    def _place_comm(self, slot):
+        """Move a card into that slot, or empty it."""
+        want = self.comm_slot_vars[slot].get()
+        key = self._comm_card_names().get(want)
+        self.console.place_comm(key, slot)
+        self._sync_bays()
+        self._refresh_site()
+        self.refresh_traffic()
+        self._bench_say(f"comm slot {slot}: "
+                        + (MODULE_SHORT.get(key, "") if key else "empty"))
+
+    def _set_harness(self):
+        self.console.dual_harness = self.harness_var.get()
+        self.console.save()
+        self._sync_bays()
+
+    def _set_double_harness(self):
+        self.console.double_harness = self.double_harness_var.get()
+        self.console.save()
+        self._sync_bays()
+
+    def _sync_comm_slots(self):
+        """The four menus, what is in them, and what is not communicating."""
+        if not getattr(self, "comm_slot_vars", None):
+            return
+        names = self._comm_card_names()
+        layout = self.console.comm_layout()
+        for slot, var in self.comm_slot_vars.items():
+            menu = self.comm_slot_menus[slot]["menu"]
+            menu.delete(0, "end")
+            for label in [self.EMPTY_SLOT] + sorted(names):
+                menu.add_command(
+                    label=label,
+                    command=lambda l=label, s=slot, v=var: (
+                        v.set(l), self._place_comm(s)))
+            here = layout.get(slot)
+            var.set(next((l for l, k in names.items() if k == here),
+                         self.EMPTY_SLOT))
+        ports = self.console.comm_positions()
+        reads = ", ".join(f"{p}:{self.console.comm_board_name(p)}"
+                          for p in sorted(ports)) or "nothing fitted"
+        dead = [str(s) for s in sorted(layout)
+                if not self.console.comm_slot_works(s)]
+        note = "  positions  " + reads
+        if dead:
+            note += "    not communicating: slot " + ", ".join(dead)
+        self.comm_slot_note.config(text=note)
+
     def _set_module(self, key):
         """Fit or pull cards, within what the bay and the card allow."""
         try:
@@ -1675,13 +2553,14 @@ class SimApp(tk.Tk):
             return
         if want and not self.console.knows_module(key):
             self.module_vars[key].set(str(self.console.fitted(key)))
-            self._flash("NOT IN THIS CONSOLE" + chr(10)
-                        + f"VERSION {self.console.software_info()['version']}"[:COLS])
+            self._bench_say(
+                "not in this console at version "
+                + self.console.software_info()["version"])
             return
         if not self.console.set_module(key, want):
-            self.module_vars[key].set(str(self.console.count(key)))
+            self.module_vars[key].set(str(self.console.fitted(key)))
             bay = BAY_NAME[MODULE_BAY[key]]
-            self._flash("WILL NOT FIT" + chr(10) + bay[:COLS])
+            self._bench_say(f"will not fit: {bay}")
             self._sync_bays()
             return
         self.func = 0
@@ -1689,19 +2568,531 @@ class SimApp(tk.Tk):
         self.device = 1
         self._sync_bays()
         self._refresh_site()
+        self.refresh_traffic()
         n = self.console.fitted(key)
-        self._flash(f"{n} x {MODULE_PART.get(key) or 'MODULE'}"[:COLS]
-                    + chr(10) + MODULE_LABEL[key][:COLS])
+        self._bench_say(f"{n} x {MODULE_PART.get(key) or 'MODULE'} "
+                        + MODULE_LABEL[key])
 
     def _sync_bays(self):
         for bay, label in self.bay_labels.items():
-            used, slots = self.console.bay_used(bay), BAY_SLOTS[bay]
+            used = self.console.bay_used(bay)
+            slots = self.console.bay_slots(bay)
             label.config(text=f"  {used} of {slots} slots used")
+        self._sync_comm_slots()
 
     def _build_site(self, tab):
         """The site: tanks with their probes, then everything wired in."""
         self.site_body = tk.Frame(tab, bg=bench.BG)
         self.site_body.pack(fill="both", expand=True, padx=12, pady=(0, 4))
+
+    # ---- the forecourt's own day -------------------------------------------
+    def _build_traffic(self, tab):
+        self.traffic_body = tk.Frame(tab, bg=bench.BG)
+        self.traffic_body.pack(fill="both", expand=True, padx=12, pady=(0, 4))
+        self._traffic_sync = []
+
+    def refresh_traffic(self):
+        """Rebuild the Traffic view. Public: the blend cards call it."""
+        if not hasattr(self, "traffic_body"):
+            return
+        for w in self.traffic_body.winfo_children():
+            w.destroy()
+        self._traffic_sync = []
+        c = self.console
+        traffic = c.traffic
+        body = self.traffic_body
+
+        # ---- the master switch, and what the day is doing ----
+        bench.section(
+            body, "Site traffic",
+            "Cars arriving, nozzles lifting, tanks going down -- the site "
+            "doing what a site does while nobody is looking at it. Nothing "
+            "here is new physics: a car is a nozzle lifted through the same "
+            "door the LIFT NOZZLE pill uses, so BIR books it, the meter "
+            "events table records it, CSLD's idle time is the gaps between "
+            "the cars, and the line's handle goes up while the fuel moves. "
+            "OFF is not the same as CLOSED: off means the generator is not "
+            "there and a meter sells whatever gal/h somebody typed into it; "
+            "CLOSED is a modelled site with its lights out.")
+        head = bench.card(body)
+        head.pack(fill="x")
+        row = tk.Frame(head.inner, bg=bench.CARD)
+        row.pack(fill="x", padx=10, pady=8)
+        self._traffic_pill = tk.Label(
+            row, text="RUNNING" if traffic.on else "OFF", bg="#24262b",
+            fg=bench.OK if traffic.on else bench.FAINT,
+            font=("Segoe UI", 9, "bold"), padx=14, pady=3, cursor="hand2")
+        self._traffic_pill.pack(side="left")
+        self._traffic_pill.bind("<Button-1>", lambda _e: self._traffic_off())
+        bench.Tip(self._traffic_pill,
+                  "Turn the whole generator on or off. Off leaves every "
+                  "meter exactly where the bench left it.")
+        self._traffic_now = tk.Label(row, bg=bench.CARD, fg=bench.MUTED,
+                                     font=bench.MONO_SM, anchor="e")
+        self._traffic_now.pack(side="right", fill="x", expand=True,
+                               padx=(12, 0))
+        # The day's exceptions go on their own wrapped line. They used to
+        # be appended to the line above, which is one right-anchored label
+        # on a row that also holds the RUNNING pill: with every tally
+        # populated it wanted 1,563px and was given 1,198 on a 1400px
+        # window, so the last counters on it -- the dry tanks, and
+        # yesterday's closing figure -- could not be read at any window
+        # size. A counter nobody can see is the thing this view keeps
+        # being fixed for.
+        self._traffic_tally = tk.Label(head.inner, bg=bench.CARD,
+                                       fg=bench.FAINT, font=bench.MONO_SM,
+                                       anchor="w", justify="left")
+        self._traffic_tally.pack(fill="x", padx=10, pady=(0, 2))
+        self._traffic_tally.bind("<Configure>", self._rewrap)
+
+        # ---- why nothing is happening, when nothing is ----
+        # The generator's one failure mode looks exactly like success: the
+        # pill says RUNNING in green, the curve draws, the hour lights up,
+        # and not one car ever arrives, because the console has no DIM in
+        # it and `selling()` is empty. Everything that fixes that is on
+        # another view, so the reason says which one and offers to go
+        # there. See `Traffic.blockers()`.
+        self._traffic_why = tk.Frame(head.inner, bg=bench.CARD)
+        self._traffic_why.pack(fill="x", padx=10, pady=(0, 2))
+        self._why_shown = None
+        self._sync_traffic_why()
+
+        # ---- volume and shape ----
+        picks = tk.Frame(head.inner, bg=bench.CARD)
+        picks.pack(fill="x", padx=10, pady=(0, 6))
+        tk.Label(picks, text="volume", bg=bench.CARD, fg=bench.FAINT,
+                 font=bench.FONT_SM, width=7, anchor="w").pack(side="left")
+        self._level_pills = {}
+        for name in _traffic.LEVEL_ORDER:
+            pill = tk.Label(picks, text=name, bg="#24262b", fg=bench.MUTED,
+                            font=("Segoe UI", 8, "bold"), padx=9, pady=2,
+                            cursor="hand2")
+            pill.pack(side="left", padx=(0, 3))
+            pill.bind("<Button-1>", lambda _e, n=name: self._traffic_level(n))
+            self._level_pills[name] = pill
+        tk.Label(picks, text="cars/day", bg=bench.CARD, fg=bench.FAINT,
+                 font=bench.FONT_SM).pack(side="left", padx=(10, 3))
+        self._cars_var = tk.StringVar(value=f"{traffic.cars_per_day:g}")
+        cars = tk.Entry(picks, textvariable=self._cars_var, width=6,
+                        bg="#24262b", fg=bench.INK, font=bench.MONO_SM,
+                        insertbackground=bench.INK, relief="flat",
+                        justify="right")
+        cars.pack(side="left")
+        cars.bind("<KeyRelease>", self._traffic_cars)
+        bench.Tip(cars, "The four words set this; type over it for a site "
+                        "between two of them. 576013-818 Table 11-1 caps a "
+                        "12,000 gallon gasoline tank at 200,000 gallons a "
+                        "month -- about 6,600 a day -- and BUSY is a "
+                        "three-tank forecourt at roughly that, which is "
+                        "where p.11-10's 'very high activity' cause for NO "
+                        "CSLD IDLE TIME lives.")
+
+        shapes = tk.Frame(head.inner, bg=bench.CARD)
+        shapes.pack(fill="x", padx=10, pady=(0, 8))
+        tk.Label(shapes, text="shape", bg=bench.CARD, fg=bench.FAINT,
+                 font=bench.FONT_SM, width=7, anchor="w").pack(side="left")
+        self._shape_pills = {}
+        for name in _traffic.SHAPE_ORDER:
+            pill = tk.Label(shapes, text=_traffic.SHAPE_WORDS[name],
+                            bg="#24262b", fg=bench.MUTED,
+                            font=("Segoe UI", 8, "bold"), padx=9, pady=2,
+                            cursor="hand2")
+            pill.pack(side="left", padx=(0, 3))
+            pill.bind("<Button-1>", lambda _e, n=name: self._traffic_shape(n))
+            self._shape_pills[name] = pill
+
+        curve = bench.TrafficCurve(head.inner, self)
+        curve.pack(fill="x", padx=10, pady=(0, 8))
+        self._traffic_sync.append(curve.sync)
+
+        # ---- the grades ----
+        selling = traffic.selling()
+        bench.section(
+            body, f"Grades ({len(selling)})",
+            "What the site sells, read off the tanks' own PRODUCT LABELs -- "
+            "the console has no idea what a grade is, and neither does "
+            "this: a tank labelled PREMIUM UNLEADED is premium because a "
+            "technician programmed it so. The share is relative, and it is "
+            "shared out over the grades this site actually has.")
+        if not selling:
+            tk.Label(body, text="No meters mapped to tanks yet -- map them "
+                     "on the Site view, under Dispensers.", bg=bench.BG,
+                     fg=bench.MUTED, font=("Segoe UI", 9)).pack(anchor="w")
+        else:
+            grades = bench.card(body)
+            grades.pack(fill="x")
+            for fam in sorted(selling):
+                grade = bench.GradeRow(grades.inner, self, fam, selling[fam])
+                grade.pack(fill="x", pady=3)
+                self._traffic_sync.append(grade.sync)
+
+        # ---- the blends ----
+        bench.section(
+            body, f"Blended grades ({len(c.blends)})",
+            "A blender mixes at the nozzle, and the TLS-350 never learns "
+            "the ratio: 576013-818 p.12-7 says a tank maps to only one "
+            "meter per fueling position, and the only blender support in "
+            "the manuals is a DIM parameter telling the console how to read "
+            "the POS. So a blend here is what it is on a site -- a grade "
+            "button that runs two meters at a ratio -- and the console sees "
+            "two ordinary transactions against two ordinary tanks. Set up "
+            "regular and E-85 and you can blend E15 out of them.")
+        add = tk.Label(body, text="+ ADD A BLEND", bg="#24262b",
+                       fg=bench.ACCENT, font=("Segoe UI", 8, "bold"),
+                       padx=10, pady=2, cursor="hand2")
+        add.pack(anchor="w", pady=(0, 6))
+        add.bind("<Button-1>", lambda _e: self._add_blend())
+        if c.blends:
+            grid = bench.FlowGrid(body, bench.BlendCard.W)
+            grid.pack(fill="x")
+            for meter in sorted(c.blends):
+                card = bench.BlendCard(grid, self, meter)
+                grid.add(card)
+                self._traffic_sync.append(card.sync)
+
+        # ---- the truck that comes on its own ----
+        bench.section(
+            body, "Deliveries",
+            "A site does not wait until the tank is dry and the tanker does "
+            "not arrive the moment it is called, so this is an order with a "
+            "lead time and then a drop. What lands is a multi-compartment "
+            "load down the same fill riser the truck dialog uses, and the "
+            "console is never told it happened -- it watches the level rise "
+            "and works it out. Mind that a delivery during an in-tank leak "
+            "test invalidates the test: 576013-610 Table 29-4, RECENT "
+            "DELIVERY.")
+        deliver = bench.card(body)
+        deliver.pack(fill="x")
+        drow = tk.Frame(deliver.inner, bg=bench.CARD)
+        drow.pack(fill="x", padx=10, pady=8)
+        self._auto_pill = tk.Label(
+            drow, text="ON" if traffic.auto_deliver else "OFF", bg="#24262b",
+            fg=bench.OK if traffic.auto_deliver else bench.FAINT,
+            font=("Segoe UI", 8, "bold"), padx=10, pady=2, cursor="hand2")
+        self._auto_pill.pack(side="left")
+        self._auto_pill.bind("<Button-1>", lambda _e: self._traffic_auto())
+        tk.Label(drow, text="call a truck below", bg=bench.CARD,
+                 fg=bench.FAINT, font=bench.FONT_SM).pack(side="left",
+                                                          padx=(8, 3))
+        self._low_var = tk.StringVar(value=f"{traffic.low_pct:g}")
+        self._fill_var = tk.StringVar(value=f"{traffic.fill_pct:g}")
+        self._lead_var = tk.StringVar(value=f"{traffic.lead_hours:g}")
+        for var, tail in ((self._low_var, "% full, fill to"),
+                          (self._fill_var, "%, tanker takes"),
+                          (self._lead_var, "h")):
+            entry = tk.Entry(drow, textvariable=var, width=4, bg="#24262b",
+                             fg=bench.INK, font=bench.MONO_SM,
+                             insertbackground=bench.INK, relief="flat",
+                             justify="right")
+            entry.pack(side="left")
+            entry.bind("<KeyRelease>", self._traffic_delivery)
+            entry.bind("<FocusOut>", self._traffic_delivery_done)
+            tk.Label(drow, text=tail, bg=bench.CARD, fg=bench.FAINT,
+                     font=bench.FONT_SM).pack(side="left", padx=(3, 6))
+        self._orders_lbl = tk.Label(deliver.inner, bg=bench.CARD,
+                                    fg=bench.MUTED, font=bench.MONO_SM,
+                                    anchor="w", justify="left")
+        self._orders_lbl.pack(fill="x", padx=10, pady=(0, 8))
+
+        # ---- what is stopping fuel right now ----
+        bench.section(
+            body, "Shutdowns",
+            "Everything currently stopping product moving, and why. A line "
+            "the console shut down after a failed test; a line whose "
+            "programmed DISABLE ALARM assignments (787, 7A7, 75B) are "
+            "active; and a relay wired to a tank whose alarm has dropped "
+            "the contactor -- 576013-623 p.7-24, 'allowing the operator to "
+            "set a relay to shut down the submersible'. All three take the "
+            "pump out, so the handle gets no pressure and no fuel moves.")
+        shut = bench.card(body)
+        shut.pack(fill="x")
+        self._shutdown_lbl = tk.Label(shut.inner, bg=bench.CARD,
+                                      fg=bench.MUTED, font=bench.MONO_SM,
+                                      anchor="w", justify="left")
+        self._shutdown_lbl.pack(fill="x", padx=10, pady=8)
+
+        self._traffic_sync.append(self._sync_traffic_head)
+        self._sync_traffic_head()
+
+    @staticmethod
+    def _rewrap(event):
+        """Wrap a label to the room it has, not to a number in the source.
+
+        Only when the number CHANGES: setting `wraplength` re-lays the
+        label out, which is another <Configure>, and a handler that writes
+        unconditionally is a handler that never stops.
+        """
+        want = max(200, event.width - 8)
+        if int(event.widget.cget("wraplength")) != want:
+            event.widget.config(wraplength=want)
+
+    def _sync_traffic_why(self):
+        """Rebuild the reason banner, but only when the reason changed.
+
+        This runs off the same tick as the rest of the header, so it must
+        cost nothing on the overwhelming majority of ticks where the answer
+        is the same as it was. The cached key is the whole of what would be
+        drawn, which also catches a meter mapped on the Site view -- that
+        does not rebuild this tab, and the banner has to clear itself when
+        the thing it was complaining about is fixed.
+        """
+        holder = getattr(self, "_traffic_why", None)
+        if holder is None or not holder.winfo_exists():
+            return
+        traffic = self.console.traffic
+        reason = traffic.idle_reason()
+        rows = traffic.blockers() if traffic.on else []
+        # the view we are ON is part of what gets drawn: a link to it is a
+        # dead click, so it is rendered differently, so a change of view
+        # has to invalidate this the same way a change of reason does
+        key = (reason, tuple(rows), self._switch.current)
+        if key == getattr(self, "_why_shown", None):
+            return
+        self._why_shown = key
+        for w in holder.winfo_children():
+            w.destroy()
+        # Emptied, never unpacked: `pack_forget` then `pack` would put the
+        # banner back at the END of the card, under the curve, instead of
+        # between the RUNNING pill and the volume pills where it belongs.
+        # An empty frame is a one-pixel line nobody sees.
+        if reason is None and not rows:
+            holder.pack_configure(pady=(0, 0))
+            return
+        holder.pack_configure(pady=(0, 2))
+        # A shut site and a switched-off generator are STATES, not faults:
+        # CLOSED is the one setting that gives CSLD all the idle time it
+        # wants, and saying it in alarm red would be a lie about the bench.
+        bad = traffic.on and reason is not None
+        edge = tk.Frame(holder, bg=bench.BAD if bad else bench.CARD_EDGE,
+                        padx=1, pady=1)
+        edge.pack(fill="x")
+        box = tk.Frame(edge, bg="#24262b")
+        box.pack(fill="both", expand=True)
+        if not traffic.on:
+            head = "THE GENERATOR IS OFF"
+        elif traffic.cars_per_day <= 0:
+            head = "THE SITE IS CLOSED"
+        elif reason is not None:
+            head = "RUNNING, AND NOTHING IS BEING SOLD"
+        else:
+            head = "RUNNING, WITH SOMETHING TO FIX"
+        tk.Label(box, text=head, bg="#24262b",
+                 fg=bench.BAD if bad else bench.MUTED,
+                 font=("Segoe UI", 8, "bold"), anchor="w").pack(
+                     fill="x", padx=8, pady=(6, 0))
+        if reason is not None and not rows:
+            lone = tk.Label(box, text=reason, bg="#24262b", fg=bench.MUTED,
+                            font=bench.FONT_SM, anchor="w", justify="left",
+                            wraplength=620)
+            lone.pack(fill="x", padx=8, pady=(1, 7))
+            lone.bind("<Configure>", self._rewrap)
+        for why, where in rows:
+            line = tk.Frame(box, bg="#24262b")
+            line.pack(fill="x", padx=8, pady=1)
+            here = where == self._switch.current
+            go = tk.Label(line,
+                          text="BELOW ↓" if here else f"{where.upper()} →",
+                          bg="#24262b",
+                          fg=bench.FAINT if here else bench.ACCENT,
+                          font=("Segoe UI", 8, "bold"),
+                          cursor="arrow" if here else "hand2", padx=6)
+            go.pack(side="right")
+            if here:
+                # a link to the view somebody is already looking at is a
+                # dead click, and dead clicks are the whole reason this
+                # banner exists
+                bench.Tip(go, "Further down this view.")
+            else:
+                go.bind("<Button-1>",
+                        lambda _e, n=where: self._switch.select(n))
+                bench.Tip(go, f"Go to the {where} view, where this is fixed.")
+            text = tk.Label(line, text=why, bg="#24262b", fg=bench.BODY,
+                            font=bench.FONT_SM, anchor="w", justify="left",
+                            wraplength=520)
+            text.pack(side="left", fill="x", expand=True)
+            text.bind("<Configure>", self._rewrap)
+        if rows:
+            tk.Frame(box, bg="#24262b", height=5).pack(fill="x")
+
+    def _sync_traffic_head(self):
+        c = self.console
+        traffic = c.traffic
+        self._sync_traffic_why()
+        for name, pill in getattr(self, "_level_pills", {}).items():
+            on = name == traffic.level_word()
+            pill.config(fg=bench.INK if on else bench.MUTED,
+                        bg=bench.CARD_EDGE if on else "#24262b")
+        for name, pill in getattr(self, "_shape_pills", {}).items():
+            on = name == traffic.shape
+            pill.config(fg=bench.INK if on else bench.MUTED,
+                        bg=bench.CARD_EDGE if on else "#24262b")
+        self._traffic_pill.config(
+            text="RUNNING" if traffic.on else "OFF",
+            fg=bench.OK if traffic.on else bench.FAINT)
+        up = traffic.nozzles_up()
+        was = traffic.yesterday()
+        self._traffic_now.config(
+            text=f"{up} nozzle{'' if up == 1 else 's'} up   "
+                 f"{traffic.cars:,} cars   {traffic.gallons:,.0f} gal today")
+        rest = []
+        if traffic.deliveries:
+            rest.append(f"{traffic.deliveries} delivered")
+        if traffic.balked:
+            rest.append(f"{traffic.balked} queued away")
+        if traffic.blocked:
+            rest.append(f"{traffic.blocked} turned away by a shutdown")
+        if traffic.dry:
+            rest.append(f"{traffic.dry} found the tank empty")
+        # yesterday's closing figure, which a seven hour tick across
+        # midnight used to destroy before anyone could read it
+        if was and was.cars:
+            rest.append(f"yesterday: {was.cars:,} cars, "
+                        f"{was.gallons:,.0f} gal")
+        self._traffic_tally.config(text="   ".join(rest))
+        # the tanker board
+        rows = []
+        for tank, order in sorted(traffic.orders.items()):
+            when = time.strftime("%H:%M", time.localtime(order.due))
+            rows.append(f"tank {tank}: {order.gallons:,.0f} gal ordered, "
+                        f"due {when}")
+        for tank in sorted(c.drops.running):
+            rows.append(f"tank {tank}: {c.drops.describe(tank)}")
+        for tank in sorted(c.tank_level):
+            left = traffic.days_left(tank)
+            if left is not None and left < 7:
+                rows.append(f"tank {tank}: {left:.1f} days of stock left")
+        self._orders_lbl.config(
+            text="\n".join(rows) or "nothing ordered, nothing on the ground")
+        # and what is dead
+        dead = []
+        for kind, number, label in c.programmed_lines():
+            if not c.lines.disabled(kind, number):
+                continue
+            why = []
+            if (kind, number) in c.leaks.disabled:
+                why.append("failed test")
+            for aa, nn, _tt in c.lines.shutdown_alarms(kind, number):
+                why.append(c.alarm_name(aa, nn))
+            tank = c.lines.tank_of(kind, number)
+            if tank and c.outputs.pump_cut(tank):
+                why.append(f"relay on tank {tank}")
+            dead.append(f"{kind.upper()} {number} {label}: "
+                        + ", ".join(why or ["shut down"]))
+        for number, tank in c.outputs.cutting():
+            dead.append(f"relay {number} ({c.outputs.label(number)}): "
+                        f"tank {tank} pumps off")
+        self._shutdown_lbl.config(
+            text="\n".join(dead) or "nothing shut down; every pump answers "
+                                    "its handle",
+            fg=bench.BAD if dead else bench.MUTED)
+
+    def _traffic_off(self):
+        traffic = self.console.traffic
+        traffic.on = not traffic.on
+        if not traffic.on:
+            # Hang up every nozzle THIS GENERATOR is holding, so turning it
+            # off leaves the forecourt quiet rather than mid-fill -- and
+            # nothing else. It used to stop every sale on the site, which
+            # meant a technician's own fill, lifted by hand from the meter
+            # card before the switch was touched, was hung up at zero
+            # gallons by a switch that promises the bench "behaves exactly
+            # as it did before it existed". See `Sale.by`.
+            sales = self.console.sales
+            for meter, blend in list(sales.blends.items()):
+                if getattr(blend, "by", None) == "traffic":
+                    sales.stop(meter)
+            for meter, sale in list(sales.running.items()):
+                if getattr(sale, "by", None) == "traffic":
+                    sales.stop(meter)
+        self.console.save()
+        self.log(f"-- site traffic {'running' if traffic.on else 'off'}")
+        self._sync_traffic_head()
+
+    def _traffic_level(self, name):
+        self.console.traffic.set_level(name)
+        self._cars_var.set(f"{self.console.traffic.cars_per_day:g}")
+        self.console.save()
+        self.log(f"-- site traffic: {name}")
+        self._sync_traffic_head()
+
+    def _traffic_shape(self, name):
+        self.console.traffic.shape = name
+        self.console.save()
+        self.log(f"-- site traffic shape: {_traffic.SHAPE_WORDS[name]}")
+        self._sync_traffic_head()
+
+    def _traffic_cars(self, _e=None):
+        try:
+            self.console.traffic.cars_per_day = float(self._cars_var.get()
+                                                      or 0)
+        except ValueError:
+            return
+        self.console.save()
+        # the word over the box has to follow the number in it, or the view
+        # goes on lighting CLOSED over a forecourt that is selling
+        self._sync_traffic_head()
+
+    def _traffic_auto(self):
+        traffic = self.console.traffic
+        traffic.auto_deliver = not traffic.auto_deliver
+        self._auto_pill.config(
+            text="ON" if traffic.auto_deliver else "OFF",
+            fg=bench.OK if traffic.auto_deliver else bench.FAINT)
+        self.console.save()
+
+    # what each delivery box will accept: (attribute, lowest, highest)
+    _DELIVERY_LIMITS = (("low_pct", 1.0, 95.0),
+                        ("fill_pct", 5.0, 100.0),
+                        ("lead_hours", 0.0, 168.0))
+
+    def _delivery_boxes(self):
+        return zip((self._low_var, self._fill_var, self._lead_var),
+                   self._DELIVERY_LIMITS)
+
+    def _traffic_delivery(self, _e=None):
+        """Take the delivery settings, but not values that mean "never".
+
+        Every box took `float(text or 0)` and nothing checked the range.
+        Clearing the low% box -- which is how anyone retypes it -- wrote
+        0, and "order when the tank falls below 0%" is never: a tank at 5%
+        of capacity sat there for twenty console hours and no truck was
+        called, with the board still reading "nothing ordered, nothing on
+        the ground". In the other direction low=500/fill=400 was accepted
+        and re-ordered forever, 16 loads in 44 hours, every tank pinned at
+        capacity with its overfill alarm posted.
+        """
+        traffic = self.console.traffic
+        for var, (name, low, high) in self._delivery_boxes():
+            text = var.get().strip()
+            if not text:
+                # a box being retyped is not a setting of zero
+                continue
+            try:
+                value = float(text)
+            except ValueError:
+                continue
+            setattr(traffic, name, min(high, max(low, value)))
+        self.console.save()
+
+    def _traffic_delivery_done(self, _e=None):
+        """Put back what was actually stored, once the box loses focus.
+
+        Otherwise a box that was clamped goes on showing the number that
+        was refused -- which is the same kind of lie as the setting it was
+        clamped for.
+        """
+        traffic = self.console.traffic
+        for var, (name, _low, _high) in self._delivery_boxes():
+            var.set(f"{getattr(traffic, name):g}")
+
+    def _add_blend(self):
+        meter = bench.free_meter(self.console)
+        if meter is None:
+            self.log("-- no free meter for another blend")
+            return
+        self.console.blends[meter] = {"label": "MID", "parts": []}
+        self.console.save()
+        self.refresh_traffic()
 
     def _refresh_site(self):
         for w in self.site_body.winfo_children():
@@ -1709,6 +3100,10 @@ class SimApp(tk.Tk):
         self._site_sync = []
         c = self.console
         body = self.site_body
+        if not hasattr(self, "_dim_choice"):
+            self._dim_choice = (bench.DEFAULT_BUS, bench.DEFAULT_SLOT)
+        if self._dim_choice not in {(b, s) for _n, b, s in self._dim_boards()}:
+            self._dim_choice = (bench.DEFAULT_BUS, bench.DEFAULT_SLOT)
 
         # ---- the tanks, side by side, each with its probe ----
         tanks = c.programmed_tanks()
@@ -1755,10 +3150,61 @@ class SimApp(tk.Tk):
                      "SENSOR CONFIG.", bg=bench.BG, fg=bench.MUTED,
                      font=("Segoe UI", 9)).pack(anchor="w")
         else:
-            grid = bench.FlowGrid(body, bench.SensorTile.W)
+            # no width: a sensor tile is as wide as the longest thing
+            # written on it, which is the only width that survives a
+            # screen that is not at 96 DPI. See `SensorTile`.
+            grid = bench.FlowGrid(body)
             grid.pack(fill="x")
             for mod, num, label in sensors:
                 grid.add(bench.SensorTile(grid, self, mod, num, label))
+
+        # ---- the external inputs: dry contacts, five kinds of meaning ----
+        contacts = c.inputs.configured()
+        bench.section(
+            body, f"External inputs ({len(contacts)})",
+            "A dry contact per programmed input on the I/O module. What the "
+            "console does when one closes is the TYPE it was given at "
+            "EXTERNAL INPUT SETUP: an alarm to report, a generator whose "
+            "tanks are tested while it is off, a pump that says the "
+            "forecourt is busy, a remote ALARM/TEST button, or a vapour "
+            "processor's run signal.")
+        if not contacts:
+            tk.Label(body, text="No I/O module fitted."
+                     if not c.has("io")
+                     else "None configured yet: switch a position on at "
+                     "INPUT CONFIG in EXTERNAL INPUT SETUP.", bg=bench.BG,
+                     fg=bench.MUTED, font=("Segoe UI", 9)).pack(anchor="w")
+        else:
+            grid = bench.FlowGrid(body, bench.InputTile.W)
+            grid.pack(fill="x")
+            for number in contacts:
+                tile = bench.InputTile(grid, self, number)
+                grid.add(tile)
+                self._site_sync.append(tile.sync)
+
+        # ---- the output relays: what the console is driving ----
+        coils = c.outputs.configured()
+        bench.section(
+            body, f"Output relays ({len(coils)})",
+            "Every relay programmed at OUTPUT RELAY SETUP, and whether the "
+            "console has it pulled in: a STANDARD relay follows the alarms "
+            "it is assigned to, a MOMENTARY one lets go when the alarm is "
+            "acknowledged, a PUMP CONTROL OUTPUT follows the pump request on "
+            "its tank. The lamp is the coil; the tile says what a meter "
+            "across the contacts would read.")
+        if not coils:
+            tk.Label(body, text="No relay module fitted."
+                     if not (c.has("relay") or c.has("io"))
+                     else "None configured yet: switch a position on at "
+                     "RELAY CONFIG in OUTPUT RELAY SETUP.", bg=bench.BG,
+                     fg=bench.MUTED, font=("Segoe UI", 9)).pack(anchor="w")
+        else:
+            grid = bench.FlowGrid(body, bench.RelayTile.W)
+            grid.pack(fill="x")
+            for number in coils:
+                tile = bench.RelayTile(grid, self, number)
+                grid.add(tile)
+                self._site_sync.append(tile.sync)
 
         # ---- the dispensers, which BIR reconciles the probe against ----
         bench.section(
@@ -1779,21 +3225,97 @@ class SimApp(tk.Tk):
                      bg=bench.BG, fg=bench.MUTED,
                      font=("Segoe UI", 9)).pack(anchor="w")
         else:
-            self._dim_ok = tk.BooleanVar(value=not c.dim_fault)
+            # one link per DIM port, because BA1 keeps a fault history per
+            # port and the alarm is per port too. BENCH.md D1.
             row = tk.Frame(body, bg=bench.BG)
             row.pack(fill="x", pady=(0, 4))
-            tk.Checkbutton(
-                row, text="  DIM link to the POS/dispensers up",
-                variable=self._dim_ok, command=self._set_dim_link,
-                bg=bench.BG, fg=bench.BODY, selectcolor=bench.CARD,
-                activebackground=bench.BG, activeforeground=bench.INK,
-                font=bench.FONT).pack(side="left")
+            self._dim_ok = {}
+            for port in range(1, c.DIM_PORTS + 1):
+                var = tk.BooleanVar(value=port not in c.dim_down)
+                self._dim_ok[port] = var
+                box = tk.Checkbutton(
+                    row, text=f"  DIM port {port} link up",
+                    variable=var,
+                    command=lambda p=port: self._set_dim_port(p),
+                    bg=bench.BG, fg=bench.BODY, selectcolor=bench.CARD,
+                    activebackground=bench.BG, activeforeground=bench.INK,
+                    font=bench.FONT)
+                box.pack(side="left", padx=(0, 14))
+                bench.Tip(box, "The RS-232 link from this DIM port to the "
+                               "POS or dispenser controller. Take it down "
+                               "and the DIM Communication Alarm posts for "
+                               "the port, the meters on it stop reporting, "
+                               "and BA1's fault history gets a row with "
+                               "its post time, clear time and duration."
+                               + (" The bench's meters are all on port 1."
+                                  if port == 1 else ""))
+            # Which DIM board the cards below belong to. 7B1 keys a meter
+            # by bus and slot -- "Bus 3: 01-06 / 3=Comm Bus, Bus 2: 09-16 /
+            # 2=Power Bus (MDIM)" -- and a second board's meter 1 is not the
+            # first board's, which is what lets two POS terminals report the
+            # same FP and M. The bench sat on the first EDIM alone; a site
+            # with an MDIM, or a second EDIM, could not be staged. BENCH D4.
+            boards = self._dim_boards()
+            if len(boards) > 1:
+                pick = tk.Frame(row, bg=bench.BG)
+                pick.pack(side="right")
+                tk.Label(pick, text="board", bg=bench.BG, fg=bench.FAINT,
+                         font=bench.FONT_SM).pack(side="left")
+                names = [name for name, _bus, _slot in boards]
+                current = [name for name, bus, slot in boards
+                           if (bus, slot) == self._dim_choice]
+                self._dim_var = tk.StringVar(
+                    value=current[0] if current else names[0])
+                menu = tk.OptionMenu(pick, self._dim_var, *names,
+                                     command=self._pick_dim)
+                menu.config(bg="#24262b", fg=bench.INK, font=bench.MONO_SM,
+                            relief="flat", highlightthickness=0,
+                            activebackground=bench.CARD_EDGE, anchor="w",
+                            padx=4, pady=0)
+                menu["menu"].config(bg="#24262b", fg=bench.INK,
+                                    font=bench.MONO_SM)
+                menu.pack(side="left", padx=(4, 0))
+                bench.Tip(menu, "Which DIM board these meters are on. A "
+                                "meter is bus, slot, position and meter to "
+                                "the console, so meter 1 on a second board "
+                                "is a different meter from meter 1 on the "
+                                "first; the MDIM on the power bus carries "
+                                "meters 9 to 16.")
+            bus, slot = self._dim_choice
+            first = 9 if bus == 2 else 1
             grid = bench.FlowGrid(body, bench.MeterCard.W)
             grid.pack(fill="x")
-            for meter in range(1, 7):
-                card = bench.MeterCard(grid, self, meter)
+            for number in range(first, first + 8):
+                ident = bench.MeterId(bus, slot, (number + 1) // 2, number)
+                card = bench.MeterCard(grid, self, ident)
                 grid.add(card)
                 self._site_sync.append(card.sync)
+
+        # ---- the vapour monitor controllers, on a VMCI site ----
+        if c.has("vmc"):
+            controllers = sorted(c.vmc_serials) or []
+            bench.section(
+                body, f"Vapour monitor controllers ({len(controllers)})",
+                "A VMC reports a status per fuelling side and the console "
+                "does not decide it -- 576013-610 Table 29-23's four alarm "
+                "rows ARE four of the eight statuses a controller sends. So "
+                "the bench sets the status the way it sets a sensor's "
+                "state, and the console does the rest: the alarm posts in "
+                "category 36, both alarm histories carry it, and the VMC "
+                "Alarm History Report has rows in it. A controller exists "
+                "once it has a serial number, which is VMC SETUP on the "
+                "panel.")
+            if not controllers:
+                tk.Label(body, text="None yet: add a serial number at VMC "
+                         "SETUP in Setup Mode.", bg=bench.BG,
+                         fg=bench.MUTED, font=("Segoe UI", 9)).pack(
+                             anchor="w")
+            else:
+                grid = bench.FlowGrid(body, bench.VmcTile.W)
+                grid.pack(fill="x")
+                for number in controllers:
+                    for side in c.VMC_SIDES:
+                        grid.add(bench.VmcTile(grid, self, number, side))
 
         # ---- the ISD monitoring tests, on a vapor recovery site ----
         if c.licensed("isd") and c.has("smart"):
@@ -1805,17 +3327,32 @@ class SimApp(tk.Tk):
                 "posts, a FAIL shuts dispensing down, the reports carry it. "
                 "From a shutdown alarm, ALARM/TEST three times on the panel "
                 "reaches the override, exactly as 577013-800 walks it.")
-            grid = bench.FlowGrid(body, bench.SensorTile.W)
+            # IsdTile's own width, not the sensor tile's: these are ISD
+            # tests, they are laid out by `IsdTile`, and a grid told to
+            # column on somebody else's tile width leaves a ragged gap or
+            # overlaps -- it went unnoticed only while the two were equal.
+            grid = bench.FlowGrid(body, bench.IsdTile.W)
             grid.pack(fill="x")
+            # The collection test a site HAS depends on which system it
+            # is: a Balance site's is FLOW COLLECT and an Assist site's is
+            # GROSS COLLECT and DEGRD COLLECT. The bench offered the assist
+            # pair on every console, including the default one, which is a
+            # Balance site. See FIDELITY I10.
+            from . import isd as _isd
             ISD_TESTS = [("leakage", "VAPOR LEAKAGE"),
                          ("gross", "GROSS PRESSURE"),
-                         ("degrade", "DEGRD PRESSURE"),
-                         ("collect_gross", "GROSS COLLECT"),
-                         ("collect_degrade", "DEGRD COLLECT"),
-                         ("sensor", "SENSOR OUT"),
-                         ("setup", "ISD SETUP")]
+                         ("degrade", "DEGRD PRESSURE")]
+            ISD_TESTS += [(key, _isd.COLLECTION_LABEL[key])
+                          for key in _isd.COLLECTION_TESTS[c.evr_site()]]
+            ISD_TESTS += [("sensor", "SENSOR OUT"),
+                          ("setup", "ISD SETUP")]
             for key, label in ISD_TESTS:
                 grid.add(bench.IsdTile(grid, self, key, label))
+            # and the processor's own switch, where there is a processor
+            if c.vapor_processor_type() != "NONE":
+                tile = bench.ProcessorTile(grid, self)
+                grid.add(tile)
+                self._site_sync.append(tile.sync)
 
         # ---- the lines the console is watching ----
         lines = c.programmed_lines()
@@ -1863,8 +3400,13 @@ class SimApp(tk.Tk):
                                 "live": sc.get("live"), "code": None,
                                 "diagprint": sc.get("diagprint"),
                                 "act": sc.get("act"),
+                                "buf": sc.get("buf"),
+                                "console": sc.get("console"),
+                                "toggle": sc.get("toggle"),
+                                "run": sc.get("run"),
                                 "depth": sc.get("depth", 0),
                                 "vp": sc.get("vp"),
+                                "when": sc.get("when"),
                                 "expand": sc.get("expand")}
                                for sc in f["screens"]]}
                     for f in self.console.available_diagnostics()]
@@ -1894,7 +3436,111 @@ class SimApp(tk.Tk):
         if MODES[self.mode] == "DIAGNOSTIC":
             return self._diag_screens(fn)
         steps = self.console.visible_steps(fn, self.device)
-        return [st for st in steps if self._selection_allows(st)]
+        steps = [st for st in steps if self._selection_allows(st)]
+        if MODES[self.mode] == "SETUP":
+            # Setup Mode has the same levels Diagnostic Mode has: a screen
+            # that says PRESS <ENTER> holds the screens below it, and they
+            # are not steps of the function. See `_level_screens`.
+            return self._setup_screens(steps)
+        return steps
+
+    def _setup_screens(self, steps):
+        """This level's screens, with the ones that repeat spread out."""
+        out = []
+        for st in self._level_screens(steps):
+            if st.get("expand") == "meters":
+                # "Press STEP to continue to the next meter", p.17-6: one
+                # screen per meter on the map, which is what the console
+                # has to show rather than one example row. The manual's own
+                # figure IS the empty template, so a console with nothing
+                # mapped still draws one.
+                keys = sorted(self.console.meter_map)
+                out += [dict(st, meter=k) for k in keys] or [dict(st)]
+                continue
+            out.append(st)
+        return out
+
+    def _level_screens(self, screens, path=None):
+        """The screens at the level the panel is standing on.
+
+        A screen's `depth` is how far down it sits: absent or 0 at the top,
+        1 inside the branch that offered it, 2 inside a branch of that. The
+        path says which branch was entered at each level, so the screens on
+        offer are the run that follows the deepest one -- stopping at the
+        first screen that climbs back OUT of it, and skipping the ones
+        deeper in, which belong to a branch that has not been entered.
+        """
+        path = self.subs if path is None else path
+        lvl = len(path)
+        out = []
+        for sc in screens[path[-1] + 1 if path else 0:]:
+            d = sc.get("depth") or 0
+            if d < lvl:
+                break
+            if d == lvl:
+                out.append(sc)
+        return out
+
+    def _level_index(self, screens, n, path=None):
+        """Where the n-th screen of this level sits in the offered list."""
+        path = self.subs if path is None else path
+        lvl = len(path)
+        start = path[-1] + 1 if path else 0
+        seen = 0
+        for i in range(start, len(screens)):
+            d = screens[i].get("depth") or 0
+            if d < lvl:
+                break
+            if d != lvl:
+                continue
+            if seen == n:
+                return i
+            seen += 1
+        return None
+
+    def _map_row(self, cells):
+        """The five cells at the columns p.17-5 draws them at."""
+        return screens.map_row_text(cells)
+
+    def _map_choices(self, n, cells):
+        """What CHANGE offers in the n-th cell of the map row.
+
+        p.17-5 lists them: the bus is "2: Power Bay (MDIMs)" or "3:
+        Communication Bay (BDIMs, EDIMs, or CDIMs)", the slot is whatever
+        that bus has, the fueling position and the meter are 00-99, and the
+        tank is "99: Tank with no probe", "00: Remove meter from tank/meter
+        map" or a tank number. `X` is on the page too, as the cell's own
+        unset state, and is where the cycle starts and returns to.
+        """
+        blank = "X" * MAP_CELLS[n][1]
+        if n == 0:
+            return [blank] + sorted(wirelists.BUS_SLOTS)
+        if n == 1:
+            # a slot belongs to its own bus, and until a bus is picked there
+            # is no list to walk
+            return [blank] + [f"{s:02d}"
+                              for s in wirelists.BUS_SLOTS.get(cells[0], ())]
+        return [blank] + [f"{i:02d}" for i in range(100)]
+
+    def _ascend(self):
+        """Come back out of a branch, onto the screen that offered it."""
+        child = self.subs[-1]
+        self.subs = self.subs[:-1]
+        fn = self.cur_function()
+        screens = self._offered(fn) if fn else []
+        lvl = len(self.subs)
+        self.step = 0
+        n = 0
+        for i in range(self.subs[-1] + 1 if self.subs else 0, len(screens)):
+            d = screens[i].get("depth") or 0
+            if d < lvl:
+                break
+            if d != lvl:
+                continue
+            if i == child:
+                self.step = n
+                return
+            n += 1
 
     def _selection_allows(self, step):
         """A screen a SELECTION gates rather than a setting.
@@ -1918,42 +3564,127 @@ class SimApp(tk.Tk):
         # some diagnostic screens belong to one vapor processor only:
         # the polisher has LOAD/EFFLUENT/VALVE/TEMP, the membrane has VP
         # STATE/HC SENSOR. A screen's "vp" says which processor it is for.
-        vp = (self.console.values.get("SV4000") or "00")
-        polisher = vp in ("05", "06")
-        def offered(sc):
-            want = sc.get("vp")
-            if not want:
-                return True
-            return (want == "polisher") == polisher
-        screens = [sc for sc in fn["steps"] if offered(sc)]
-        if self.sub is None:
-            return [sc for sc in screens if not sc.get("depth")]
-        out = [screens[self.sub]]
-        for sc in screens[self.sub + 1:]:
-            if not sc.get("depth"):
-                break
+        screens = self._diag_offered(fn)
+        # **The branch is its children, and does not open with a copy of the
+        # screen that offered it.** In every chapter-6 figure the `E` arrow
+        # runs from the `PRESS <ENTER>` screen TO THE FIRST SCREEN OF THE
+        # BRANCH: Figure 6-2 draws `SYSTEM CONFIGURATION / PRESS <ENTER>`
+        # -E-> `SLOT 1 4 PROBE / POR= XXXXXX C= XXXXXX`, Figure 6-25 draws
+        # `BIR METER MAP / PRESS <ENTER>` -E-> `BIR METER MAP / STATUS:
+        # COMPLETE`, and the same at COMM BOARD RE-INITIALIZE, PC and DIM
+        # and WPLLD DIAGNOSTIC DATA, the two CSLD reports, both key-block
+        # branches and the Mag Sensor diagnostics.
+        #
+        # The parent was the first member of the list, so ENTER redrew the
+        # screen you were already on and every branch in Diagnostic Mode
+        # cost one keypress more than the manual's diagram -- with "nothing
+        # happened" as the feedback for a correct press, which teaches a
+        # technician to press ENTER twice or to give the branch up as dead.
+        # It also made BACKUP's way out invisible: the screen on each side
+        # of the boundary was the same two lines. See the diagnostic-mode
+        # audit, DG3, and the key-behaviour audit, K11.
+        out = []
+        for sc in self._level_screens(screens):
             if sc.get("expand") == "slots":
                 # one screen per slot in the cage, which is what the console
                 # has to show rather than one example slot
                 out += [{"text": l1, "l2": l2, "code": None, "depth": 1}
                         for l1, l2 in self.console.slot_report()]
                 continue
+            if sc.get("expand") == "mt_keys":
+                # "Continue to press STEP to scroll through a list of active
+                # keys": one screen per key the console will accept, from the
+                # console's own list rather than the three names in Figure
+                # 6-4. CHANGE on a row arms BLOCK: YES and ENTER selects that
+                # key, which is how the figure blocks J DOE. See FIDELITY
+                # D13.
+                #
+                # The label runs left in seventeen and the ID is six, which
+                # is 8A3's own two fields and comes to 24 with the space
+                # between them -- exactly the display.
+                out += [{"text": f"{name:<17.17s} {ident}",
+                         "l2": "BLOCK: NO", "code": None, "depth": 1,
+                         "act": "mt_select", "ident": ident,
+                         "verbatim": True}
+                        for ident, name in self.console.tracker_keys()]
+                continue
             out.append(sc)
         return out
 
-    def _diag_children(self):
-        """The full-list index of the screen the panel is on, if it has any."""
+    def _diag_offered(self, fn):
+        """The screens of one diagnostic function this console can show.
+
+        Both the list a walk STEPS through and the index ENTER descends on
+        have to be built from this same list. `_diag_children` used to count
+        over `fn["steps"]` raw and `_diag_screens` filtered it, so on any
+        console where a screen was hidden the two disagreed and ENTER
+        descended into a different branch from the one the panel was
+        standing on. Nothing hid a top-level screen until D10's four gates,
+        which is why it had never shown. See FIDELITY D10 and D15.
+        """
+        # some diagnostic screens belong to one vapor processor only:
+        # the polisher has LOAD/EFFLUENT/VALVE/TEMP, the membrane has VP
+        # STATE/HC SENSOR. A screen's "vp" says which processor it is for.
+        vp = (self.console.values.get("SV4000") or "00")
+        polisher = vp in ("05", "06")
+        out = []
+        for sc in fn["steps"]:
+            if sc.get("when") and not self.console.visible(sc, self.device):
+                # a diagnostic screen can be conditional too: Fig 6-3 gives
+                # SERVICE REPORT two branches, and which one a console walks
+                # is whether it has a Maintenance Tracker. See FIDELITY D3.
+                continue
+            want = sc.get("vp")
+            if want and (want == "polisher") != polisher:
+                continue
+            out.append(sc)
+        return out
+
+    def _offered(self, fn):
+        """Every screen of this function this console can show, all levels.
+
+        The list `self.subs` indexes. Diagnostic Mode gates screens on the
+        vapor processor and on `when`; Setup Mode gates them on `when` and
+        on the panel's own selection.
+        """
+        if MODES[self.mode] == "DIAGNOSTIC":
+            return self._diag_offered(fn)
+        return [st for st in self.console.visible_steps(fn, self.device)
+                if self._selection_allows(st)]
+
+    def _branch_at(self):
+        """Where, in the offered list, the branch under the panel starts.
+
+        None unless the screen the panel is standing on is one that says
+        PRESS <ENTER> and has screens a level down behind it.
+        """
         fn = self.cur_function()
-        if fn is None or MODES[self.mode] != "DIAGNOSTIC" or self.sub is not None:
+        if fn is None or MODES[self.mode] not in ("DIAGNOSTIC", "SETUP"):
             return None
-        screens = fn["steps"]
-        tops = [i for i, sc in enumerate(screens) if not sc.get("depth")]
-        if not tops or self.step == HEADER:
+        if self.step == HEADER:
             return None
-        i = tops[self.step % len(tops)]
-        if i + 1 < len(screens) and screens[i + 1].get("depth"):
+        screens = self._offered(fn)
+        here = self._level_screens(screens)
+        if not here:
+            return None
+        i = self._level_index(screens, self.step % len(here))
+        if i is None:
+            return None
+        if (i + 1 < len(screens)
+                and (screens[i + 1].get("depth") or 0) == len(self.subs) + 1):
             return i
         return None
+
+    def _diag_children(self):
+        """`_branch_at` under the name the register cites.
+
+        FIDELITY D15 and CLOSED U37 both name this method, and a citation
+        in a comment outlives the entry it names -- so the name stays and
+        the one-mode guard with it.
+        """
+        if MODES[self.mode] != "DIAGNOSTIC":
+            return None
+        return self._branch_at()
 
     def cur_step(self):
         st = self.steps()
@@ -1995,13 +3726,37 @@ class SimApp(tk.Tk):
         if what in ("date", "time", "insert", "insertbol"):
             held = self._insert.get(what, "")
             if self.editing:
-                return [text[:COLS], self._edit_text()[:COLS]]
-            if what == "date":
-                return [text[:COLS], "DATE: " + (held or time.strftime(
-                    "%m/%d/%Y", self.console.now()))]
-            if what == "time":
-                return [text[:COLS], "TIME: " + (held or time.strftime(
-                    "%I:%M %p", self.console.now()))]
+                # **The label stays while you type**, which is what
+                # 576013-610 Rev AC p.5-2 draws for all four of these
+                # screens: `ENTER DELIVERY DATE` / `DATE: XX/XX/XXXX`,
+                # `ENTER DELIVERY TIME` / `TIME: XX:XX XX`, `TICKET
+                # VOLUME: XXX`, and p.5-3's `BOL: 23223`. This arm dropped
+                # every label the four arms below it build, so the glass
+                # read a bare `12252026` with nothing to say what it was.
+                #
+                # The EDIT/VIEW branch thirty lines down has kept its label
+                # all along -- `f"{text}: {self._edit_text()}"` -- which is
+                # what makes this an oversight in one renderer rather than
+                # a decision. See the refusals audit, R5.
+                return [text[:COLS],
+                        (self._insert_prefix(what)
+                         + self._edit_text())[:COLS]]
+            if what in ("date", "time"):
+                # a value already typed is shown in the screen's own shape,
+                # not as the digit run the keypad sent
+                now = self.console.now()
+                clock = time.strftime("%m/%d/%Y" if what == "date"
+                                      else "%I:%M %p", now)
+                shown = self._insert_shown(what, held) if held else clock
+                return [text[:COLS],
+                        (self._insert_prefix(what) + str(shown))[:COLS]]
+            if what == "insertbol":
+                # 576013-610 Rev AC p.5-3: the inserted delivery's Bill of
+                # Lading screen reads `BOL:`, and this drew the TICKET
+                # VOLUME line belonging to the screen before it, so the
+                # panel showed a volume where a number was being typed.
+                # See FIDELITY O7.
+                return [text[:COLS], f"BOL: {held}"[:COLS]]
             return [text[:COLS], f"TICKET VOLUME: {held or 0}"[:COLS]]
         record = self._delivery()
         if record is None:
@@ -2017,6 +3772,30 @@ class SimApp(tk.Tk):
         ticket = "" if record.ticket is None else f"{record.ticket:.0f}"
         return [head[:COLS], f"TICKET VOLUME: {ticket}"[:COLS]]
 
+    def _choices(self, step):
+        """The choices this step actually offers.
+
+        Usually all of them. A variance report's SELECT is the exception:
+        `S532`, `S533` and `S534` are one enable flag PER PERIOD -- the
+        console prints them as `PERIODIC DISABLED / WEEKLY DISABLED / DAILY
+        ENABLED` -- and the function itself already disappears when all
+        three are off. A console cannot honour one third of a setting and
+        ignore the other two thirds, so a period the site has disabled is
+        not on the panel either. See FIDELITY G10.
+        """
+        names = [c[0] if isinstance(c, list) else c
+                 for c in (step.get("choices") or [])]
+        gate = step.get("choices_when")
+        if not gate:
+            return names
+        stored = (self.console.values.get(gate["code"])
+                  or gate.get("default", "")).strip()
+        on = {name for digit, name in zip(stored, gate["flags"])
+              if digit == "1"}
+        # a stored value of the wrong length is not a reason to leave the
+        # panel with nothing to step onto
+        return [name for name in names if name in on] or names
+
     def _choice(self, step):
         """What a selection screen is showing.
 
@@ -2024,8 +3803,7 @@ class SimApp(tk.Tk):
         not offer, the line rate is 3.0 GPH on a PLLD and 0.20 GAL/HR on a
         VLLD, and a console only ever shows a choice it has.
         """
-        names = [c[0] if isinstance(c, list) else c
-                 for c in (step.get("choices") or [])]
+        names = self._choices(step)
         value = str(self.sel.get(step["sel"], ""))
         if names and value not in names:
             value = names[0]
@@ -2074,6 +3852,14 @@ class SimApp(tk.Tk):
     def _scope_head(self, step, text):
         """"TEST CONTROL: ALL TANKS": the screens that name what they will
         run the test on."""
+        if step.get("head") == "device":
+            # a screen headed by the device rather than by the step's own
+            # name: "R 1: OVERFILL ALARM" over "PUSH ALARM/TEST KEY"
+            return self._device_head()
+        if step.get("head") == "function":
+            # a screen headed by the function: "TEST OUTPUT RELAYS" over
+            # "ENTER RELAY NUMBER #", 576013-610 Rev AC p.22-1
+            return (self.cur_function() or {}).get("function", text)
         prefix = step.get("head_scope")
         if not prefix:
             return text
@@ -2141,14 +3927,36 @@ class SimApp(tk.Tk):
         if what == "prior":
             records = console.deliveries.records.get(self.device) or []
             if not records:
-                self._flash("NO DELIVERIES")
+                self.log("-- no deliveries on this tank")
                 return
             self.dlv = (self.dlv + 1) % len(records)
-            self._flash("PRIOR DELIVERY" + chr(10) + f"{self.dlv + 1} BACK")
+            # The screen it moves to is the answer; a console does not
+            # narrate its own navigation. See FIDELITY U5.
+            self.log(f"-- delivery {self.dlv + 1} back")
             return
         if what in ("date", "time"):
+            if what == "date" and not self._date_in_range(text):
+                # 576013-610 Rev AC p.5-2, and the console's own words:
+                # "If you enter a date that is out of the range of the
+                # current or previous reconciliation periods, the error
+                # message, **'DATE IS OUT OF RANGE,'** will appear."
+                #
+                # It is one of exactly TWO error messages the manuals draw
+                # anywhere -- `INVALID INSERT` on the same page is the
+                # other -- and this console had the other one and not this.
+                # A date thirty-six years before the console's own clock
+                # was taken in silence and the walk carried on and inserted
+                # the delivery. `_refuse`'s rule is that the console says
+                # nothing about a keystroke it cannot use, and the whole
+                # point of these two is that they are the exceptions.
+                self._flash("DATE IS OUT OF RANGE")
+                return
             self._insert[what] = text
-            self.confirm = [text[:COLS], CONT_STEP]
+            # the line the screen was already showing, which is what every
+            # other confirmation on this console is
+            self.confirm = [(self._insert_prefix(what)
+                             + self._insert_shown(what, text))[:COLS],
+                            CONT_STEP]
             self._render()
             return
         if what == "insert":
@@ -2156,7 +3964,7 @@ class SimApp(tk.Tk):
             try:
                 volume = float(text)
             except ValueError:
-                self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+                self._refuse("numbers only")
                 return
             record = console.deliveries.insert(self.device, when, volume)
             if record is None:
@@ -2173,7 +3981,7 @@ class SimApp(tk.Tk):
         if what == "insertbol":
             record = self._insert.get("record")
             if record is None:
-                self._flash("INSERT A DELIVERY" + chr(10) + "FIRST")
+                self.log("-- nothing to edit: no delivery inserted")
                 return
             record.bol = text[:20]
             console.save()
@@ -2183,7 +3991,7 @@ class SimApp(tk.Tk):
             return
         record = self._delivery()
         if record is None:
-            self._flash("NO DELIVERIES")
+            self.log("-- no deliveries on this tank")
             return
         if what == "bol":
             record.bol = text[:20]
@@ -2191,14 +3999,115 @@ class SimApp(tk.Tk):
                             CONT_STEP]
         else:
             try:
-                record.ticket = float(text)
+                entered = float(text)
             except ValueError:
-                self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+                self._refuse("numbers only")
                 return
+            # The ticket is what the reconciliation's TICKETED column is
+            # made of, and this wrote the record and never told BIR: an
+            # entered ticket sat on the delivery report and the period's
+            # ticketed total stayed at zero. The difference goes in, so a
+            # corrected ticket corrects rather than doubles. BENCH.md T3.
+            self.console.bir.ticket(record.tank,
+                                    entered - (record.ticket or 0.0))
+            record.ticket = entered
             self.confirm = [f"TICKET VOLUME: {record.ticket:.0f}"[:COLS],
                             CONT_STEP]
         console.save()
         self._render()
+
+    @staticmethod
+    def _insert_prefix(what):
+        """The label each delivery-insert screen carries, off p.5-2."""
+        return {"date": "DATE: ", "time": "TIME: ",
+                "insertbol": "BOL: "}.get(what, "TICKET VOLUME: ")
+
+    def _insert_shown(self, what, typed):
+        """A typed date or time in the shape its own screen draws it.
+
+        p.5-2 draws `DATE: XX/XX/XXXX` and `TIME: XX:XX XX`, and the
+        keypad sends eight digits and four. The confirmation used to echo
+        the digit run -- `12252026` on a line of its own with no label --
+        where every other confirmation on this console is the line the
+        screen was already showing. See R1 for the same rule on the setup
+        fields, and the refusals audit R5.
+        """
+        digits = "".join(c for c in str(typed) if c.isdigit())
+        if what == "date" and len(digits) >= 8:
+            return f"{digits[:2]}/{digits[2:4]}/{digits[4:8]}"
+        if what == "time" and len(digits) >= 3:
+            hhmm = digits[:4].rjust(4, "0")
+            try:
+                hour, minute = int(hhmm[:2]), int(hhmm[2:])
+            except ValueError:                       # pragma: no cover
+                return typed
+            if hour > 23 or minute > 59:
+                return typed
+            # the screen's own twelve hour clock. What the ARROWS do here
+            # -- "Select AM or PM", p.5-2 -- is a keypad question and not
+            # this one; the console reads the half of the day off the
+            # twenty-four hour value it was given. See UNKNOWNS B14.
+            half = "AM" if hour < 12 else "PM"
+            shown = hour % 12 or 12
+            return f"{shown:02d}:{minute:02d} {half}"
+        return typed
+
+    def _date_in_range(self, text):
+        """Is this typed date inside a reconciliation period the console has?
+
+        "the range of the current or previous reconciliation periods",
+        576013-610 Rev AC p.5-2. The console keeps four kinds of period at
+        once -- shift, daily, weekly and periodic -- and a delivery is
+        counted into every one of them, so the range this takes is the
+        WIDEST of the four: no earlier than the oldest period still on the
+        books, and no later than now, because the current period ends at
+        now.
+
+        *The widest is a reading and a deliberately generous one.* The page
+        says "periods" without naming a kind, and refusing a date the
+        console would have taken is the worse error of the two: this
+        message exists to catch a date that belongs to no period at all,
+        which is the case it was found on -- 1990 on a console whose clock
+        says 2026.
+
+        A console with no reconciliation period to compare against takes
+        any date, because the sentence has nothing to measure.
+        """
+        digits = "".join(c for c in str(text) if c.isdigit())
+        if len(digits) < 8:
+            return True
+        try:
+            opens = time.mktime((int(digits[4:8]), int(digits[:2]),
+                                 int(digits[2:4]), 0, 0, 0, 0, 1, -1))
+        except (ValueError, OverflowError):
+            # a date this console cannot even build is `_refuse`'s business
+            return True
+        bir, floors = self.console.bir, []
+        for kind in ("shift", "daily", "weekly", "periodic"):
+            row = bir.last(self.device, kind) or bir.current(self.device, kind)
+            opened = (row or {}).get("opened")
+            if opened:
+                floors.append(float(opened))
+        # **And no later than the month before this one**, which is what
+        # keeps this usable. Every period on this console opens at first
+        # touch -- `BIR._open` -- so on a console loaded a minute ago all
+        # four of them opened a minute ago, and a floor taken from those
+        # alone would refuse yesterday's ticket on every bench there is.
+        # The widest of the four kinds is the periodic one and its default
+        # is MONTHLY, so "the current or previous reconciliation period" of
+        # the widest kind is this month and last month. A console with real
+        # history keeps whichever floor is older.
+        now = self.console.now()
+        month = (now.tm_year, now.tm_mon - 1) if now.tm_mon > 1 else (
+            now.tm_year - 1, 12)
+        floors.append(time.mktime((month[0], month[1], 1, 0, 0, 0, 0, 1, -1)))
+        # **A DAY overlaps the window, not an instant in it.** The screen
+        # asks for a date and nothing else, so the day it names runs from
+        # midnight to midnight: today is in range on a console whose clock
+        # says a quarter to one in the morning, and it would not be if this
+        # compared a time of day against `now`.
+        closes = opens + 86399.0
+        return closes >= min(floors) and opens <= time.mktime(now)
 
     def _insert_when(self):
         """The date and time typed for an inserted delivery, or now."""
@@ -2214,28 +4123,41 @@ class SimApp(tk.Tk):
         except (ValueError, OverflowError):
             return time.mktime(now)
 
-    def _device_code(self):
-        """Table 29-1's letter for whatever this function is looking at."""
+    def _device_head(self):
+        """"T 1: UNLEADED": the device, its number and what it is called.
+
+        576013-610 Rev AC p.4-1 heads every reading this way and puts the
+        reading underneath, and the mag sump screens on p.82 and p.86 do the
+        same. The label is whatever the site programmed for that device.
+        """
+        letter = self._device_code()
+        code = {"T": "602", "L": "702", "V": "707", "G": "712",
+                "C": "742", "H": "747", "s": "722", "Q": "782",
+                "W": "7A2", "P": "760", "R": "807", "I": "802",
+                "r": "7C5"}.get(letter, "602")
+        # An unlabelled smart sensor is SMART SENSOR n everywhere except in
+        # the mag sump walk, where p.23-1 and p.24-3 both call it SUMP 1.
+        # `Console.sump_screen` already falls back that way, so step 0 read
+        # `s 1: SMART SENSOR 1` and step 2 read `s 1: SUMP 1` on the same
+        # function -- one walk disagreeing with itself. FIDELITY O8.
+        word = DEVICE_WORD.get(letter, "DEVICE")
         fn = self.cur_function()
-        name = fn["function"] if fn else ""
-        if "MAG SUMP" in name:
-            return "s"
-        if "IN-TANK" in name or "TANK" in name.split()[0:1]:
-            return "T"
-        for word, letter in (("COMMUNICATION", "D"), ("LIQUID", "L"),
-                             ("EXTERNAL INPUT", "I"),
-                             ("VAPOR", "V"),
-                             ("GROUNDWATER", "G"), ("2-WIRE", "C"),
-                             ("3-WIRE", "H"), ("SMART", "s"),
-                             # the mag sump functions are a smart sensor's,
-                             # and 576013-610 Rev AC p.82 heads them "s 1:"
-                             ("MAG SUMP", "s"),
-                             ("PUMP RELAY", "r"), ("OUTPUT RELAY", "R"),
-                             ("WPLLD", "W"), ("PRESSURE LINE", "Q"),
-                             ("LINE LEAK DETECT", "P")):
-            if word in name:
-                return letter
-        return "T"
+        if letter == "s" and "MAG SUMP" in ((fn or {}).get("function") or ""):
+            word = "SUMP"
+        label = (self.console.text(code, self.device)
+                 or f"{word} {self.device}")
+        return f"{letter} {self.device}: {label}"
+
+    def _device_code(self):
+        """Table 29-1's letter for whatever this function is looking at.
+
+        One table, in `screens`, because there were two of these and they
+        were the same twenty lines: the panel read one and the printer and
+        the wire read the other, so a letter added to either was a letter
+        the other kept getting wrong.
+        """
+        fn = self.cur_function()
+        return screens.device_code(fn["function"] if fn else "")
 
     def cur_field(self):
         """The field this step edits.
@@ -2265,7 +4187,8 @@ class SimApp(tk.Tk):
         raw = self.console.values.get(code.upper())
         if raw is None:
             return ""
-        return fieldio.decode(f, code, raw) if f else raw.strip()
+        return (fieldio.decode(f, code, raw, self.console) if f
+                else raw.strip())
 
     # ---- typing into a field, the way the console does it -------------------
     def _begin_edit(self, value=""):
@@ -2273,6 +4196,7 @@ class SimApp(tk.Tk):
         self.editing = True
         self.buf = "" if value is None else str(value)
         self.cur = 0
+        self.on_meridiem = False
         self._tap = None
 
     def _edit_text(self):
@@ -2287,14 +4211,14 @@ class SimApp(tk.Tk):
         """
         if self._time_field() and self.meridiem:
             return self._edit_time()
-        if (self.cur_field() or {}).get("kind") == "date":
+        if self._date_entry():
             return self._edit_date()
         text = self.buf
         i = max(0, min(self.cur, len(text)))
         if i >= len(text):
             text = text + " "
         if self._blink:
-            return text[:i] + "_" + text[i + 1:]
+            return text[:i] + CURSOR + text[i + 1:]
         return text
 
     def _edit_date(self):
@@ -2303,7 +4227,7 @@ class SimApp(tk.Tk):
         cells = [digits[i] if i < len(digits) else "-" for i in range(8)]
         i = max(0, min(self.cur, 7))
         if self._blink:
-            cells[i] = "_"
+            cells[i] = CURSOR
         return "".join(cells[:2]) + "/" + "".join(cells[2:4]) + "/" \
             + "".join(cells[4:])
 
@@ -2315,18 +4239,47 @@ class SimApp(tk.Tk):
         """
         digits = (self.buf + "____")[:4]
         i = max(0, min(self.cur, 3))
-        if self._blink:
-            digits = digits[:i] + "_" + digits[i + 1:]
+        if self._blink and not self.on_meridiem:
+            digits = digits[:i] + CURSOR + digits[i + 1:]
         # Both halves of the day stay on the screen while you are editing,
-        # which is what the Setup Manual draws ("TIME: XX:XX AM PM") and what
-        # the console in the video shows; the arrows pick between them. How a
-        # real one marks WHICH is picked is not recorded anywhere, so the
-        # chosen half is shown in place and the other after it.
-        other = "PM" if self.meridiem == "AM" else "AM"
-        return f"{digits[:2]}:{digits[2:]} {self.meridiem} {other}"
+        # which is what the Setup Manual draws ("TIME: XX:XX AM PM"). HOW a
+        # real console marks which half is picked was unrecorded until a video
+        # of one settled it: the halves keep a fixed AM PM order and the same
+        # blinking cursor that walks the digits moves onto the FIRST LETTER of
+        # the chosen one. Read frame by frame the panel goes
+        #   TIME: 03:02 _M PM   (AM chosen)
+        #   TIME: 03:02 AM _M   (PM chosen)
+        # and on ENTER the line collapses to the chosen half alone. See
+        # UNKNOWNS A4b for the video and the timestamps.
+        am, pm = "AM", "PM"
+        if self._blink and self.on_meridiem:
+            if self.meridiem == "AM":
+                am = "_M"
+            else:
+                pm = "_M"
+        return f"{digits[:2]}:{digits[2:]} {am} {pm}"
+
+    def _entry_cells(self):
+        """How many cells this field's template has, or None if it is free.
+
+        A date is eight, `--/--/----`, and a time is four. Everything else
+        -- a label, a number, a float -- is as long as it is.
+        """
+        if self._date_entry():
+            return 8
+        if self._time_field():
+            return 4
+        return None
 
     def _put(self, ch):
         """Type a character where the cursor is, and move past it."""
+        cells = self._entry_cells()
+        if cells is not None and self.cur >= cells:
+            # The cursor cannot walk off the end of a fixed template. Without
+            # this a ninth digit on a date grew the buffer while the display
+            # went on showing the first eight, so the screen read as a
+            # complete entry and ENTER refused it.
+            return
         text = self.buf.ljust(self.cur)
         self.buf = text[:self.cur] + ch + text[self.cur + 1:]
         self.cur += 1
@@ -2354,7 +4307,15 @@ class SimApp(tk.Tk):
         if self.msg:
             return self.msg.split(chr(10))[:ROWS]
         if self.locked:
-            return ["SYSTEM SECURITY", "CODE: " + "*" * len(self.buf) + "_"]
+            return ["SYSTEM SECURITY",
+                    "CODE: " + "*" * len(self.buf) + CURSOR]
+        if self.maint_report:
+            # Chapter 32's screen, reached by a key rather than by a
+            # function, so it is drawn wherever the console was standing --
+            # including the resting screen, whose branch below returns
+            # before `self.confirm` is ever looked at.
+            return list(self.confirm or ["MAINTENANCE REPORT",
+                                         "PRESS <PRINT>"])
         if MODES[self.mode] == "NORMAL" and not self._entered:
             # the status display a console sits on, cycling any active alarms
             # The console's resting screen, as photographed: the date and time
@@ -2362,11 +4323,20 @@ class SimApp(tk.Tk):
             clock = self.console.clock_text()
             al = self._alarms()
             if not al:
-                return [clock, "ALL FUNCTIONS NORMAL"]
+                # centred on the glass, as photographed: two cells in
+                return [clock, "ALL FUNCTIONS NORMAL".center(COLS)]
             # "If more than one condition exists, the display will alternately
             # flash all messages": and a single unacknowledged one flashes on
             # its own, which is what the manual's example screen is showing.
-            a = al[self._cycle % len(al)]
+            #
+            # A message holds for a whole flash, which is why this counts in
+            # PAIRS of polls. `_blink` and `_cycle` both advance once a poll,
+            # so stepping the message once a poll locked them together: with
+            # an even number of alarms every message landed on the same half
+            # of the flash every time, and half of them were blanked on every
+            # pass. Two alarms meant one of them was never drawn at all.
+            # See FIDELITY U2.
+            a = al[(self._cycle // 2) % len(al)]
             key = a["aa"] + a["nn"] + a["tt"]
             if key not in self.console.acked and self._blink:
                 return [clock, ""]
@@ -2374,7 +4344,16 @@ class SimApp(tk.Tk):
         if self.confirm:
             return list(self.confirm)
         if self.step == MODE_SCREEN:
-            return [f"{MODES[self.mode]} MODE".replace("NORMAL MODE", "MODE"),
+            # **Centred, as photographed on a real console.** `SETUP MODE`
+            # and `DIAG MODE` both sit in the middle of the top line with
+            # seven blank cells before them, where a FUNCTION screen's name
+            # -- `SYSTEM DIAGNOSTIC` in the same set of photographs -- is
+            # hard against the left. So it is the mode screen that centres
+            # and not the console, which is why left-aligning both looked
+            # right until the glass was seen. The resting screen's own
+            # `ALL FUNCTIONS NORMAL` was already centred here for the same
+            # reason and off the same kind of evidence.
+            return [MODE_SCREEN_NAME[MODES[self.mode]].center(COLS),
                     CONT_FUNCTION]
         fn = self.cur_function()
         if fn is None:
@@ -2384,10 +4363,42 @@ class SimApp(tk.Tk):
             # the function's own screen, which is where FUNCTION lands
             return [fn["function"][:COLS], CONT_STEP]
         text = e["text"].split("(")[0].strip().upper()
+        if e.get("map"):
+            # 576013-623 Rev AN p.17-5's own two lines, and the row's cells
+            # sit under the words they belong to rather than evenly.
+            cells = (self.buf or MAP_BLANK).split()
+            if self.editing and self._blink:
+                cells = list(cells)
+                n = self.slot % len(MAP_CELLS)
+                cells[n] = " " * len(cells[n])
+            return [e["head"][:COLS], self._map_row(cells)]
+        if e.get("vmc") == "remove":
+            # 576013-623 Rev AN p.27-2. The screen that removes a VMC asks
+            # twice, and its two questions are drawn differently: the first
+            # is a value on the controller's own line, the second is a
+            # question over the serial being removed. Neither has a space
+            # before its colon and the second has no colon at all.
+            held = self.console.vmc_serial(self.device) or ""
+            if self.vmc_remove.startswith("sure"):
+                return [f"REMOVE VMC: {held}"[:COLS],
+                        f"ARE YOU SURE? "
+                        f"{'YES' if self.vmc_remove == 'sure_yes' else 'NO'}"]
+            return [f"x {self.device}: {held}".rstrip()[:COLS],
+                    f"REMOVE VMC: "
+                    f"{'YES' if self.vmc_remove == 'yes' else 'NO'}"]
+        if e.get("offset"):
+            # p.17-6: three cells naming the meter and one the panel sets.
+            cells = screens.offset_cells(self.console, e.get("meter"))
+            if self.editing:
+                cells[-1] = self.buf or "+0.00"
+                if self._blink:
+                    cells[-1] = " " * len(str(cells[-1]))
+            return [e["head"][:COLS], screens.offset_row_text(cells)]
         f = self.cur_field() or {}
         if f.get("kind") == "slots":
             # a config screen is per MODULE: which positions are connected
-            wires = f.get("slots") or 4
+            wires = (self.console.positions(f["code"][1:4])
+                     or f.get("slots") or 4)
             base = ((self.device - 1) // wires) * wires
             cells = (self.buf if self.editing else
                      self.console.slot_text(f["code"][1:4], wires,
@@ -2397,13 +4408,101 @@ class SimApp(tk.Tk):
                 cells[self.slot % max(len(cells), 1)] = " "
             return [self._module_head(text, base // wires + 1)[:COLS],
                     ("SLOT #: " + " ".join(cells))[:COLS]]
+        if MODES[self.mode] == "DIAGNOSTIC" and e.get("buf") and self.editing:
+            # "ENTER ID TO BLOCK / ID: XXXXXX", with the ID going in -- and
+            # the Service Notice duration is the same shape with its own
+            # prompt, "DURATION : 1". The prompt comes off the field where
+            # the screen names one.
+            from .console import FIELDS
+            prompt = (FIELDS.get(e.get("console") or "", {}).get("prompt")
+                      or "ID:")
+            return [self.console.diag_line(e["text"], self.device)[:COLS],
+                    f"{prompt} {self.buf}"[:COLS]]
         if self.editing:
+            if self._live_mode():
+                # The live modes draw their own screens while a value is
+                # going in, and three branches written for exactly that were
+                # unreachable because this returned first: what the panel
+                # showed was the step's NAME over the digits, where the
+                # manual keeps the head and the label and puts the digits
+                # after the label. Worst of the three was Manual
+                # Adjustments, whose "head" was the raw `%s` format string
+                # out of recondata.json, uppercased. See FIDELITY O11.
+                if MODES[self.mode] == "RECONCILIATION":
+                    return self._recon_lines(e, text)
+                if e.get("dlv"):
+                    return self._delivery_lines(e, text)
+                if e.get("entry"):
+                    # "TEST DURATION: ALL TANKS" over "DURATION: XX",
+                    # 576013-610 Rev AC p.20-2
+                    return [self._scope_head(e, text)[:COLS],
+                            f"DURATION: {self._edit_text()}"[:COLS]]
+                if e.get("density"):
+                    # "T 1: XXXX DELIVERY" over "DENSITY         :5.9972",
+                    # "where XXXX = NEXT or LAST" -- p.4-5, and the same
+                    # label-and-gap shape the setup manual gives the tank's
+                    # own density step
+                    return [self._named_head(e["head"])[:COLS],
+                            f"DENSITY         :{self._edit_text()}"[:COLS]]
+                if e.get("pick") == "device":
+                    # `TEST OUTPUT RELAYS` over `ENTER RELAY NUMBER #`,
+                    # with the number going in where the `#` is. The head
+                    # is the function's own name on p.22-1 and stays there
+                    # while you type; the fallback below would have put the
+                    # step's name over the bare digits.
+                    return [self._scope_head(e, text)[:COLS],
+                            e["body"].replace("#", self._edit_text())[:COLS]]
+                return [text[:COLS], self._edit_text()[:COLS]]
             if MODES[self.mode] != "SETUP":
                 return [text[:COLS], self._edit_text()[:COLS]]
             if self._is_label_step(e):
                 return [self._enter(text)[:COLS],
                         f"{self._device_code()}{self.device}: "
                         f"{self._edit_text()}"[:COLS]]
+            scoped = self._setup_scope_head(e)
+            if scoped is not None:
+                # **A screen that names its own scope keeps that name while
+                # you change it.** `screens.setup_lines` draws these as
+                # `TST EARLY STOP: ALL TANKS` over the value, and the edit
+                # went through the generic path below instead -- so CHANGE
+                # on that screen replaced BOTH lines, heading it with the
+                # tank's product label and putting the step's own words,
+                # `LEAK TEST EARLY STOP:`, in front of the value. Thirty
+                # columns on a twenty-four column display, and a screen
+                # that changed identity at the first press of a key. The
+                # same argument as the console-setting prompt below: the
+                # console must not contradict itself about which screen
+                # you are on. See UNKNOWNS B9.
+                return [scoped[:COLS],
+                        self._second(e.get("l2", ""),
+                                     self._edit_text())[:COLS]]
+            if e.get("console"):
+                # **A console setting keeps its prompt while you type in
+                # it.** `screens.py` draws the resting screen as the
+                # field's own prompt and its value -- `BDIM TRANS ALARM
+                # DELAY` over `HOURS: 024`, `ISO 3166 COUNTRY` over
+                # `CODE:` -- and this path dropped the prompt on the first
+                # press of CHANGE, so the only word telling a technician
+                # what unit they were typing went away at the moment they
+                # started typing. The two screens either side of them, on
+                # the same function, keep theirs, because those are S-code
+                # fields and go through `_second` below.
+                #
+                # The Diagnostic Mode branch two hundred lines up has read
+                # the prompt off the same field all along, for the Service
+                # Notice duration: "the prompt comes off the field where
+                # the screen names one". No manual page draws the mid-edit
+                # state of any of them -- see UNKNOWNS B9 -- so what
+                # settles it is that the console must not contradict
+                # itself three screens apart.
+                from .console import FIELDS
+                prompt = FIELDS.get(e["console"], {}).get("prompt")
+                if prompt is None:
+                    prompt = text + ":"
+                prompt = prompt.replace("%d", str(self.device))
+                head, _label = self._setup_context(e, text)
+                return [head[:COLS],
+                        self._second(prompt, self._edit_text())[:COLS]]
             head, label = self._setup_context(e, text)
             return [head[:COLS],
                     self._second(label, self._edit_text())[:COLS]]
@@ -2435,13 +4534,30 @@ class SimApp(tk.Tk):
                 return [head[:COLS], "PRESS PRINT FOR HISTORY"]
             head = self._scope_head(e, text)
             if e.get("sel"):
-                return [head[:COLS], self._choice(e)[:COLS]]
+                # A choice the manual draws behind a word of its own:
+                # 576013-610 Rev AC p.5-1 puts `SELECT: EDIT/VIEW` under
+                # EDIT/VIEW OR INSERT, where this drew the bare choice.
+                # See FIDELITY O7.
+                pick = self._choice(e)
+                label = e.get("sel_label")
+                return [head[:COLS],
+                        (f"{label}: {pick}" if label else pick)[:COLS]]
             if e.get("entry"):
                 # "TEST DURATION: ALL TANKS / DURATION: XX"
                 return [head[:COLS],
                         f"DURATION: {self.sel.get(e['entry'], '')}"[:COLS]]
             if e.get("action"):
-                return [head[:COLS], "PRESS <ENTER>"]
+                # An action the manual asks twice for draws its own answer:
+                # 576013-610 Rev AC p.8-2 puts `CLOSE NOW: NO` under CLOSE
+                # CURRENT SHIFT and says "Press CHANGE, ENTER, then STEP to
+                # close the current shift", which is the same dance
+                # Reconciliation Mode's own close already does. An action
+                # with no such line is still a plain PRESS <ENTER>.
+                body = e.get("body")
+                if body and ":" in body:
+                    body = (body[:body.rfind(":") + 1]
+                            + (" YES" if self.armed else " NO"))
+                return [head[:COLS], (body or "PRESS <ENTER>")[:COLS]]
             if e.get("livehead"):
                 # a header the console dates itself: "REPORT DATE: AUG 23
                 # 2026 / PRESS <ENTER>" on the ISD report functions
@@ -2455,39 +4571,115 @@ class SimApp(tk.Tk):
             head_spec = e.get("head")
             if head_spec and "%d" in head_spec:
                 # "Q 1: PLLD #1": a screen that names its own head, with the
-                # device number in it
-                return [self._named_head(head_spec)[:COLS],
-                        (live or "")[:COLS]]
+                # device number in it -- and, where the manual words the line
+                # under it, that shape too: "T 1: NEXT DELIVERY" over
+                # "DENSITY = X.XXXX" (576013-610 Rev AC p.4-5).
+                shape = e.get("reading")
+                body = (shape.format(live.strip()) if shape and live
+                        else (live or ""))
+                return [self._named_head(head_spec)[:COLS], body[:COLS]]
             if head_spec == "device":
                 # "s 1: SUMP 1 / 0.000 IN     74.8 F": the mag sump screens
                 # are headed by the sensor and its label rather than by what
                 # the step is called (576013-610 Rev AC p.82, p.86)
-                letter = self._device_code()
-                code = {"T": "602", "L": "702", "V": "707", "G": "712",
-                        "C": "742", "H": "747", "s": "722", "Q": "782",
-                        "W": "7A2", "P": "760", "R": "807", "I": "802",
-                        "r": "7C5"}.get(letter, "602")
-                label = (self.console.text(code, self.device)
-                         or f"{DEVICE_WORD.get(letter, 'DEVICE')} "
-                            f"{self.device}")
-                head = f"{letter} {self.device}: {label}"
+                head = self._device_head()
                 if live and chr(10) in live:
                     one, two = live.split(chr(10), 1)
                     return [one[:COLS], two[:COLS]]
+                shape = e.get("reading")
+                if shape and live:
+                    # a device-headed screen whose second line is the
+                    # reading inside a phrase: "ON - PRESS ANY KEY"
+                    return [head[:COLS], shape.format(live.strip())[:COLS]]
                 return [head[:COLS], (live or "")[:COLS]]
+            if head_spec == "product":
+                # "The product name displayed is of the lowest tank number
+                # containing the product", and the manual heads every one of
+                # FUEL MANAGEMENT's screens with that name ALONE --
+                # `REGULAR UNLEADED` -- where this console drew
+                # `T 1: DIESEL`. FIDELITY O4.
+                return [self.console.fuel_label(self.device)[:COLS],
+                        (live or "")[:COLS]]
             if head_spec == "plain":
                 # a site-wide reading: no device prefix, the ISD status
                 # screens are about the site, not a tank
                 return [text[:COLS], (live or "")[:COLS]]
-            head = f"{self._device_code()} {self.device}:{text}" if live else text
-            return [head[:COLS], live[:COLS] if live else "PRESS <STEP>"]
+            if live:
+                # 576013-610 Rev AC p.4-1 draws a reading as the device
+                # and its label over "LABEL = value UNITS", with its own
+                # worked example: "T 1: UNLEADED" over
+                # "VOLUME = 10,000 GAL". This used to head the screen
+                # with the step's NAME jammed against the colon and put a
+                # bare right-justified number underneath, which no manual
+                # draws -- grepping all 28 extractions for "T 1:VOLUME"
+                # returns nothing. screens.setup_context has done it the
+                # manual's way for Setup Mode all along; this is the
+                # sibling it never got.
+                # A screen the manual draws its own way says so, and says
+                # it the way the manual reads: the sensor status screens
+                # are "L1: (Location)" over "SENSOR NORMAL" (p.16-1), the
+                # test results are "GRS: (Date) (Results)" (p.9-1), and
+                # the last-shift readings are "BEGIN INVENTORY: XXXXXX"
+                # (p.8-1). The rule above is for the readings the manual
+                # draws with an "=".
+                shape = e.get("reading")
+                value = live.strip()
+                # A reading with nothing behind it is the label alone. The
+                # manual never draws a dangling "=", and a screen that has
+                # no value yet is not a screen with an empty one.
+                if shape:
+                    body = shape.format(value)
+                elif value and len(text) + 3 + len(value) <= COLS:
+                    body = f"{text} = {value}"
+                else:
+                    # No room for the value beside the label, or no value to
+                    # put there. LAST DELIVERY DENSITY is 21 characters, so
+                    # "LABEL = value" fills the display before the value
+                    # starts -- and the manual names that step in its flow
+                    # chart without ever drawing its screen, so what a real
+                    # console shortens it to is not recorded. See UNKNOWNS
+                    # A20. The label alone is at least a line the manual has.
+                    body = text
+                    
+                return [self._device_head()[:COLS], body[:COLS]]
+            return [text[:COLS], "PRESS <STEP>"]
         if MODES[self.mode] == "DIAGNOSTIC" and e.get("act"):
             # "RESET ACCUCHART NO ... Selecting YES clears the AccuChart Tank
             # Profile": CHANGE walks the answer, ENTER does it.
-            head = self.console.diag_line(e["text"], self.device)
-            body = (e.get("l2") or "")
-            body = body[:body.rfind(":") + 1] + (" YES" if self.armed
-                                                 else " NO")                 if ":" in body else body
+            #
+            # A screen carrying BOTH a reader and an action reads: this
+            # branch used to take the head from the manual's literal and
+            # leave the `live` unreachable, so `BLOCK: XXXXXX` never became
+            # `BLOCK: A54321`. See FIDELITY D13.
+            body = e.get("l2") or ""
+            if e.get("verbatim"):
+                head = e["text"]
+            elif e.get("live"):
+                read = self.console.diag_value(e["live"], self.device,
+                                               self._diag_kind()) or ""
+                # a reader that answers on BOTH lines answers both of them:
+                # `COMM 1 (RS-232)` over `REINIT COMM BD: NO` is one token,
+                # and taking only its first line ran the two together
+                head, _sep, second = read.partition(chr(10))
+                head = head or e["text"]
+                body = second or body
+            else:
+                head = self.console.diag_line(e["text"], self.device)
+            # **The answer is the last word, not whatever follows a colon.**
+            #
+            # This keyed the YES/NO swap on finding a colon in the line, and
+            # `RESET ACCUCHART NO` is the manual's own wording for Figure
+            # 6-10's last screen and has none -- so CHANGE armed the reset,
+            # the line went on reading NO, and ENTER then cleared the tank
+            # profile and restarted the 56-day calibration with nothing on
+            # the glass having said it was about to. Arming a destructive
+            # action invisibly is the exact failure the console's
+            # CHANGE-then-ENTER design exists to prevent. FIDELITY D18.
+            word = " YES" if self.armed else " NO"
+            for tail in ("YES", "NO"):
+                if body.endswith(tail):
+                    body = body[:-len(tail)].rstrip() + word
+                    break
             return [head[:COLS], body[:COLS]]
         if MODES[self.mode] == "DIAGNOSTIC":
             # Two lines straight from the manual, but pointed at THIS console:
@@ -2496,7 +4688,16 @@ class SimApp(tk.Tk):
             head = self.console.diag_line(e["text"], self.device)
             body = (self.console.diag_value(e["live"], self.device,
                                             self._diag_kind())
-                    if e.get("live") else (e.get("l2") or ""))
+                    if e.get("live") else "")
+            if not body:
+                # A reading this console cannot take falls back to the line
+                # the manual draws rather than to nothing: ORIG and CURR REF
+                # DISTANCE answer for a Mag probe and not for a capacitance
+                # one -- "Probe types 01=CAP0 and 02=CAP1 are not supported
+                # by this command" -- and two of the three shipped presets
+                # fit CAP probes. A console never draws a blank line.
+                # FIDELITY D2.
+                body = e.get("l2") or ""
             if body and chr(10) in body:
                 # the line leak diagnostics read on BOTH lines: a pressure and
                 # a pair of switch states, not a label over a value
@@ -2505,9 +4706,19 @@ class SimApp(tk.Tk):
         if self._chart_locked(e):
             # "TANK PROFILE : 50 PTS / ENTER PASSCODE->______<", with the
             # passcode going in, which is the one setup screen that reads
-            # off the panel rather than off the console
-            return ["TANK PROFILE : 50 PTS",
-                    "ENTER PASSCODE->" + "*" * len(self.buf) + "_"]
+            # off the panel rather than off the console.
+            #
+            # The field is SIX cells between the arrow and the closing `<`,
+            # and it keeps its width as the digits go in -- 576013-623 Rev AN
+            # p.5-27, and the same construction `_change_into` already used
+            # two screens down. This drew `ENTER PASSCODE->***` with no field
+            # and no closing bracket, which the citation audit only accepted
+            # because a prefix of the manual's line is still a prefix.
+            typed = "".join(ch for ch in self.buf if ch.isdigit())[:6]
+            field = "*" * len(typed) + "_" * (6 - len(typed))
+            if self._blink and len(typed) < 6:
+                field = field[:len(typed)] + CURSOR + field[len(typed) + 1:]
+            return ["TANK PROFILE : 50 PTS", f"ENTER PASSCODE->{field}<"]
         if e.get("profile") and self._profile_pending:
             # "CLEAR EXISTING PROFILE / ARE YOU SURE? : NO"
             return ["CLEAR EXISTING PROFILE",
@@ -2515,9 +4726,17 @@ class SimApp(tk.Tk):
         if e.get("archive"):
             text = e["text"].split("(")[0].strip().upper()
             if self.sure:
-                # the choice is made; the console asks it again
+                # the choice is made; the console asks it again.
+                #
+                # A SPACE before the colon, which the manual does not print.
+                # Photographed on a real console mid-restore: `RESTORE SETUP
+                # DATA: YES / ARE YOU SURE? : YES`. The mark measures to the
+                # centre of cell 14 within 0.05 of a cell, where a flush
+                # colon would sit in cell 13 -- a full cell away. The other
+                # ARE YOU SURE screens keep the manual's flush colon until a
+                # photograph says otherwise; see UNKNOWNS B4.
                 return [f"{text}: YES"[:COLS],
-                        f"ARE YOU SURE?: {'YES' if self.armed else 'NO'}"]
+                        f"ARE YOU SURE? : {'YES' if self.armed else 'NO'}"]
             return ["ARCHIVE UTILITY",
                     f"{text}: {'YES' if self.armed else 'NO'}"[:COLS]]
         if e.get("point") and e["point"] in self._point:
@@ -2629,8 +4848,17 @@ class SimApp(tk.Tk):
     _second = staticmethod(screens.second)
 
     def _shown(self):
-        """What line two reads, defaulted the way a console out of the box is."""
-        return screens.shown(self.console, self.cur_field(), self._stored())
+        """What line two reads, defaulted the way a console out of the box is.
+
+        Through `screen_word`, because this is the PANEL's view: a field
+        can be rendered one way on the glass and another on the paper and
+        the wire, and ULLAGE is (p.5-14 draws `90 PERCENT`, the site tape
+        prints `ULLAGE: 90%`). Both uses of this are panel-side -- the
+        value CHANGE walks from, and the seed CHANGE puts in the buffer.
+        """
+        f = self.cur_field()
+        return screens.screen_word(
+            f, screens.shown(self.console, f, self._stored()))
 
     def _masked(self, value):
         """`value` drawn in the field's own fixed-width mask."""
@@ -2676,13 +4904,26 @@ class SimApp(tk.Tk):
                 named = self.console.text("522", self.device)
                 return (f"D{self.device}: {named}".rstrip(),
                         label or text + ":")
-            return f"COMM BOARD: {self.device}", label or text + ":"
+            # "COMM BOARD: 1 (Type)" -- 576013-623 Rev AN p.6-2 draws the
+            # card in the slot beside its number, and draws it on the
+            # screen you are CHOOSING on: its `PARITY: ODD` figure is the
+            # screen after CHANGE has moved parity off NONE and it still
+            # reads `(Type)`. `screens.py` was fixed and this path was not,
+            # so the board type vanished from the head on the first press
+            # of CHANGE and came back when you stepped away.
+            return (f"COMM BOARD: {self.device} "
+                    f"({self.console.comm_board_name(self.device)})",
+                    label or text + ":")
         letter = self._device_code()
         named = self.console.text(
             {"T": "602", "L": "702", "V": "707", "G": "712", "C": "742",
              "H": "747", "s": "722", "Q": "782", "W": "7A2", "P": "760",
              "R": "807", "I": "802", "r": "7C5"}.get(letter, "602"),
             self.device)
+        if step.get("bare"):
+            # the value stands on its own under the device's own head, with
+            # no prompt in front of it. See `screens.setup_context`.
+            return f"{letter}{self.device}: {named}".rstrip(), ""
         return f"{letter}{self.device}: {named}".rstrip(), label or text + ":"
 
     def _guard(self, fn):
@@ -2703,6 +4944,19 @@ class SimApp(tk.Tk):
 
     def _keyed(self):
         self._last_key = time.time()
+        # The white key's MAINTENANCE REPORT screen is not a step of any
+        # function, so nothing else would take it back off the glass. Any
+        # key leaves it; `k_white` and `k_print` put it back, because those
+        # are the two the screen itself names.
+        self.maint_report = False
+        # `ON - PRESS ANY KEY`, and 576013-610 Rev AC p.2-5 says what the
+        # any key is for: "Press any key to printout Relay Setup". This
+        # runs before every handler's own work, so the key that cashes it
+        # still does whatever else it does. See FIDELITY U8.
+        if getattr(self, "relay_setup_due", False):
+            self.relay_setup_due = False
+            self.paper_out(printer.relays(self.console))
+            self.log("-- PRINT: output relay setup")
 
     def _sync_device(self):
         """Keep TANK/SENSOR pointed at a device this function actually has.
@@ -2716,6 +4970,10 @@ class SimApp(tk.Tk):
             self.device = devices[0]
 
     def _render(self):
+        # the backlight is on whenever the console is, unless SW2-3 has
+        # blanked the display
+        self.lcd.backlight(self.console.powered
+                           and not self.console.display_blanked)
         if self.console.display_blanked and self.console.powered:
             # SW2-3 closed: the display is off, the console is not. Keys,
             # serial and printer all still work; you just cannot see.
@@ -2723,6 +4981,15 @@ class SimApp(tk.Tk):
                 self.lcd.itemconfig(_rid, text="")
             self.hint.config(text="DISPLAY OFF   |   DIP SW2-3 is closed "
                                   "(Switches menu)")
+            return
+        if self._busy() and getattr(self, "busy_line", None):
+            for _i, _rid in enumerate(self._text_ids):
+                self.lcd.itemconfig(
+                    _rid,
+                    text=["ARCHIVE UTILITY",
+                          self.busy_line][_i].ljust(COLS)[:COLS])
+            self.hint.config(text="saving setup data; the console does not "
+                                  "answer the keypad while it works")
             return
         if self.isdflow:
             for _i, _rid in enumerate(self._text_ids):
@@ -2742,6 +5009,16 @@ class SimApp(tk.Tk):
             self.hint.config(text="ISD shutdown override: ENTER, CHANGE "
                                   "picks YES, ENTER overrides and logs it")
             return
+        if self.mt_login:
+            self._mt_timed_out()
+        if self.mt_login:
+            rows = self._mt_lines()
+            for _i, _rid in enumerate(self._text_ids):
+                self.lcd.itemconfig(_rid, text=rows[_i].ljust(COLS)[:COLS])
+            self.hint.config(text="Maintenance Tracker log-in: STEP asks for "
+                                  "the key, ENTER reads the one in the port "
+                                  "(card cage tab), any key leaves")
+            return
         if self.boot_restore:
             # the cold-start restore offer, drawn the way 576013-637 shows
             # it: the clock over the question, then the step prompt
@@ -2758,8 +5035,8 @@ class SimApp(tk.Tk):
                                   "NO carries on without restoring")
             return
         if not self.console.powered:
-            # dark glass: not even the ghosts of the unlit segments change,
-            # but the text is gone and so is the status line under the face
+            # dead glass: the backlight is off, the text is gone and so is
+            # the status line under the face
             for _rid in self._text_ids:
                 self.lcd.itemconfig(_rid, text="")
             self.hint.config(text="NO AC POWER   |   the breaker is off "
@@ -2789,11 +5066,24 @@ class SimApp(tk.Tk):
         self.hint.config(text="   |   ".join(bits))
 
     def _flash(self, text):
+        # Cancel the timer the LAST flash left running, or it clears this
+        # one early: two messages inside a second and a half is ordinary on
+        # a panel -- an INVALID ENTRY and then another -- and the first
+        # one's timer was wiping the second one's message. It showed up as a
+        # test that failed only in a full run, which is the shape V0 warns
+        # about.
+        pending = getattr(self, "_flash_id", None)
+        if pending is not None:
+            try:
+                self.after_cancel(pending)
+            except tk.TclError:                        # pragma: no cover
+                pass
         self.msg = text
         self._render()
         self._flash_id = self.after(1500, self._clear)
 
     def _clear(self):
+        self._flash_id = None
         self.msg = ""
         self._render()
 
@@ -2802,7 +5092,8 @@ class SimApp(tk.Tk):
             # the site outside carries on; the console does not
             for key in ("power", "warn", "alarm"):
                 self._set_led(key, False)
-            for sync in getattr(self, "_site_sync", []):
+            for sync in (list(getattr(self, "_site_sync", []))
+                         + list(getattr(self, "_traffic_sync", []))):
                 try:
                     sync()
                 except Exception:
@@ -2823,7 +5114,8 @@ class SimApp(tk.Tk):
             self.editing, self.buf, self.confirm = False, "", None
             self.console.in_setup = False
             self.log("-- 15 minutes idle: returned to Operating Mode")
-        for sync in getattr(self, "_site_sync", []):
+        for sync in (list(getattr(self, "_site_sync", []))
+                     + list(getattr(self, "_traffic_sync", []))):
             try:
                 sync()
             except Exception:
@@ -2835,62 +5127,167 @@ class SimApp(tk.Tk):
         # acknowledged alarm whose cause is still there keeps its light, and a
         # corrected one that nobody has acknowledged yet has gone dark while
         # its message is still on the display.
-        cond = [a for a in describe_alarms(self.console.conditions())
-                if not a["description"].endswith("Active")]
-        warn = any("Warning" in a["description"] for a in cond)
-        alarm = any("Warning" not in a["description"] for a in cond)
+        # BOTH of these tests used to be case-sensitive, and the console's
+        # own descriptions are not written in one case: fifteen are title
+        # case and thirty-one are capitals, so `"Warning" in description`
+        # saw six categories and sent the other thirty-one conditions to the
+        # RED lamp. `SETUP DATA WARNING` was yellow under a liquid sensor and
+        # red under a tank, a line and a pressure line -- one message, three
+        # devices, two different lights.
+        #
+        # Photographed on a real console, which is what settles it: the glass
+        # reads `Q 1:SETUP DATA WARNING` -- category 21, capitals, the
+        # thirty-one -- with the YELLOW lamp lit and the red one dark. And
+        # 576013-623 Rev AN p.5-1 names it, "the yellow warning light will
+        # flash".
+        #
+        # `endswith("Active")` was dead for the same reason: the only two
+        # descriptions that end in the word, `TANK TEST ACTIVE` and `RELAY
+        # ACTIVE`, are capitals, so neither was ever exempted.
+        #
+        # **The lamp comes off the manual's own column now**, which is the
+        # half of this that was left open: 576013-610 Rev AC chapter 29
+        # heads every one of its message tables `Display Message | Front
+        # Panel Indicator | Cause | Action`, and the second column is the
+        # lamp, one row at a time. `front_panel_indicator` reads the
+        # 68 messages the tables name, plus five whose lamp differs between
+        # sensor families.
+        #
+        # **It cannot be worked out from the message**, which is what the
+        # string match was trying to do: `HIGH PRODUCT ALARM` is a Warning
+        # with the word ALARM in it, `PAPER OUT` and `TANK SIPHON BREAK`
+        # carry neither word, and `LIQUID WARNING` is an Alarm on a Type B
+        # sensor and a Warning on a liquid one. Eighteen conditions were on
+        # the wrong lamp, every one of them red where the page says yellow.
+        #
+        # The substring test stays as the fallback for the 159 rows no
+        # table names -- most of them families whose chapter is in another
+        # manual -- and so does the `ACTIVE` exemption, for the same rows.
+        # Where the page speaks it wins: `TANK TEST ACTIVE` is one of its
+        # Warnings, and that exemption was this project's own.
+        # **And it lights for what the console is SHOWING, not for what is
+        # merely true.** 576013-610 Rev AC p.29-1 keeps the two together:
+        # "When no warning or alarm conditions exist, the system displays
+        # the ALL FUNCTIONS NORMAL message. If an alarm or warning
+        # condition does exist, the system displays the type and location
+        # of the condition."
+        #
+        # The lamps read `conditions()`, the RAW list, where the glass is
+        # drawn from `compute_alarms()` -- and Alarm Reduction sits between
+        # the two. A water alarm has a three minute filter, "the Water
+        # Alarm Filter allows the user to select from several filters that
+        # will delay the POSTING of a water alarm" (623 p.7-15), so the red
+        # lamp stood over `ALL FUNCTIONS NORMAL` for three minutes with
+        # nothing posted and nothing for the technician to read. Probe Out
+        # has a two minute delay and the DIM comm alarms six. The console
+        # keeps the two lists apart carefully; only the lamp read the wrong
+        # one. See the alarm-lifecycle audit, A2.
+        #
+        # The intersection with `cond` is the other half of p.29-1 and was
+        # already right: "you cannot turn off warning and alarm lights
+        # until you correct the cause". A latched message whose cause has
+        # gone keeps its message -- it is still on `al` -- and drops its
+        # lamp, because it is no longer a condition.
+        live_now = {a["aa"] + a["nn"] + a["tt"]
+                    for a in describe_alarms(self.console.conditions())}
+        lit = [(a, self.lamp_for(a)) for a in al
+               if a["aa"] + a["nn"] + a["tt"] in live_now]
+        warn = any(which == "warning" for _a, which in lit)
+        alarm = any(which == "alarm" for _a, which in lit)
         self._set_led("power", True)
         self._set_led("warn", warn and self._blink)   # the manual: it flashes
         self._set_led("alarm", alarm)
+        # **And the console makes a noise about it.** 576013-610 Rev AC
+        # p.29-1 gives it a heading of its own -- "AUDIBLE ALARM / Press
+        # ALARM/TEST to silence the alarm" -- 576013-623 p.2-2 says the key
+        # "shuts off audible alarm", and 577013-814's operability
+        # procedures start a dozen numbered steps with "press the
+        # Alarm/Test key to silence the beeper".
+        #
+        # Nothing called `_beep` except the lamp test, so `silenced` was
+        # tracked exactly right and drove nothing audible: **there was no
+        # sound for ALARM/TEST to stop**, and a trainee was never taught
+        # the noise that makes somebody walk to the panel. A missing
+        # caller, not a missing feature.
+        #
+        # It sounds while a condition is standing and stops when the key is
+        # pressed, and a NEW condition clears `silenced` and starts it
+        # again -- `compute_alarms` does that already, on the manual's rule
+        # that an alarm which comes back is a new alarm.
+        #
+        # *One exception is documented and cannot be reached yet.* 623
+        # p.5-27 lists a Service Notice warning as posting a message and
+        # blinking the yellow lamp with the "console beeper silent", which
+        # only reads as an exception if the others sound. This console has
+        # no alarm number for Service Notice at all -- UNKNOWNS A26 -- so
+        # there is nothing here to exempt.
+        if (warn or alarm) and not self.console.silenced:
+            self._beep()
         self._cycle += 1
-        # "If your system has a printer, it will print an alarm or warning
-        # report when it detects a warning or alarm condition."
-        for tank, record in self.console.printed_deliveries:
-            # "when the system recognizes that a delivery occurred, an
-            # adjusted delivery report is automatically printed"
-            self.paper_out(printer.delivery(self.console, tank, record))
-            if self.console.licensed("bir"):
-                # a reconciling console prints the adjusted report too,
-                # which "takes into consideration all dispensing that
-                # occurred during the delivery"
-                self.paper_out(printer.adjusted_delivery(
-                    self.console, tank, record))
-            self.log(f"-- PRINT: delivery on tank {tank}, "
-                     f"{record.amount:.0f} gallons")
-        self.console.printed_deliveries.clear()
-        # "Confirmation Report": prints after a successful auto-dial call
-        for receiver in self.console.autodial.confirm_pending:
-            self.paper_out(["CONFIRMATION REPORT",
-                            f"RECEIVER {receiver}: CONNECTED",
-                            self.console.clock_text()])
-            self.log(f"-- PRINT: confirmation report, receiver {receiver}")
-        self.console.autodial.confirm_pending.clear()
-        # "Each time an AccuChart calibration is updated, a user notification
-        # message is sent to the local printer."
-        for tank, when in self.console.accuchart_log:
-            self.paper_out(printer.accuchart_update(self.console, tank, when))
-            self.log(f"-- PRINT: accuchart update on tank {tank}")
-        self.console.accuchart_log.clear()
-        keys = {a["aa"] + a["nn"] + a["tt"] for a in al}
-        if keys - self._posted:
-            self.paper_out(printer.alarms(self.console))
-            self.log("-- PRINT: alarm posted")
-        self._posted = keys
+        # Everything the console owes the paper, in the order it owes it.
+        #
+        # This was four queue drains and an alarm watermark written out here,
+        # which is why `run.py --headless` printed nothing at all and why the
+        # four automatic printouts the manuals promise had nowhere to live:
+        # the renderer for them belongs beside the other reports and the
+        # panel is not the only thing that should be able to ask. See
+        # FIDELITY P2. `printer.automatic` drains the queues, so whatever
+        # asks has to put the answer on the roll -- asking twice gets an
+        # empty list the second time.
+        for note, lines in printer.automatic(self.console):
+            self.paper_out(lines)
+            self.log(note)
+        # Auto-Transmit has no paper and no frame to show, so the serial log
+        # is where it is visible at all. See FIDELITY P3.
+        for note in self.console.autotx.notices:
+            self.log(note)
+        self.console.autotx.notices.clear()
         # On the bench, say WHY each message is still there: an alarm whose
         # cause is gone is only waiting to be acknowledged.
-        livekeys = {a["aa"] + a["nn"] + a["tt"] for a in cond}
+        # `live_now` is the same set the lamps were chosen from: a message
+        # is still standing if its condition is still true. This built its
+        # own set from a list that had the `ACTIVE` descriptions filtered
+        # out of it, so a running tank test read as "cause corrected" in
+        # the bench log while the test was still running.
         rows = []
         for a in al:
-            if (a["aa"] + a["nn"] + a["tt"]) in livekeys:
+            if (a["aa"] + a["nn"] + a["tt"]) in live_now:
                 tail = " (silenced)" if self.console.silenced else ""
             else:
                 tail = ": cause corrected, ALARM/TEST clears it"
             rows.append("  " + a["text"] + tail)
         txt = "  ALL FUNCTIONS NORMAL" if not rows else "\n".join(rows)
         self.alarm_lbl.config(text=txt, fg="#7bd88f" if not al else "#ff9b9b")
-        if not self.msg and (MODES[self.mode] == "NORMAL" or self.editing):
+        if not self.msg and (MODES[self.mode] == "NORMAL" or self.editing
+                             or self._live_screen()):
             self._render()
         self._poll_id = self.after(700, self._poll)
+
+    def _live_screen(self):
+        """Is the screen in front of you a READING rather than a setting?
+
+        The poll redrew the display in Operating Mode alone, so a screen
+        anywhere else that shows a live value was painted once when you
+        stepped onto it and then never again. **The console went on running
+        underneath it and the panel stopped saying so**, which is
+        indistinguishable from a console that has hung.
+
+        The Pressure Line Leak diagnostic is where it shows worst, because
+        that screen is the one you START a test from: ENTER runs the pump,
+        the line climbs to about thirty psi and ripples the way a submersible
+        does, ten seconds later the check valve seats it back to the relief
+        valve's setpoint and it bleeds down from there -- and every bit of
+        that was already modelled and none of it reached the glass. The
+        screen sat on RUNNING PUMP and one frozen pressure for the whole
+        half hour a 0.20 gph test takes. See FIDELITY U3, which measured
+        that test's length and did not notice the panel was not drawing it.
+
+        A screen carrying a `live` token is the whole of the rule: it is
+        what the Diagnostic and Reconciliation screens use for a value the
+        console reads rather than one it stores, and a stored value cannot
+        change without a keypress that repaints anyway.
+        """
+        return bool((self.cur_step() or {}).get("live"))
 
     def destroy(self):
         """Stop the timers before the window goes, or they fire into nothing."""
@@ -2903,9 +5300,112 @@ class SimApp(tk.Tk):
                     pass
         super().destroy()
 
+    @staticmethod
+    def lamp_for(entry):
+        """Which front-panel lamp one condition lights, or None.
+
+        `front_panel_indicator` is 576013-610 Rev AC chapter 29's own
+        `Front Panel Indicator` column, 68 messages plus five that depend
+        on the sensor family. Where it does not speak -- 159 of the
+        console's rows, most of them families whose chapter is in another
+        manual -- this falls back to the substring test the lamp used to be
+        chosen by, and to the `ACTIVE` exemption, which is this project's
+        own and applies only to rows no page has settled.
+        """
+        found = front_panel_indicator(entry["description"], entry["aa"])
+        if found:
+            return found
+        if entry["description"].upper().endswith("ACTIVE"):
+            return None
+        return ("warning" if "WARNING" in entry["description"].upper()
+                else "alarm")
+
     def _set_led(self, key, on):
         cv, oval, colour = self.led[key]
-        cv.itemconfig(oval, fill=colour if on else LED_OFF)
+        fill = colour if on else LED_OFF
+        cv.itemconfig(oval, fill=fill)
+        cv.itemconfig(self._glint[key], fill=blend(fill, "#ffffff", 0.45))
+
+    # ---- the beeper -------------------------------------------------------
+    # A TLS-350 has one, the Operator's Manual counts it as one of the ways
+    # the console tells you something is wrong, and Setup can turn it off:
+    # "System Beeper (Enable/Disable)", value S53000. Nothing here made a
+    # sound until now, which made the setting decorative and the annual
+    # audible test impossible to rehearse.
+    BEEP_HZ, BEEP_MS = 2400, 220
+
+    def beeper_enabled(self):
+        """Is the beeper switched on in Setup? Default is on."""
+        return (self.console.values.get("S53000") or "1") != "0"
+
+    def _beep(self, times=1):
+        """Make the noise, if this console is set to make it."""
+        if not self.beeper_enabled() or not self.console.powered:
+            return
+        try:
+            import winsound
+            for _n in range(times):
+                winsound.Beep(self.BEEP_HZ, self.BEEP_MS)
+        except Exception:
+            try:
+                for _n in range(times):
+                    self.bell()
+            except Exception:
+                pass
+
+    # ---- the audible and visual test --------------------------------------
+    HOLD_SECONDS = 3.0
+
+    def _alarm_held_start(self, _ev=None):
+        """ALARM/TEST going down starts the clock on the hold."""
+        self._alarm_hold = self.after(int(self.HOLD_SECONDS * 1000),
+                                      self._lamp_test)
+
+    def _alarm_held_stop(self, _ev=None):
+        """Let go early and nothing happened."""
+        pending, self._alarm_hold = getattr(self, "_alarm_hold", None), None
+        if pending:
+            try:
+                self.after_cancel(pending)
+            except tk.TclError:
+                pass
+
+    def _lamp_test(self):
+        """The console's own self test, as the operability guide walks it.
+
+        577013-814, "TLS-3xx Audible and Visual Test Procedure": "1. Press and
+        Hold Alarm Test button for a minimum 3 seconds. 2. Verify Green Power,
+        Yellow Warning and Red Alarm LED indicators are lit and audible alarm
+        sounds. 3. The printer will automatically print a System Status
+        report." 576013-818 says the same in one line: "Press the ALARM/TEST
+        button to verify that the red ALARM and yellow WARNING LEDs illuminate
+        and the console beeper switches On."
+
+        This is step one of the annual inspection, so it is worth having the
+        bench do it exactly: all three lamps on together, the beeper, and the
+        report out of the slot.
+        """
+        self._alarm_hold = None
+        if not self.console.powered:
+            return
+        for key in ("alarm", "warn", "power"):
+            self._set_led(key, True)
+        self.log("-- ALARM/TEST held: lamp and beeper test")
+        self._beep()
+        try:
+            self.paper_out(printer.status(self.console))
+            self.log("-- PRINT: system status report")
+        except Exception:
+            pass
+        # then the lamps go back to telling the truth
+        self.after(1200, self._refresh_leds)
+
+    def _refresh_leds(self):
+        """Put the lamps back to what the console's state actually says."""
+        try:
+            self._render()
+        except tk.TclError:
+            pass
 
     def log(self, line):
         try:
@@ -2934,6 +5434,52 @@ class SimApp(tk.Tk):
             self.buf = ""
             return True
         return False
+
+    def _bench_say(self, text):
+        """Something the BENCH did, said where the bench says things.
+
+        A real console shows nothing when somebody fits a card, loads a
+        site, or changes its software: those are not things a console can be
+        told. Twelve of them were painted on the 24-column glass through
+        `_flash` anyway, which put `SITE LOADED`, `WILL NOT FIT` and
+        `CONSOLE RESET` on the same two rows the manual reserves for the
+        console's own screens.
+
+        `_abandon` has the rule -- "the bench may say what the console must
+        not" -- and the log under the panel is where the bench says it.
+        See FIDELITY U5.
+        """
+        self.log("-- " + " ".join(text.split()))
+
+    def _refuse(self, why):
+        """Refuse a typed value the way the console refuses one: silently.
+
+        **`INVALID ENTRY` is this project's screen and no console's.** It
+        stood at seventeen sites, over a second line that named the rule the
+        entry had broken -- NUMBERS ONLY, BAD DATE, ENTER 6 DIGITS, MAX n
+        CHARS, a range. Searched across every manual on the shelf, the tape
+        and 904 captured replies, the words appear nowhere.
+
+        What the manuals DO draw is two error messages, both for one
+        function: "the error message, 'DATE IS OUT OF RANGE,' will appear"
+        and "you will see an 'INVALID INSERT' error", 576013-610 Rev AC
+        p.5-2. Both of those are drawn here, in the manual's own words.
+        Everywhere else the console takes the keystrokes it can use and says
+        nothing about the ones it cannot.
+
+        `_abandon` above states the rule this follows and names the same
+        mistake made once before: "An earlier version flashed NOT SAVED
+        here, which was this simulator inventing a screen the hardware does
+        not have. The bench hint under the console still warns while an
+        entry is open, because **the bench may say what the console must
+        not**." So the reason goes to the log under the panel, where a
+        number about what the simulator did belongs, and the glass keeps
+        whatever screen the console was on.
+
+        See FIDELITY U5.
+        """
+        self.editing, self.buf = False, ""
+        self.log(f"-- entry refused: {why}")
 
     def _mode_offered(self, mode):
         """"You must have the BIR software module key installed to access
@@ -2980,8 +5526,14 @@ class SimApp(tk.Tk):
         """
         self._keyed()
         self.chart_open = False
-        if self._abandon("FUNCTION"):
-            return
+        # "If FUNCTION is pressed while in a Step, the system will advance to
+        # the next Function" (576013-623 Rev AN p.2-2), and p.3-1 says what
+        # becomes of a half-typed entry on the way: "If you press the STEP,
+        # FUNCTION, or MODE key without pressing ENTER, the data will not be
+        # saved." One press, and the data is lost -- not a press that is
+        # swallowed to cancel the entry and a second one to move. MODE has
+        # always read it this way; these two did not. See FIDELITY U5.
+        self._abandon("FUNCTION")
         self.sub = None
         self.confirm = None
         if MODES[self.mode] == "NORMAL" and not self._entered:
@@ -2997,6 +5549,16 @@ class SimApp(tk.Tk):
     def k_step(self):
         """"Use the STEP key to move from one procedure to the next."""
         self._keyed()
+        if self.mt_login:
+            # "Press Step and the display will read INSERT KEY IN PORT"
+            if self.mt_login == "prompt":
+                import time as _time
+                self.mt_login = "insert"
+                self.mt_asked = _time.mktime(self.console.now())
+            else:
+                self.mt_login = None
+            self._render()
+            return
         if self.isdflow:
             state = self.isdflow["state"]
             if state == "countdown":
@@ -3015,6 +5577,50 @@ class SimApp(tk.Tk):
             self.boot_restore = None
             self._render()
             return
+        if (self.cur_step() or {}).get("vmc") == "remove":
+            # p.27-2's own three STEPs. Off the `REMOVE VMC: YES`
+            # confirmation to the second question; off `ARE YOU SURE? YES`
+            # the controller is removed and the walk ends on the parent,
+            # which is the page's last figure. What STEP off `ARE YOU
+            # SURE? NO` does is on no page, so it leaves the same way
+            # without removing anything.
+            if self.confirm and self.vmc_remove == "yes":
+                self.confirm = None
+                self.vmc_remove = "sure_no"
+                self._render()
+                return
+            if self.vmc_remove.startswith("sure"):
+                if self.vmc_remove == "sure_yes":
+                    held = self.console.vmc_serial(self.device)
+                    self.console.vmc_serials.pop(self.device, None)
+                    self.console.values.pop(f"S8C1{self.device:02d}", None)
+                    self.console.save()
+                    self.log(f"-- VMC {self.device} serial {held} removed")
+                self.vmc_remove = "no"
+                self.confirm = None
+                if self.subs:
+                    self._ascend()
+                self._render()
+                return
+        if self.confirm and self._sure_head:
+            # 576013-623 Rev AN p.5-30, the tail of System Beeper. "Press
+            # ENTER: DISABLED / PRESS <STEP> TO CONTINUE. Press STEP:
+            # DISABLED / ARE YOU SURE? : NO."
+            #
+            # Spaced either side of the colon, which is `diagdata.json`'s
+            # form rather than the tighter one used elsewhere: UNKNOWNS B4
+            # has the argument, and this page writes it spaced.
+            if self.confirm[1] == CONT_STEP:
+                self.confirm = [self._sure_head, "ARE YOU SURE? : NO"]
+                self.sure = False
+                self._render()
+                return
+            # STEP off the question itself. What answering NO does is on no
+            # page -- there is no figure for it -- so it does nothing
+            # rather than invent a re-enable, and the value the first ENTER
+            # stored stands either way.
+            self._sure_head = None
+            self.sure = False
         if self.confirm:
             self.confirm = None
             pending = getattr(self, "_archive_pending", None)
@@ -3023,6 +5629,13 @@ class SimApp(tk.Tk):
                 # starts saving your setup data to the EEPROM."
                 self._archive_pending = None
                 self.armed = self.sure = False
+                # "When the save is completed, the system returns the
+                # original message: ARCHIVE UTILITY / PRESS <STEP> TO
+                # CONTINUE" -- 576013-623 Rev AN p.28-2, and the same
+                # sentence for the restore on p.28-3. That message is the
+                # FUNCTION's own screen, not the step the save was started
+                # from, which is where this landed. See SU30.
+                self.step = HEADER
                 self._run_archive(pending)
                 return
             if (self.cur_step() or {}).get("archive"):
@@ -3035,8 +5648,9 @@ class SimApp(tk.Tk):
             # "DAYS = XX / PRESS <STEP> TO CONTINUE ... Press STEP. The system
             # displays the message:" and what it displays is the NEXT step.
             # One press, not two.
-        if self._abandon("STEP"):
-            return
+        # p.3-1 again: STEP with an entry open loses the entry AND steps.
+        # See the note in `k_function`.
+        self._abandon("STEP")
         if self.step == MODE_SCREEN:
             self.step = HEADER
             self._render()
@@ -3044,8 +5658,26 @@ class SimApp(tk.Tk):
         steps = self.steps()
         if not steps:
             return
-        self.step = 0 if self.step == HEADER else (self.step + 1) % len(steps)
+        if self.step == HEADER:
+            self.step = 0
+        elif (MODES[self.mode] == "SETUP" and self.subs
+              and self.step % len(steps) == len(steps) - 1):
+            # "Press STEP to return to the AUTO TRANSMIT SETUP message.
+            # Press STEP again to continue to the next communications setup
+            # function" -- 576013-623 Rev AN p.6-6, and p.27-2 leaves the
+            # REMOVE VMC walk the same way, its last figure the parent's own
+            # `REMOVE VMC SERIAL NUMBER` / `PRESS <ENTER>`. The last screen
+            # of a branch STEPS back OUT of it rather than round it, which
+            # is what makes a branch escapable with the key the manual uses
+            # rather than only with BACKUP.
+            #
+            # Setup only. No chapter-6 figure nests, and the diagnostic
+            # branches are walked as rings.
+            self._ascend()
+        else:
+            self.step = (self.step + 1) % len(steps)
         self.armed = self.sure = False
+        self.vmc_remove = "no"
         self._render()
 
     def k_backup(self):
@@ -3060,15 +5692,18 @@ class SimApp(tk.Tk):
         if self._abandon("BACKUP"):
             return
         self.confirm = None
-        if self.sub is not None and self.step <= 0:
+        self.vmc_remove = "no"
+        if self.subs and self.step <= 0:
             # back out of the screens ENTER went down into, onto the one that
-            # offered them
-            fn = self.cur_function()
-            tops = [i for i, sc in enumerate(fn["steps"])
-                    if not sc.get("depth")] if fn else []
-            self.step = max((n for n, i in enumerate(tops) if i <= self.sub),
-                            default=0)
-            self.sub = None
+            # offered them.
+            #
+            # Off `_offered`, not off `fn["steps"]` raw: `self.subs` indexes
+            # the OFFERED list, so on a console where any screen is gated out
+            # the two disagreed and BACKUP landed on the wrong top-level
+            # screen. Exactly the fault D15 records two methods along, where
+            # `_diag_children` counted over the raw list and ENTER descended
+            # into a different branch from the one the panel was standing on.
+            self._ascend()
             self._render()
             return
         if self.step > 0:
@@ -3113,10 +5748,59 @@ class SimApp(tk.Tk):
             self._render()
             return
         self._keyed()
+        # **A screen with no device on it has no next device.**
+        #
+        # "The TANK/SENSOR key is used to advance by tank or sensor through
+        # setup procedures or displayed data" (576013-623 Rev AN p.2-3), and
+        # the Quick Help p.2 is blunter: "Press to change to the next tank
+        # or sensor." Where the glass shows no tank, there is none to change
+        # to -- but the pointer is one counter for the whole panel, so this
+        # moved it anyway, on 119 screens, changing nothing anyone could
+        # see. Two presses on the bare `SETUP MODE` screen and IN-TANK SETUP
+        # then opened on TANK 3 with the technician believing they were
+        # programming tank 1.
+        #
+        # `_devices()` is scoped to the FUNCTION, which is why it could not
+        # catch this: SYSTEM SETUP has console-wide steps and repeating ones
+        # in the same function, and its `_device_count()` fallback handed
+        # four phantom devices to SYSTEM LANGUAGE.
+        #
+        # The discriminator already exists and `screens.py` already uses it
+        # for this exact distinction -- `console_step(step) and not
+        # step.get("repeat")`. The repeating console screens, Station Header
+        # Line 1-4 and Shift #1-4 Start Time, are the two that DO walk, and
+        # they keep walking.
+        #
+        # **The function HEADER is deliberately not blocked here**, though
+        # TANK/SENSOR changes nothing on the glass there either. The
+        # docstring on `_devices` says the key works "on any screen" and a
+        # test asserts it from the function header, and that sentence is
+        # this project's own paraphrase with no page behind it -- but a
+        # paraphrase with a test on it is not something to overturn from a
+        # page that does not mention headers either. It stays as it is,
+        # written down rather than changed. See K3 and UNKNOWNS B6.
+        # A third case the menu data does not mark: a step whose FIELD is
+        # per-device even though the step calls itself console-wide. `ADD
+        # VMC SERIAL NUMBER` draws `x 1:` from a field scoped to the device,
+        # and TANK/SENSOR walks the controllers on it.
+        from .console import FIELDS
+        step = self.cur_step()
+        field = FIELDS.get((step or {}).get("console")) or {}
+        if self.step == MODE_SCREEN or (
+                step and screens.console_step(step)
+                and not step.get("repeat")
+                and field.get("scope") != "device"):
+            self.log("-- TANK/SENSOR: no device on this screen")
+            return
         self.chart_open = False
         self.editing, self.buf = False, ""
         self.confirm = None
         devices = self._devices()
+        if not devices:
+            # a function whose devices are all unconfigured has nothing to
+            # step to, and TANK/SENSOR on it does nothing rather than
+            # inventing a device 1 to point at
+            return
         if self.device in devices:
             self.device = devices[(devices.index(self.device) + 1)
                                   % len(devices)]
@@ -3171,16 +5855,58 @@ class SimApp(tk.Tk):
         fn = self.cur_function()
         name = fn["function"] if fn else ""
         code = self.CONFIG_OF.get(name)
+        want = (self.cur_step() or {}).get("smart_kind")
+        if want:
+            # "Press Tank to view the next airflow meter", 577013-800 Rev P
+            # Figure 7, and the next AIRFLOW METER is not the next smart
+            # sensor: an air flow meter and a vapour pressure sensor are two
+            # categories of one card, so AIRFLOW METER SELECT walked a mag
+            # sensor's position and offered to enable it for ISD. This is
+            # the one place in the menu where a STEP decides the walk rather
+            # than the function, which is what two device families under one
+            # function means.
+            live = [n for n in range(1, max(self.console.capacity("smart"), 1)
+                                     + 1)
+                    if self.console.sensor_type("smart", n) == want]
+            return live or [1]
+        if name == "TEST OUTPUT RELAYS":
+            # "Repeat this procedure for any additional relays" -- as many
+            # as the cage carries, and `outputs.count()` is already the
+            # console's answer to that: the greater of the Relay module's
+            # capacity and the I/O module's, which is exactly what OUTPUT
+            # RELAY SETUP prints. The rule below is per-CARD positions
+            # raised to the card count, and for relays that is both wrong
+            # ways round: a twelve-relay console walked four on the glass
+            # and printed twelve on the paper, and a console carrying only
+            # an I/O module walked four and printed two. The report and the
+            # panel are one console. See FIDELITY U8.
+            return list(range(1, max(self.console.outputs.count(), 1) + 1))
         if name in self.DEVICE_LIMIT:
             n = self.DEVICE_LIMIT[name]
         else:
-            n = max(SLOT_POSITIONS.get(code, 0), self._device_count())                 if code else self._device_count()
+            n = (max(SLOT_POSITIONS.get(code, 0), self._device_count())
+                 if code else self._device_count())
         n = max(n, 1)
         if code and MODES[self.mode] != "SETUP":
             # Reporting on a position nobody wired up is reporting on
             # something that is not there: LIQUID STATUS walked eight sensors
             # and called five of them NORMAL on a site with three.
             live = self.console.configured_devices(code, n)
+            # **An empty list is NOT an answer, and a photograph said so.**
+            #
+            # This was changed to return `live` even when empty, on the
+            # reasoning that a site with no sensors should walk none -- the
+            # same reasoning that gave the guard above its three-of-eight
+            # case. Then a bare console was photographed: no probes, no
+            # sensors, no line leak cards, and ALARM HISTORY walks `SYSTEM
+            # ALARM HISTORY` and then `T 1:` `T 2:` `T 3:` `T 4:` exactly as
+            # it would on a site with four tanks. IN-TANK INVENTORY is
+            # OFFERED there too and answers `NO ACTIVE TANKS`.
+            #
+            # So a real console does not hide a device it has no programming
+            # for -- it walks the position and says there is nothing on it.
+            # The flat range is restored, and O16 is open again with the
+            # photographs as its evidence rather than closed on an inference.
             if live:
                 return live
         return list(range(1, n + 1))
@@ -3190,11 +5916,15 @@ class SimApp(tk.Tk):
 
         A console steps through the devices its cards can carry: four tanks
         to a probe module, eight sensors to a sensor module. The four
-        console-wide ones (header lines, shift times) go round four.
+        console-wide ones (header lines, shift times) go round four. One
+        function walks PRODUCTS instead, and there are as many of those as
+        there are distinct product codes.
         """
         fn = self.cur_function()
         if fn is None:
             return 1
+        if fn.get("scope") == "product":
+            return max(len(self.console.fuel_products()), 1)
         name = fn["function"]
         need = FUNCTION_REQUIRES.get(name)
         if MODES[self.mode] != "SETUP":
@@ -3216,6 +5946,16 @@ class SimApp(tk.Tk):
             return 6                    # six comm ports, six receivers
         return 4
 
+    def _product_scope(self):
+        """Is the function the panel is on walked by PRODUCT?
+
+        FUEL MANAGEMENT is: "all information displayed is for products, not
+        tanks", and TANK moves to the next product rather than the next
+        tank. See FIDELITY O4.
+        """
+        fn = self.cur_function() or {}
+        return fn.get("scope") == "product"
+
     def k_change(self):
         self._keyed()
         if self.isd_override in ("no", "yes"):
@@ -3226,12 +5966,63 @@ class SimApp(tk.Tk):
             self.boot_restore = "yes" if self.boot_restore == "ask" else "ask"
             self._render()
             return
+        if (self._sure_head and self.confirm
+                and self.confirm[1].startswith("ARE YOU SURE?")):
+            # "Press CHANGE: DISABLED / ARE YOU SURE? : YES", p.5-30
+            self.sure = not self.sure
+            self.confirm = [self._sure_head,
+                            f"ARE YOU SURE? : {'YES' if self.sure else 'NO'}"]
+            self._render()
+            return
         self.confirm = None
         e = self.cur_step()
         if e is None:
             return
+        if e.get("vmc") == "remove":
+            # "Press CHANGE." twice on p.27-2, once for each question
+            self.vmc_remove = {"no": "yes", "yes": "no",
+                               "sure_no": "sure_yes",
+                               "sure_yes": "sure_no"}[self.vmc_remove]
+            self._render()
+            return
+        if (e.get("body") or "").strip() == "PRESS <ENTER>":
+            # **A prompt is not a field.** 576013-623 Rev AN p.5-19 draws
+            # `CUSTOM ALARM LABELS` over `PRESS <ENTER>` and the screen's
+            # whole content is an instruction to press a key: there is no
+            # setting behind it to walk. CHANGE wrote over the manual's
+            # second line anyway -- `ENABLED`, then `DISABLED`, from the
+            # `flag` field S5BD00 the step happens to carry -- so the
+            # console told a technician the feature was disabled when no
+            # such state exists. `MODIFY TANK/METER MAP` blanked its prompt
+            # the same way from a `list` field, and `MASS/DENSITY` and
+            # `FISCAL HEIGHT SECURITY` three screens away refused the key
+            # correctly, because they carry no code. The prompt is the test,
+            # not the presence of a code. See FIDELITY U5.
+            self.log("-- this step is navigable only")
+            return
+        if e.get("buf"):
+            # "Press Change and enter the 4-digit service code" -- the same
+            # shape one screen along: CHANGE opens the field, the keypad
+            # fills it, ENTER takes it.
+            self._change_into("")
+            self._render()
+            return
         if e.get("act"):
             self.armed = not self.armed
+            self._render()
+            return
+        if e.get("toggle") == "service_session":
+            # Figure 6-5: CHANGE walks DISABLED to ENABLED and back, and the
+            # console can refuse -- "If there is a delivery in progress, then
+            # cannot change to Enable, and it will display 'DISABLED DEL IN
+            # PROGRESS'", which is twenty-four characters and so is the whole
+            # second line. See FIDELITY D9.
+            c = self.console
+            said = (c.end_service_session() if c.service_session()
+                    else c.start_service_session())
+            self.log(f"-- service notice session: {said.lower()}")
+            if said.startswith("DISABLED DEL"):
+                self.confirm = [e["text"][:COLS], said[:COLS]]
             self._render()
             return
         if self._live_mode():
@@ -3239,7 +6030,7 @@ class SimApp(tk.Tk):
             # rate, for how long. CHANGE walks them, ENTER accepts.
             if e.get("dlv"):
                 if e["dlv"] == "prior":
-                    self._flash("PRESS <ENTER>" + chr(10) + "FOR THE PRIOR ONE")
+                    self.log("-- ENTER steps back to the prior delivery")
                     return
                 self._change_into(self._delivery_value(e))
                 self._render()
@@ -3248,14 +6039,31 @@ class SimApp(tk.Tk):
                 self._change_into("")
                 self._render()
                 return
-            if e.get("action") and MODES[self.mode] == "RECONCILIATION":
-                # "press CHANGE. The system displays SHIFT CLOSE NOW: YES"
+            if e.get("density"):
+                # "Press CHANGE and enter any one of the three values below
+                # from the product's delivery ticket". This was a read-only
+                # `live` step with no code, so CHANGE did nothing at all and
+                # the console had no route to a delivery density. FIDELITY
+                # O13.
+                self._change_into("")
+                self._render()
+                return
+            if e.get("action") and (MODES[self.mode] == "RECONCILIATION"
+                                    or e.get("body")):
+                # "press CHANGE. The system displays SHIFT CLOSE NOW: YES",
+                # and p.8-2 asks for the same on CLOSE CURRENT SHIFT
                 self.armed = not self.armed
                 self._render()
                 return
+            if self._typed_day(e):
+                # "To select a different date, press CHANGE, enter the date,
+                # and then press ENTER" -- so CHANGE here opens the date
+                # template rather than walking CURRENT and PREVIOUS.
+                self._begin_edit("")
+                self._render()
+                return
             if e.get("sel"):
-                names = [c[0] if isinstance(c, list) else c
-                         for c in e["choices"]]
+                names = self._choices(e)
                 cur = self._choice(e)
                 nxt = (names.index(cur) + 1) % len(names) if cur in names else 0
                 self.sel[e["sel"]] = names[nxt]
@@ -3267,13 +6075,21 @@ class SimApp(tk.Tk):
                 self._render()
             return
         if self._chart_locked(e):
-            self._flash("ENTER PASSCODE" + chr(10) + "THEN <ENTER>")
+            # 576013-623 Rev AN p.5-27 draws this screen and both of its
+            # lines: `TANK CHART SECURITY` over `ENTER PASSCODE->______<`,
+            # six underscores for the six digits it wants. This drew
+            # `ENTER PASSCODE / THEN <ENTER>`, whose second line is nobody's.
+            # See FIDELITY U5.
+            typed = "".join(ch for ch in self.buf if ch.isdigit())[:6]
+            field = typed + "_" * (6 - len(typed))
+            self._flash("TANK CHART SECURITY" + chr(10)
+                        + f"ENTER PASSCODE->{field}<")
             return
         if e.get("console"):
             from .console import FIELDS
             f = FIELDS.get(e["console"], {})
             if f.get("kind") == "view":
-                self._flash("VIEW ONLY")
+                self.log("-- view only: this step takes no change")
                 return
             if f.get("kind") == "setting" and f.get("choices"):
                 # a fixed list of words is walked with CHANGE, not typed
@@ -3288,7 +6104,23 @@ class SimApp(tk.Tk):
                 self.console.save()
                 self._render()
                 return
-            self._change_into(self._console_value(e))
+            # A plain numeric scalar CLEARS on CHANGE and takes its digits
+            # calculator-fashion -- `_change_into`'s docstring has the
+            # video that settles it, and does this for every `int`, `float`
+            # and `digits` FIELD. A console setting has no such kind, so
+            # `BDIM TRANS ALARM DELAY` seeded with `024` and one press of
+            # `1` overtyped it to `124`, where PRECISION TEST DURATION two
+            # screens away cleared first. `number` is the same fact under
+            # another name, and it is on the field already.
+            # `chartcode` clears for the same reason a `digits` field does,
+            # and p.5-27 draws the console agreeing: the screen that asks
+            # for an existing passcode is `ENTER PASSCODE->______<`, six
+            # underscores and no value in them. SYSTEM SECURITY is the same
+            # six-digit code one screen away and clears because its kind is
+            # `digits`.
+            self._change_into("" if (f.get("number")
+                                     or f.get("kind") == "chartcode")
+                              else self._console_value(e))
             self._render()
             return
         if e.get("point") in ("height", "volume"):
@@ -3296,7 +6128,7 @@ class SimApp(tk.Tk):
             self._render()
             return
         if e.get("point") == "count":
-            self._flash("PRESS <STEP>" + chr(10) + "TO ADD A POINT")
+            self.log("-- STEP adds a chart point")
             return
         if e.get("profile"):
             from .console import Console as _C
@@ -3316,7 +6148,43 @@ class SimApp(tk.Tk):
             self._render()
             return
         if not e.get("code"):
-            self._flash("NOT SIMULATED" + chr(10) + "navigable only")
+            # Developer text, in lower case, on a 24-column all-caps
+            # display. The only such string on the glass. See FIDELITY U5.
+            self.log("-- this step is navigable only")
+            return
+        if e.get("offset"):
+            # "Then press CHANGE. The Offset value flashes `0`. Enter the
+            # desired offset in increments of +/-0.01% with a maximum range
+            # of +/-9.99%" -- p.17-6. One cell of the four is a value, and
+            # CHANGE clears it rather than walking anything.
+            if e.get("meter") is None:
+                # nothing mapped: there is no meter for an offset to be of
+                self.log("-- no meter mapped to give an offset to")
+                return
+            self.editing, self.buf, self.cur = True, "", 0
+            self._render()
+            return
+        if e.get("map"):
+            # "Press [left arrow] or [right arrow] to move to the field you
+            # want to change. Then press CHANGE until the correct choice
+            # appears." p.17-5, and the cell the cursor is on is the only
+            # one a press touches.
+            if not self.editing:
+                self.editing = True
+                self.buf = MAP_BLANK
+                self.slot = 0
+            cells = self.buf.split()
+            n = self.slot % len(MAP_CELLS)
+            choices = self._map_choices(n, cells)
+            here = choices.index(cells[n]) if cells[n] in choices else -1
+            cells[n] = choices[(here + 1) % len(choices)]
+            if n == 0 and cells[1] not in self._map_choices(1, cells):
+                # a slot belongs to its own bus: "9 - 16 ... Type 2 bus",
+                # "1 - 3 ... Type 3 bus". Changing the bus under a slot it
+                # does not have leaves a row the command would refuse.
+                cells[1] = "X" * MAP_CELLS[1][1]
+            self.buf = " ".join(cells)
+            self._render()
             return
         f = self.cur_field()
         if f is not None and f.get("kind") == "slots":
@@ -3324,7 +6192,8 @@ class SimApp(tk.Tk):
             # the CHANGE key ... You move between PLLDs by pressing the right
             # or left arrow key."
             if not self.editing:
-                wires = f.get("slots") or 4
+                wires = (self.console.positions(f["code"][1:4])
+                         or f.get("slots") or 4)
                 base = ((self.device - 1) // wires) * wires
                 self.editing = True
                 self.buf = self.console.slot_text(f["code"][1:4], wires, base)
@@ -3346,7 +6215,8 @@ class SimApp(tk.Tk):
             if kind == "flag":
                 names = list(f.get("words") or ("DISABLED", "ENABLED"))
             else:
-                names = [lab for _v, lab in fieldio.choices_of(f, self.console)]
+                names = [screens.screen_word(f, lab) for _v, lab
+                         in fieldio.choices_of(f, self.console)]
             cur = self.buf if self.editing else str(self._shown() or "")
             nxt = (names.index(cur) + 1) % len(names) if cur in names else 0
             self.buf = names[nxt] if names else ""
@@ -3357,7 +6227,28 @@ class SimApp(tk.Tk):
         self._render()
 
     # Field kinds the keypad types as numbers.
-    NUMERIC_KINDS = ("int", "flag", "float", "time", "date", "digits")
+    #
+    # `chartcode` is here because 576013-623 Rev AN p.5-19 says what it
+    # takes -- "press CHANGE and enter a 6-digit numeric passcode" -- and
+    # because the handler that stores it has always agreed: `_enter_console`
+    # keeps only `c.isdigit()` and refuses anything that is not six of them.
+    # It was NOT in this set, so the six digit keys multi-tapped to letters
+    # and that refusal was guaranteed: `1 2 3 4 5 6` entered `QADGJM` and
+    # the console turned it down, every time, on every key sequence. **The
+    # whole feature was unreachable from the panel**, with its ENTER handler
+    # written correctly and unsatisfiable. `_chart_locked` -- the screen you
+    # meet when a passcode already EXISTS -- has treated the field as
+    # numeric all along, which is what makes this an omission rather than a
+    # reading. See the setup-mode audit, SU8.
+    #
+    # `list` is here for the same reason and was found by the same sweep:
+    # all eight of them are numbers with separators in them -- the siphon
+    # and line manifolded partners are TANK NUMBERS, `T#:
+    # 00,00,00,00,00,00,00`, and the rest are alarm numbers, dial times,
+    # the meter map and a meter offset. One press of `6` on a manifold
+    # partner list put an `M` in it.
+    NUMERIC_KINDS = ("int", "flag", "float", "time", "date", "digits",
+                     "chartcode", "list")
 
     def _signed_entry(self, field=None):
         """Does this field take a minus sign?
@@ -3366,6 +6257,12 @@ class SimApp(tk.Tk):
         appears on the display" is Tank Tilt, and the pressure offset screens
         say the same. A clock does not have a negative half.
         """
+        if (self.cur_step() or {}).get("offset"):
+            # "Enter the desired offset in increments of +/-0.01% with a
+            # maximum range of +/-9.99%", p.17-6. The step's field is
+            # `S7B400`, whose kind is the wire's packed `list` and carries
+            # no sign of its own; the SCREEN types one number.
+            return True
         f = self.cur_field() if field is None else field
         if (f or {}).get("kind") not in ("int", "float"):
             return False
@@ -3385,6 +6282,26 @@ class SimApp(tk.Tk):
         step = self.cur_step() or {}
         if step.get("adjust") or step.get("point") in ("height", "volume"):
             return True
+        if step.get("entry"):
+            # TEST DURATION, the one place in Operating Mode a technician
+            # types a number, and it could not be typed: "press CHANGE,
+            # **enter the test duration**, then press ENTER" (576013-610
+            # Rev AC p.20-2), and a duration in hours is a numeric entry.
+            # p.3-3 scopes the multi-tap rule to the other kind of field --
+            # "To enter either an alphabetic or numeric character, press
+            # the 2 key once to enter an 'A'" -- and lists the keys that
+            # belong to numeric entries separately.
+            #
+            # The `6` key went M, N, O, 6, so a twelve hour test took eight
+            # presses and the field spent three of every four showing a
+            # LETTER where the screen says hours. **The same console
+            # already does it the other way one mode across**: MANUAL
+            # ADJUSTMENTS' volume and Delivery Maintenance's ticket both
+            # take a digit on the first press, and both are in this method
+            # one line up. See the operating-mode audit, OP12.
+            return True
+        if self._typed_day(step):
+            return True
         if step.get("dlv") in ("insert", "date", "time"):
             return True
         console = step.get("console")
@@ -3392,6 +6309,29 @@ class SimApp(tk.Tk):
             from .console import FIELDS
             spec = FIELDS.get(console, {})
             if spec.get("number") or spec.get("digits"):
+                # `number` is a field with a stated range; `digits` is one
+                # the manual gives no range for and still types as a
+                # number. **This branch had no `digits` field to find until
+                # the seven AVG SALES days got one**, and those are the
+                # console's clearest case: 576013-623 Rev AN p.9-2 draws
+                # `AVG SALES SUN:          983` and says "enter the average
+                # daily sales", and the keypad was multi-tapping letters
+                # into it. A mechanism written for a case and never given
+                # one -- the mirror of this project's commonest shape.
+                #
+                # `PRODUCT CODE` sits beside them in the same sweep and is
+                # deliberately NOT here: p.7-2 says "Enter the alphanumeric
+                # code used by a point-of-sale terminal", and notes that a
+                # UK four-star code is entered as `4*` with five presses of
+                # the zero key. Letters are right there.
+                return True
+            if spec.get("kind") in self.NUMERIC_KINDS:
+                # A console setting's KIND is judged by the same list a
+                # code field's is. Only the test above the `console` branch
+                # was reading it, and a console step has no `cur_field`, so
+                # `chartcode` -- the one numeric kind that only ever
+                # appears here -- never reached it. See the note on
+                # `NUMERIC_KINDS`.
                 return True
             if spec.get("kind") == "consoletextdev":
                 # "VMC SERIAL NUMBER / S/N : 005830"
@@ -3408,6 +6348,16 @@ class SimApp(tk.Tk):
         """
         f = self.cur_field() or {}
         kind = f.get("kind")
+        if kind == "list":
+            # A list is typed INTO ITS TEMPLATE -- `T#: 00,00,00,00,00,00,00`
+            # with the commas already on the glass, and CHANGE puts the
+            # cursor on the first digit -- so the seed is the value and not
+            # the word the resting screen shows for it. The generator's tank
+            # list is the one that has both: p.23-3 draws `TANK #: ALL TANK`
+            # where nothing is entered and `TANK #: X, X` where something is,
+            # and seeding with `ALL TANK` gave the keypad eight letters to
+            # overtype.
+            return screens.shown(self.console, f, self._stored())
         if kind not in ("time", "date", "digits"):
             return self._shown()
         code = self.cur_code() or ""
@@ -3435,6 +6385,32 @@ class SimApp(tk.Tk):
     def _time_field(self):
         """Is the screen in front of you asking for a time of day?"""
         return (self.cur_field() or {}).get("kind") == "time"
+
+    def _date_entry(self):
+        """Is the screen in front of you asking for a date?
+
+        Every one used to be a setup field with a `date` kind. SELECT DAY is
+        the first that is not: it is a live-mode screen with no function code
+        behind it at all, and the manual still says to type a date into it.
+        See FIDELITY Q1.
+        """
+        return ((self.cur_field() or {}).get("kind") == "date"
+                or self._typed_day(self.cur_step()))
+
+    def _typed_day(self, step):
+        """A SELECT DAY the manual types a date into rather than toggles.
+
+        The two report families genuinely differ, which is what made one
+        model wrong for both. 576013-610 Rev AC p.28-3, the reconciliation
+        report: "To select a different date, press CHANGE, enter the date,
+        and then press ENTER." p.28-7, the three variance chapters: "To
+        select the previous month and day (as defined by the reconciliation
+        period), press CHANGE, then press ENTER" -- which is a toggle, and is
+        what those keep. See FIDELITY Q1.
+        """
+        if not (step or {}).get("typed_day"):
+            return False
+        return self._recon_word(step).startswith("SELECT DAY")
 
     def _seed_meridiem(self):
         """AM or PM, off whatever the field holds now.
@@ -3467,12 +6443,25 @@ class SimApp(tk.Tk):
         "use the arrow keys to move the cursor to the incorrect character,
         press CHANGE and enter the correct character". Pressing CHANGE again
         rubs the field out: "(To erase a label press CHANGE again.)"
+
+        Retain-or-clear is a property of the FIELD, not of the key, and video
+        of real consoles now settles all three kinds it can be. A clock
+        RETAINS and takes the cursor on its first character. A date BLANKS to
+        its template. And a plain numeric scalar -- a limit, a percentage --
+        CLEARS outright, with the cursor at the right-hand entry position and
+        digits arriving calculator-fashion. That last one was unrecorded until
+        a Spanish-firmware TLS-350 PLUS was filmed doing it on six separate
+        limit fields in a row. See UNKNOWNS A3 for the video and the caveats:
+        the console filmed is Spanish, and every prior it cleared was a zero.
         """
         if self.editing:
             self.buf, self.cur, self._tap = "", 0, None
             return
         if self._time_field():
             self.meridiem = self._seed_meridiem()
+        if (self.cur_field() or {}).get("kind") in ("int", "float", "digits"):
+            self._begin_edit("")
+            return
         self._begin_edit("" if value is None else str(value))
 
     def _delivery_value(self, step):
@@ -3489,6 +6478,25 @@ class SimApp(tk.Tk):
 
     def k_enter(self):
         self._keyed()
+        if (self._sure_head and self.confirm
+                and self.confirm[1].startswith("ARE YOU SURE?")):
+            # "Press ENTER: ARE YOU SURE? : YES / PRESS <STEP> TO
+            # CONTINUE", p.5-30. The page draws ENTER only on YES; what it
+            # does on NO is on no page, so it does nothing.
+            if self.sure:
+                self.confirm = ["ARE YOU SURE? : YES", CONT_STEP]
+                self._sure_head = None
+                self.sure = False
+                self._render()
+            return
+        if self.mt_login:
+            if self.mt_login == "insert" and not self._mt_timed_out():
+                self._mt_present()
+            else:
+                # "Press any key to display the operating mode main screen"
+                self.mt_login = None
+                self._render()
+            return
         if self.isdflow:
             st = self.isdflow
             c = self.console
@@ -3552,15 +6560,50 @@ class SimApp(tk.Tk):
             if self.buf == self.console.security_code():
                 self.locked = False
                 self.buf = ""
-                self._flash("CODE ACCEPTED")
+                # Being let in is the acknowledgement, and being put back in
+                # Normal Mode is the refusal. Neither is announced: `CODE
+                # ACCEPTED` and `INVALID SECURITY CODE` were this project's.
+                # See FIDELITY U5.
+                self.log("-- security code accepted")
             else:
                 self.buf = ""
                 self.mode = MODES.index("NORMAL")
                 self.locked = False
                 self._entered = False
-                self._flash("INVALID SECURITY" + chr(10) + "CODE")
+                self.log("-- security code refused")
             return
         e0 = self.cur_step()
+        if e0 is not None and e0.get("pick") == "device":
+            # "Enter the number of the relay you want to test, then press
+            # ENTER. The system displays the number and name of the relay
+            # you selected. For example: `R 1: OVERFILL ALARM` / `PUSH
+            # ALARM/TEST KEY`" -- 576013-610 Rev AC p.22-1. That screen is
+            # this function's next step and already draws itself; nothing
+            # could reach it with a chosen relay. See FIDELITY U8.
+            want = self.buf.strip()
+            self.editing, self.buf = False, ""
+            devices = self._devices()
+            if want.isdigit() and int(want) in devices:
+                self.device = int(want)
+                self.step += 1
+            else:
+                # A relay the console does not have. The manual draws no
+                # refusal for this and `_refuse`'s rule is that the console
+                # takes the keystrokes it can use and says nothing about the
+                # ones it cannot, so the screen stays where it is.
+                self.log(f"-- no relay {want or 'number'} on this console")
+            self._render()
+            return
+        if self.editing and e0 is not None and e0.get("buf") == "mt_id":
+            # "ENTER ID TO BLOCK / ID: XXXXXX" and then ENTER: the typed key
+            # is what the ARE YOU SURE screen below will block, which is
+            # Figure 6-4's other branch. See FIDELITY D13.
+            self.console.mt_pending = self.buf.strip().upper()
+            self.editing, self.buf, self.cur = False, "", 0
+            self.confirm = [f"ID: {self.console.mt_pending}"[:COLS],
+                            CONT_STEP]
+            self._render()
+            return
         if (MODES[self.mode] == "DIAGNOSTIC" and e0 is not None
                 and e0.get("live") == "line_pressure"):
             # ENTER on the pressure screen starts the Gross test on the line
@@ -3579,20 +6622,33 @@ class SimApp(tk.Tk):
             # message over the top of the only thing worth looking at.
             self._render()
             return
+        if e0 is not None and e0.get("run"):
+            # "PRESS <ENTER>", and that is the whole interaction -- no YES/NO
+            # to arm first, which is what `act` is for. Figure 6-29's manual
+            # test and Figure 6-30's evac hold are both this shape: ENTER on
+            # the confirming screen does it and the acknowledgement is the
+            # figure's own line over PRESS <STEP> TO CONTINUE.
+            said = self.console.diag_action(e0["run"], self.device)
+            self.log(f"-- diag {e0['run']}: {said.lower()}")
+            self.confirm = [said[:COLS], CONT_STEP]
+            self._render()
+            return
         if e0 is not None and e0.get("act"):
             if not self.armed:
-                self._flash("NOTHING TO DO")
+                self.log("-- nothing to do on this step")
                 return
             self.armed = False
-            said = self.console.diag_action(e0["act"], self.device)
+            said = self.console.diag_action(e0["act"], self.device,
+                                            e0.get("ident"))
             self.log(f"-- diag {e0['act']}: {said.lower()}")
             self.confirm = [said[:COLS], CONT_STEP]
             self._render()
             return
-        parent = self._diag_children()
+        parent = self._branch_at()
         if parent is not None:
-            # "PRESS <ENTER>": and down a level you go
-            self.sub = parent
+            # "PRESS <ENTER>": and down a level you go. Appended rather than
+            # assigned, because a branch can hold a branch -- see `sub`.
+            self.subs = self.subs + [parent]
             self.step = 0
             self.confirm = None
             self._render()
@@ -3602,10 +6658,32 @@ class SimApp(tk.Tk):
             if self.buf == self.console.chart_code:
                 self.chart_open = True
                 self.buf = ""
-                self._flash("PASSCODE ACCEPTED")
+                self.log("-- tank chart passcode accepted")
             else:
                 self.buf = ""
-                self._flash("INVALID PASSCODE")
+                self.log("-- tank chart passcode refused")
+            return
+        if e is not None and e.get("toggle"):
+            # "E: ENABLED / PRESS <STEP> TO CONTINUE". The acknowledgement is
+            # the line the screen was already showing, which is O9's shape in
+            # a third mode.
+            self.confirm = None
+            self.confirm = [self._lines()[1][:COLS], CONT_STEP]
+            self._render()
+            return
+        if e is not None and e.get("map"):
+            self._enter_map()
+            return
+        if e is not None and e.get("offset"):
+            self._enter_offset(e)
+            return
+        if e is not None and e.get("vmc") == "remove":
+            # "Press ENTER to confirm.." is drawn on the YES of the FIRST
+            # question and nowhere else in the walk: the second question is
+            # answered with STEP. p.27-2.
+            if self.vmc_remove == "yes":
+                self.confirm = ["REMOVE VMC: YES", CONT_STEP]
+                self._render()
             return
         if e is not None and e.get("console"):
             self._enter_console(e)
@@ -3620,7 +6698,7 @@ class SimApp(tk.Tk):
             # "press CHANGE, then ENTER. The system confirms your choice ...
             # The system asks you to reconfirm ... ARE YOU SURE?: NO"
             if not self.armed:
-                self._flash("NOTHING TO DO")
+                self.log("-- nothing to do on this step")
                 return
             label = e["text"].upper()
             if not self.sure:
@@ -3628,23 +6706,31 @@ class SimApp(tk.Tk):
                 self.sure = True
                 self.armed = False
             else:
-                self.confirm = ["ARE YOU SURE?: YES", CONT_STEP]
+                # spaced, off the glass -- see the note in `_lines`
+                self.confirm = ["ARE YOU SURE? : YES", CONT_STEP]
                 self._archive_pending = e["archive"]
             self._render()
             return
         if self._live_mode() and e is not None:
-            if e.get("runtest"):
-                # A results screen is a per-line screen, and ENTER on the line
-                # you are looking at starts the test whose result it shows.
-                # The Operator's Manual routes a manual test through START
-                # LINE PRESSURE TEST instead; this is the same engine, reached
-                # from the line rather than from the function.
-                kind, rate_key = e["runtest"].split(":")
-                said = self.console.leaks.start(kind, self.device, rate_key)
-                self.log(f"-- {rate_key} test on {kind} {self.device}: {said}")
-                self._flash(f"{self.console.lines.code(kind)} {self.device}: "
-                            + rate_key.upper() + chr(10) + said)
-                return
+            # **A results screen is a reading, and ENTER is not one of its
+            # keys.** 576013-610 Rev AC ch.11 gives every screen of
+            # PRESSURE LINE RESULTS three keys and says so for each of
+            # them: STEP to reach it, "to view 3.0 gph test results for
+            # other lines in the system, press TANK/SENSOR", "to print
+            # ... press PRINT". Starting a test is chapter 12, a separate
+            # function with its own three-screen confirmation, which this
+            # console implements correctly beside it.
+            #
+            # ENTER here started a real 3.0 gph test on the line whose
+            # result you were reading -- on real hardware, from a screen
+            # that cannot do it, and a 3.0 gph failure shuts a pump down.
+            # The code's own comment argued the convenience: "the same
+            # engine, reached from the line rather than from the function."
+            # A training console that offers a shortcut the hardware does
+            # not have teaches the shortcut. The six `runtest` keys went
+            # out of `normaldata.json` with it, so there is no step left
+            # for this branch to have run on. See FIDELITY O15 and the
+            # operating-mode audit's OP11.
             if e.get("dlv"):
                 self._enter_delivery(e)
                 return
@@ -3657,27 +6743,54 @@ class SimApp(tk.Tk):
                 self._render()
                 return
             if e.get("action"):
-                if MODES[self.mode] == "RECONCILIATION" and not self.armed:
-                    self._flash("NOTHING TO DO")
+                if not self.armed and (MODES[self.mode] == "RECONCILIATION"
+                                       or e.get("body")):
+                    self.log("-- nothing to do on this step")
                     return
                 self.armed = False
                 self._flash(self._run_action(e["action"]))
                 return
+            if self._typed_day(e) and self.editing:
+                self._accept_day(e)
+                return
+            if e.get("sel"):
+                # "Press CHANGE to choose INSERT, then press ENTER ... The
+                # system displays this message": every selection in both
+                # live modes is acknowledged, and the acknowledgement is the
+                # line the selection screen was already showing, over PRESS
+                # <STEP> TO CONTINUE. Thirteen screen shapes and about thirty
+                # instances, and ENTER on a selection used to be a no-op.
+                # The mechanism was here for TYPED values all along.
+                # FIDELITY O9.
+                # The acknowledgement is the line the screen was showing,
+                # whichever renderer drew it: Reconciliation Mode words its
+                # own selections -- "ADJUSTMENT TYPE: DAILY", "SELECT
+                # PERIOD: PREVIOUS" -- and Operating Mode draws some bare,
+                # "SINGLE TANK", "3.0 GPH".
+                self.confirm = None
+                self.confirm = [self._lines()[1][:COLS], CONT_STEP]
+                self._render()
+                return
             if e.get("entry") and self.editing:
                 self._accept_entry(e)
+                return
+            if e.get("density") and self.editing:
+                self._accept_density(e)
                 return
             return
         code, f = self.cur_code(), self.cur_field()
         if not self.editing or not code:
             return
         if (f or {}).get("kind") == "slots":
-            wires = f.get("slots") or 4
+            wires = (self.console.positions(f["code"][1:4])
+                     or f.get("slots") or 4)
             base = ((self.device - 1) // wires) * wires
             self.console.set_slots(f["code"][1:4], self.buf, base)
             self.confirm = [f"SLOT #: {self.buf}"[:COLS],
                             CONT_STEP]
             self.editing, self.buf = False, ""
             self._refresh_site()
+            self.refresh_traffic()
             self._render()
             return
         typed = self.buf
@@ -3686,15 +6799,15 @@ class SimApp(tk.Tk):
             # half of the day, so both go to the encoder
             typed = f"{typed} {self.meridiem}"
         try:
-            data = fieldio.encode(f or {}, code, typed,
-                                  self.console.values.get(code.upper()))
+            data = fieldio.encode(f or {}, code,
+                                  screens.wire_word(f, typed),
+                                  self.console.values.get(code.upper()),
+                                  self.console.metric(), self.console)
         except ValueError as e:
-            self._flash("INVALID ENTRY" + chr(10) + str(e)[:COLS])
-            self.editing = False
-            self.buf = ""
+            self._refuse(str(e))
             return
         if data is None:
-            self._flash("NOTHING ENTERED")
+            self.log("-- nothing entered")
         else:
             self.console.values[code.upper()] = data
             if code.upper().startswith("S501"):
@@ -3702,21 +6815,74 @@ class SimApp(tk.Tk):
                 self.console.set_clock()
             self.console.save()
             self._refresh_site()
+            self.refresh_traffic()
             # "PRODUCT CODE: X / PRESS <STEP> TO CONTINUE": the console
             # holds the confirmation until you step off it.
             step = self.cur_step()
-            shown = fieldio.decode(f, code, data) if f else self.buf
+            shown = screens.screen_word(
+                f, fieldio.decode(f, code, data, self.console) if f
+                else self.buf)
             if self._is_label_step(step):
                 head = f"{self._device_code()}{self.device}: {shown}"
             else:
+                # **In the field's own mask**, which is the same mask the
+                # screen one line above it uses.
+                #
+                # This drew whatever `fieldio.decode` returned, and decode's
+                # float branch is `"%g"` -- the shortest round-trip form,
+                # which is precisely what a fixed-width console field is
+                # not. So the console said `TANK DIAMETER: 96.5` on the
+                # confirmation and `TANK DIAMETER: 096.50` one STEP later:
+                # one value, two shapes, a keypress apart. Worse, typing
+                # `499.995` was CONFIRMED as `499.995` and stored as
+                # `500.00`, so the confirmation asserted a precision the
+                # console does not keep.
+                #
+                # The manuals never draw a confirmation in a different shape
+                # from the field it confirms -- 576013-623 Rev AN p.7-5
+                # `TANK DIAMETER: XXX.XX`, p.7-14 `WATER WARNING: XX.X`,
+                # p.17-3 `ALARM THRESHOLD: X.XX`, p.17-4 `ALARM OFFSET:
+                # XXXXXX`, each the same mask as the field above it on the
+                # same page. Twenty-three fields across nine functions
+                # disagreed. See R1.
+                shown = self._masked(shown)
                 # the confirmation is the screen's own second line, held: the
                 # manual shows "TIME: XX:XX XM" over CONT_STEP
                 words = step["text"].split("(")[0].strip().upper()
                 _head, label = self._setup_context(step, words)
-                head = self._second(label, shown)
+                # and with the step's own GAP, for the same reason as the
+                # mask: the field screen uses `step["gap"]` and this used
+                # the default space, so `RECON WARN LIMIT:000003` -- which
+                # 576013-623 Rev AN p.116 draws with nothing between the
+                # colon and the digits -- was confirmed with a space in it.
+                # Found by the test for the mask, walking the same function.
+                head = self._second(label, shown, step.get("gap", " "))
             self.confirm = [head[:COLS], CONT_STEP]
+            if str((step or {}).get("sure", "\0")) == str(data):
+                # "Press STEP: DISABLED / ARE YOU SURE? : NO" -- the beeper
+                # is the one setup value the console asks twice about, and
+                # it asks only on the answer that silences it. STEP off the
+                # ordinary acknowledgement goes to the question instead of
+                # to the next step. See the setup-mode audit, SU11.
+                self._sure_head = head[:COLS]
         self.editing = False
         self.buf = ""
+        # **And put it on the glass.** This path built the acknowledgement
+        # and never repainted, which is not a cosmetic omission: `_poll`
+        # redraws only in Operating Mode, mid-entry or on a live screen --
+        # and ENTER has just cleared `editing` -- so in Setup Mode nothing
+        # redrew until the NEXT key, and the next key clears `confirm` on
+        # its way past. Every typed setup value's `XXX: value / PRESS
+        # <STEP> TO CONTINUE` was therefore built, held, and never seen.
+        #
+        # It reads as correct from `_lines()`, which recomputes from
+        # `confirm` on demand, and that is what the tests call; the canvas
+        # is where it was missing. `_enter_console` and the `sel`, `slots`,
+        # `toggle` and archive branches all render for themselves, which is
+        # why only this one -- the S-code fields, the commonest screen in
+        # Setup Mode -- was silent. See FIDELITY U5 and the note on
+        # `_lines` in `audits/2026-09-10-key-behaviour.md`.
+        self._render()
 
     # ---- starting and stopping tests from the panel ------------------------
     def _accept_entry(self, step):
@@ -3724,15 +6890,67 @@ class SimApp(tk.Tk):
         text = self.buf.strip()
         self.editing, self.buf = False, ""
         if not text.isdigit():
-            self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+            self._refuse("numbers only")
             return
         value = int(text)
         lo, hi = step.get("min"), step.get("max")
         if (lo is not None and value < lo) or (hi is not None and value > hi):
-            self._flash("INVALID ENTRY" + chr(10) + f"{lo} TO {hi} HOURS")
+            self._refuse(f"{lo} to {hi} hours")
             return
         self.sel[step["entry"]] = str(value)
-        self._flash("ENTERED" + chr(10) + f"{value} HOURS")
+        # 576013-610 Rev AC p.20-2 confirms the typed duration the way it
+        # confirms everything else: the value over PRESS <STEP> TO CONTINUE.
+        # This flashed `ENTERED` over `3 HOURS`, a screen no manual draws.
+        self.confirm = [f"DURATION: {value}"[:COLS], CONT_STEP]
+        self._render()
+
+    def _accept_density(self, step):
+        """A delivery density typed on the NEXT or LAST DELIVERY screen.
+
+        "Press ENTER and the console converts the entered value to the
+        actual density" -- and the value the console REPORTS is the one that
+        was entered, which is what 61F answers with and what the setup
+        manual says of the same entry on the tank's own density: "if this
+        value is accepted, it will be converted to actual density (but the
+        user entered value is displayed)". Which of the three forms a number
+        is, and the conversion, is on no page here: UNKNOWNS A23.
+        """
+        text = self.buf.strip()
+        self.editing, self.buf = False, ""
+        try:
+            value = float(text)
+        except ValueError:
+            self._refuse("numbers only")
+            return
+        self.console.set_delivery_density(self.device, step["density"], value)
+        self.confirm = [f"DENSITY         :{value:.4f}"[:COLS], CONT_STEP]
+        self._render()
+
+    def _accept_day(self, step):
+        """A date typed on SELECT DAY, which is the day the report covers.
+
+        The manual does not draw the typing screen, only the instruction, so
+        the shape is the one this chapter uses for every other typed value:
+        the choice you made last on line one, and the field being typed on
+        line two (576013-610 Rev AC p.28-19). What it MEANS is settled --
+        p.28-20 asks for "the desired closing date". See FIDELITY Q1.
+        """
+        digits = "".join(ch for ch in self.buf if ch.isdigit())
+        self.editing, self.buf = False, ""
+        if len(digits) != 8:
+            self._refuse("a date is MM/DD/YYYY")
+            return
+        try:
+            when = time.mktime(time.strptime(digits, "%m%d%Y"))
+        except (ValueError, OverflowError):
+            self._refuse("not a date")
+            return
+        self.sel["day"] = when
+        self._recon_sync()
+        self.confirm = [self._lines()[1][:COLS], CONT_STEP]
+        self.log("-- reconciliation day set to "
+                 + clock_date(time.localtime(when)))
+        self._render()
 
     def _enter_adjustment(self, step):
         """"Enter the total positive or negative adjustment volume in gallons".
@@ -3746,7 +6964,7 @@ class SimApp(tk.Tk):
         try:
             gallons = float(text)
         except ValueError:
-            self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+            self._refuse("numbers only")
             return
         kind, _previous = self._recon_period()
         self.console.bir.adjust(self.device, gallons, kind)
@@ -3765,7 +6983,16 @@ class SimApp(tk.Tk):
             return [self.device]
         if kind == "tank":
             return sorted(self.console.tank_level) or [self.device]
-        return list(range(1, max(self.console.capacity(kind), 1) + 1))
+        # **ALL LINES is the lines the console HAS**, which is the same rule
+        # `programmed_lines` states for every other list of them: a line
+        # exists once its position is switched on at LINE CONFIG or it has
+        # been given a label, and a card in the cage is wires. This asked
+        # the CARD how many positions it could serve, so ALL LINES on a
+        # two-line site started tests on six -- four of them on pipe nobody
+        # has told the console about, which the console then reports on.
+        mine = [n for k, n, _label in self.console.programmed_lines()
+                if k == kind]
+        return mine or [self.device]
 
     def _rate_key(self, kind, step):
         """The engine's name for the rate the panel is showing."""
@@ -3776,18 +7003,60 @@ class SimApp(tk.Tk):
         return {"3.0 GPH": "gross", "0.2 GPH": "periodic",
                 "0.1 GPH": "annual"}.get(label, "periodic")
 
+    def _test_screen(self, kind, device, rate_key):
+        """The two lines a test walk leaves on the glass for one device.
+
+        576013-610 Rev AC p.11-4 draws both ends of a LINE test and both are
+        the device's own status: "Press ENTER to begin the test. The system
+        displays the message:" over `Q #: RUNNING PUMP` / `PRESS <STEP> TO
+        CONTINUE`, and the stop walk over `Q #: TEST ABORTED` / the same.
+        **The console reports the DEVICE, not a tally of devices**, and the
+        `sump` branch below has drawn its screen this way all along -- which
+        makes the counts the odd ones out rather than the shape.
+
+        *The tank half is an inference and worth saying so.* Chapters 20 and
+        21 draw their confirmations as screens the text extraction
+        interleaves with their neighbours -- the trap UNKNOWNS section D
+        describes and which has cost this project five wrong readings -- so
+        rather than read one out of a scrambled column, the tank screen is
+        built from strings the manual DOES draw elsewhere: chapter 9's
+        `T #: (Product Name)` over `leaks.status_line`, which is the
+        console's own words for what a tank's test is doing.
+
+        See FIDELITY U5.
+        """
+        if kind == "tank":
+            label = self.console.text("602", device) or ""
+            return [f"T {device}:{label}"[:COLS],
+                    self.console.leaks.status_line("tank", device,
+                                                   rate_key)[:COLS]]
+        from .pressure import Lines
+        line = self.console.lines.line(kind, device)
+        # the KIND's own word: 576013-610 Rev AC p.11-4 draws `Q #: RUNNING
+        # PUMP` for PLLD and p.12-4 draws `W #: TEST PENDING` for WPLLD,
+        # because Figure 20's status list has no RUNNING PUMP on it
+        return [f"{Lines.code(kind)} {device}: {line.shown_status()}"[:COLS],
+                CONT_STEP]
+
     def _run_action(self, action):
         verb, kind = action.split(":")
         if verb == "close":
             # "Manual Shift lets you close the shift and generate a Shift
             # Reconciliation Report."
             if not self.console.licensed("bir"):
-                return "BIR NOT INSTALLED"
+                # A console without the key does not offer the mode at all
+                # -- `_mode_offered` is that gate -- so there is no screen
+                # for it to draw and `BIR NOT INSTALLED` was this project's.
+                self.log("-- close refused: no BIR key")
+                return None
             rows = self.console.bir.close(kind)
             self.paper_out(printer.reconcile(self.console, kind=kind,
                                              previous=True))
+            # The count is a fact about what the simulator did, so it goes
+            # in the bench log; `{kind} CLOSED / {n} TANK(S)` was a screen
+            # no page draws. See FIDELITY U5.
             self.log(f"-- {kind} closed on {len(rows)} tank(s)")
-            return f"{kind.upper()} CLOSED" + chr(10) + f"{len(rows)} TANK(S)"
+            return None
         steps = self.steps()
         rate_step = next((s for s in steps if s.get("sel", "").endswith("rate")),
                          {})
@@ -3805,40 +7074,244 @@ class SimApp(tk.Tk):
             self.confirm = [f"s {self.device}:{gap}{said}"[:COLS], CONT_STEP]
             return None
         if verb == "stop":
-            done = [self.console.leaks.stop(kind, d)
-                    for d in self._test_devices(kind)]
-            stopped = sum(1 for d in done if d != "NO TEST RUNNING")
-            return (f"{stopped} TEST(S)" + chr(10) + "STOPPED") if stopped                 else ("NO TEST" + chr(10) + "RUNNING")
+            devices = self._test_devices(kind)
+            done = [self.console.leaks.stop(kind, d) for d in devices]
+            stopped = [d for d, said in zip(devices, done)
+                       if said != "NO TEST RUNNING"]
+            self.log(f"-- {kind} test stopped on {len(stopped)} device(s)")
+            if not stopped:
+                # 576013-610 Rev AC p.21-1, and these are the manual's own
+                # two lines: "If all active tests are stopped, the system
+                # displays the message: LEAK TEST NOT ACTIVE / PRESS
+                # <FUNCTION> TO CONTINUE."
+                return "LEAK TEST NOT ACTIVE" + chr(10) + CONT_FUNCTION
+            if kind == "vlld":
+                # The VLLD chapter draws its own answer and it is not the
+                # line's status. 576013-610 Rev AC p.13-5: "Press ENTER to
+                # stop the leak test on all lines. The system displays the
+                # message: `STOP LEAK TEST: ALL LINES` / `PRESS <ENTER>`"
+                # -- the screen it was already on. Chapter 11's PLLD walk
+                # answers `Q #: TEST ABORTED` and chapter 13's does not,
+                # and they are different chapters about different cards.
+                return None
+            self.confirm = self._test_screen(kind, stopped[0], None)
+            return None
         rate_key = self._rate_key(kind, rate_step)
         if rate_key == "purge":
             # "Air Purge purges air from the VLLD Controller by performing six
             # consecutive VLLD Controller 3.0 gph selftests"
             for dev in self._test_devices(kind):
                 self.console.leaks.air_purge(dev)
+            # "Air Purge purges air from the VLLD Controller by performing
+            # six consecutive VLLD Controller 3.0 gph selftests" -- which is
+            # what it DOES, and no page draws a screen saying it is done.
+            # See FIDELITY U5.
             self.log(f"-- air purge on {len(self._test_devices(kind))} line(s)")
-            return "AIR PURGE DONE" + chr(10) + "6 SELFTESTS"
+            return None
         hours = float(self.sel["hours"]) if kind == "tank" else None
         manual = kind == "tank" and self.sel["stop_mode"].startswith("MANUAL")
-        started = 0
-        for dev in self._test_devices(kind):
-            if self.console.leaks.start(kind, dev, rate_key, hours,
-                                        manual) == "TEST STARTED":
-                started += 1
-        self.log(f"-- {rate_key} test started on {started} {kind}(s)")
-        return (f"{started} TEST(S) STARTED" + chr(10)
-                + (f"{hours:.0f} HOURS" if hours else rate_key.upper()))             if started else ("NO TEST STARTED" + chr(10) + "CHECK DEVICE")
+        devices = self._test_devices(kind)
+        started, said = [], {}
+        for dev in devices:
+            said[dev] = self.console.leaks.start(kind, dev, rate_key, hours,
+                                                 manual)
+            if said[dev] == "TEST STARTED":
+                started.append(dev)
+        self.log(f"-- {rate_key} test started on {len(started)} {kind}(s)"
+                 + ("" if len(started) == len(devices) else
+                    "; " + ", ".join(f"{d}: {said[d]}" for d in devices
+                                     if said[d] != "TEST STARTED")))
+        # And how long the bench is about to sit here. This warning hung off
+        # the results screen's ENTER, which was a shortcut no console has
+        # and is gone (FIDELITY O15) -- so it now hangs off the walk the
+        # manual routes a hand-started test through, which is where a
+        # technician actually starts one. See FIDELITY U3.
+        if started:
+            self._say_how_long(kind, rate_key, said[started[0]])
+        # **ENTER always lands on the device's own status screen, whether a
+        # test started or not**, because on this walk the status word IS the
+        # answer. 576013-610 Rev AC p.11-4 draws ENTER over `Q #: RUNNING
+        # PUMP`, and 577013-344 Rev H p.22 lists what else that same line
+        # can read -- DISPENSING, TEST 3.0, HANDLE ON, LINE LOCKOUT, DISABLE
+        # ALARM, TEST PENDING, STP POWER OFF. Every one of those is a reason
+        # a test did not start, said in the console's own words on the
+        # console's own screen. There is no separate refusal message on this
+        # walk and there does not need to be.
+        #
+        # This counted only "TEST STARTED" and threw the rest away, so ENTER
+        # on a line that was dispensing, or already testing, or shut down,
+        # changed nothing on the glass and printed nothing anywhere: a dead
+        # key. A technician cannot be taught why a test will not run by a
+        # console that will not say. The STOP half of this same function has
+        # drawn the manual's own `LEAK TEST NOT ACTIVE` all along, which is
+        # what makes this an oversight rather than a decision.
+        #
+        # FIDELITY U5's rule is that this project does not INVENT screens.
+        # This invents none: the screen is the one the walk already draws,
+        # shown when the manual shows it.
+        #
+        # **Except on the VLLD walk, where chapter 13 draws no screen at
+        # all.** p.13-2: "Press ENTER to start the test. The system begins
+        # the line leak, displays the message: `START LEAK TEST: ALL LINES`
+        # / `PRESS <ENTER>` and prints a report that the test has started."
+        # The message it displays is the one it was already displaying. The
+        # single-line walk on the same page says the same thing in fewer
+        # words -- "Press ENTER to start the line leak test. The system
+        # prints a confirmation that it has started the test" -- and draws
+        # no screen either.
+        #
+        # This answered `W 1: TEST COMPLETE`: the WPLLD letter on a VLLD
+        # line, the word COMPLETE at the instant a test starts, and a
+        # screen change the chapter does not draw. See CLOSED U34, and
+        # UNKNOWNS A33 for the report, which every VLLD page says prints
+        # and no page anywhere draws.
+        if kind == "vlld":
+            return None
+        self.confirm = self._test_screen(kind, (started or devices)[0],
+                                         rate_key)
+        return None
+
+    def _enter_map(self):
+        """MODIFY TANK/METER MAP: the row the five cells have been dialled to.
+
+        "Press ENTER to confirm your change", 576013-623 Rev AN p.17-5, and
+        the change goes to `Console.map_meter` -- 7B1's own store, which is
+        where the serial command writes. A panel that had put the five
+        numbers under `S7B100` in `values` would have stored a row nothing
+        reads: BIR takes its tank per meter off `meter_map` and nowhere
+        else.
+
+        Two of the tank column's three meanings are this screen's own:
+        "99: Tank with no probe" is the -1 the command takes, and
+        "00: Remove meter from tank/meter map" is its 0.
+        """
+        if not self.editing:
+            self.log("-- nothing entered: press CHANGE first")
+            return
+        cells = self.buf.split()
+        if any(set(cell) == {"X"} for cell in cells):
+            # a row with a cell nobody has dialled is not a row. No page
+            # draws a refusal for it, so the screen stays where it is with
+            # the entry still open and the reason goes to the log.
+            self.log("-- meter map: every field wants a value")
+            return
+        self.editing, self.buf = False, ""
+        bus, slot, fp, meter, tank = (int(c) for c in cells)
+        number = -1 if tank == 99 else tank
+        fields = [str(bus), str(slot), str(fp), str(meter), str(number)]
+        bad = wirelists.map_errors(self.console, fields)
+        if bad:
+            # The wire answers this with the row and `??` in the field it
+            # could not take. The panel cannot draw two lines of that on a
+            # two line display and no page says it tries, so the rule is
+            # `_refuse`'s: the console says nothing and keeps its screen.
+            self.log("-- meter map refused: " + " ".join(sorted(
+                ("bus", "slot", "position", "meter", "tank")[i]
+                for i in bad)))
+            self._render()
+            return
+        self.console.map_meter(bus, slot, fp, meter, number)
+        self.log(f"-- meter map: FP {fp} M {meter} "
+                 + ("unmapped" if not number else f"on tank {number}"))
+        # The acknowledgement is the line the screen was already showing
+        # over PRESS <STEP> TO CONTINUE, which is what every other typed
+        # value in Setup Mode does. See FIDELITY O9.
+        self.confirm = [self._map_row(cells), CONT_STEP]
+        self._refresh_site()
+        self._render()
+
+    def _enter_offset(self, step):
+        """INDIVIDUAL METER OFFSET: this meter's own calibration percent.
+
+        "Enter the desired offset in increments of +/-0.01% with a maximum
+        range of +/-9.99% and Press ENTER to confirm your change" -- and it
+        goes to `Console.set_meter_offset`, which is where `S7B400` writes.
+        The step used to carry a `list` field and so went down the ordinary
+        S-code path, which stored eleven characters under `S7B400` in
+        `values`: BIR reads `meter_offsets` and nothing has ever read that.
+        """
+        key = step.get("meter")
+        if not self.editing or key is None:
+            self.log("-- nothing entered: press CHANGE first")
+            return
+        typed = self.buf.strip()
+        self.editing, self.buf = False, ""
+        try:
+            pct = float(typed)
+        except ValueError:
+            self.log(f"-- meter offset refused: {typed!r} is not a number")
+            self._render()
+            return
+        if abs(pct) > 9.99:
+            # the page's own range, and `_offset_ok` is the wire's half of
+            # the same rule
+            self.log(f"-- meter offset refused: {pct:+.2f}% is over 9.99%")
+            self._render()
+            return
+        tank = int((self.console.meter_map.get(key) or {}).get("tank") or 0)
+        self.console.set_meter_offset(key.fp, key.meter, max(tank, 0), pct)
+        self.log(f"-- meter {key.meter} at FP {key.fp}: offset {pct:+.2f}%")
+        self.confirm = [screens.offset_row_text(
+            screens.offset_cells(self.console, key)), CONT_STEP]
+        self._render()
 
     def _enter_console(self, step):
-        """Store one of the settings the console keeps for itself."""
+        """Store one of the settings the console keeps for itself.
+
+        **ENTER without CHANGE stores nothing.** This had no such guard, so
+        a bare ENTER -- no CHANGE, nothing typed -- wrote `self.buf`, which
+        is the empty string, and ERASED the setting. On thirteen screens:
+
+            AVG SALES SUN:         0   ->   AVG SALES SUN:
+            MIN: +1.00                 ->   MIN:
+            TIME: 11:59 PM             ->   TIME:
+
+        all seven Fuel Management days and six EVR/ISD screens, including
+        the nozzle air-to-liquid range and the analysis start time. And it
+        did it under a `PRESS <STEP> TO CONTINUE` that reads like success,
+        so the console told you it had taken the entry while destroying
+        one. A technician pressing ENTER to see what a screen does loses
+        the site's programming.
+
+        The sibling path for ordinary S-code fields has had the guard all
+        along -- `if not self.editing or not code: return` -- and this is
+        the same rule: 576013-623 Rev AN's procedures all read "press
+        CHANGE, enter the value, then press ENTER", so ENTER is the second
+        half of a CHANGE and does nothing on its own.
+
+        CHANGE sets `editing`, so a DELIBERATE empty entry still reaches
+        the branches that treat it as "remove this" -- which is what the
+        serial number screen wants, and is a different thing from never
+        having pressed CHANGE at all. See K1.
+        """
         from .console import FIELDS
         f = FIELDS.get(step["console"], {})
+        if (not self.editing and f.get("kind") == "setting"
+                and f.get("choices")):
+            # **A pick-list has nothing to guard.** CHANGE walks the list
+            # and stores as it goes, so `editing` is never set and ENTER
+            # fell into the guard below and drew nothing -- on a screen
+            # 576013-623 Rev AN p.6-2 says is confirmed: "Press ENTER to
+            # confirm your choice. The system displays the message:
+            # `PARITY: XXX` / `PRESS <STEP> TO CONTINUE`." Nothing can be
+            # erased here, which is what the guard exists to prevent.
+            device = self.device if f.get("scope") == "device" else 0
+            shown = self.console.setting(f["which"], device,
+                                         f.get("default", ""))
+            prompt = f.get("prompt") or ""
+            self.confirm = [f"{prompt} {shown}".strip()[:COLS], CONT_STEP]
+            self._render()
+            return
+        if not self.editing:
+            self.log("-- nothing entered: press CHANGE first")
+            return
         text, kind = self.buf.strip(), f.get("kind")
         self.editing, self.buf = False, ""
         console = self.console
         if kind == "chartcode":
             digits = "".join(c for c in text if c.isdigit())
             if len(digits) != 6:
-                self._flash("INVALID ENTRY" + chr(10) + "ENTER 6 DIGITS")
+                self._refuse("six digits")
                 return
             on = console.set_chart_code(digits)
             self.chart_open = on         # whoever set it knows it
@@ -3848,7 +7321,7 @@ class SimApp(tk.Tk):
             try:
                 getattr(console, f["which"])[self.device] = float(text)
             except ValueError:
-                self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+                self._refuse("numbers only")
                 return
             console.record_chart_change(self.device)
             console.save()
@@ -3858,11 +7331,11 @@ class SimApp(tk.Tk):
             try:
                 value = float(text.replace("IWC", "").strip())
             except ValueError:
-                self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+                self._refuse("numbers only")
                 return
             if not console.set_pmc_threshold(f["which"], value):
                 # "-8 < off < on < +3"
-                self._flash("OUT OF RANGE" + chr(10) + "-8 < OFF < ON < +3")
+                self._refuse("-8 < off < on < +3")
                 return
             off, on = console.pmc_thresholds()
             shown = off if f["which"] == "off" else on
@@ -3873,19 +7346,24 @@ class SimApp(tk.Tk):
             allowed = f.get("choices")
             number = f.get("number")
             if number:
-                if not text.isdigit() or not (number[0] <= int(text)
+                # "This feature lets you enter a delay (of from 5 to 999
+                # hours) ... Enter 000 to disable this feature": a range
+                # with a hole under it, where zero is not the bottom of the
+                # range but the way to turn the thing off. 576013-623 Rev
+                # AN p.51, FIDELITY N3.
+                spare = f.get("zero_disables") and text.strip("0") == ""
+                if not text.isdigit() or not (spare or number[0] <= int(text)
                                               <= number[1]):
-                    self._flash("INVALID ENTRY" + chr(10)
-                                + f"{number[0]} TO {number[1]}")
+                    self._refuse(f"{number[0]} to {number[1]}"
+                                 + (" or 0" if f.get("zero_disables")
+                                    else ""))
                     return
                 text = text.rjust(int(f.get("width") or 0), "0")
             elif allowed and text.upper() not in allowed:
-                self._flash("INVALID ENTRY" + chr(10)
-                            + "/".join(allowed)[:COLS])
+                self._refuse("one of " + "/".join(allowed))
                 return
             elif f.get("maxlen") and len(text) > int(f["maxlen"]):
-                self._flash("INVALID ENTRY" + chr(10)
-                            + f"MAX {f['maxlen']} CHARS")
+                self._refuse(f"at most {f['maxlen']} characters")
                 return
             console.set_setting(f["which"], text.upper(), device)
             console.save()
@@ -3918,7 +7396,7 @@ class SimApp(tk.Tk):
         try:
             value = float(text)
         except ValueError:
-            self._flash("INVALID ENTRY" + chr(10) + "NUMBERS ONLY")
+            self._refuse("numbers only")
             return
         self._point[which] = value
         if which == "height":
@@ -3928,7 +7406,7 @@ class SimApp(tk.Tk):
             return
         height = self._point.get("height")
         if height is None:
-            self._flash("ENTER A HEIGHT" + chr(10) + "FIRST")
+            self.log("-- a chart point wants its height first")
             return
         n = self.console.add_chart_point(self.device, height, value)
         self._point.clear()
@@ -3949,11 +7427,12 @@ class SimApp(tk.Tk):
             self._profile_pending = None
             self.editing, self.buf = False, ""
             if not self.armed:
-                self._flash("PROFILE UNCHANGED")
+                self.log("-- tank profile unchanged")
                 return
             self.armed = False
             erased = self.console.set_tank_profile(tank, wanted)
             self._refresh_site()
+            self.refresh_traffic()
             self.confirm = [f"TANK PROFILE: {_C.PROFILE_NAME[wanted]}"[:COLS],
                             CONT_STEP]
             self.log(f"-- tank {tank} profile {_C.PROFILE_NAME[wanted]}, "
@@ -3964,7 +7443,7 @@ class SimApp(tk.Tk):
                        if v == self.buf), None)
         self.editing, self.buf = False, ""
         if chosen is None or chosen == self.console.tank_profile(tank):
-            self._flash("PROFILE UNCHANGED")
+            self.log("-- tank profile unchanged")
             return
         if self.console.profile_erasable(tank, chosen):
             self._profile_pending = chosen
@@ -3973,6 +7452,7 @@ class SimApp(tk.Tk):
             return
         self.console.set_tank_profile(tank, chosen)
         self._refresh_site()
+        self.refresh_traffic()
         self.confirm = [f"TANK PROFILE: {_C.PROFILE_NAME[chosen]}"[:COLS],
                         CONT_STEP]
         self._render()
@@ -3982,41 +7462,97 @@ class SimApp(tk.Tk):
     # that the console is BUSY and does not answer the keypad while it is.
     ARCHIVE_SECONDS = 3.0
 
+    # 576013-623 Rev AN, beside the restore procedure: "If you are restoring
+    # after a reboot (switching the console Off and then back On), the system
+    # will wait 5 minutes before processing your request to restore archived
+    # setup data. This delay is to allow all hardware to initialize."
+    # WHETHER the console is inside those five minutes is the console's own
+    # question and it counts the real 300 seconds down in `restore_hold()`;
+    # what the bench sits through in their place is this, for the reason
+    # ARCHIVE_SECONDS is three and not sixty.
+    REBOOT_HOLD_SECONDS = 5.0
+
     def _run_archive(self, what):
         """Save, restore or clear. The console goes away while it works."""
         self.log(f"-- archive {what}: working")
-        if self.ARCHIVE_SECONDS <= 0:
+        if what in ("save", "restore"):
+            # 576013-637 Rev M p.4 step 8 and p.15 step 6: "Press the STEP
+            # key and the printer prints" the START TIME record. A clear
+            # prints nothing, because that manual draws no record for one.
+            self.paper_out(printer.archive_record(self.console, what,
+                                                  "START TIME"))
+            self.log(f"-- PRINT: archive {what} START TIME")
+        seconds = self.ARCHIVE_SECONDS
+        if what == "restore" and self.console.restore_hold() > 0:
+            # The request is taken and then sat on -- "the system will wait 5
+            # minutes before processing your request to restore archived
+            # setup data" -- so the console is away for the hold as well as
+            # for the work.
+            seconds = max(seconds, self.REBOOT_HOLD_SECONDS)
+            self.log("-- archive restore: holding for hardware to initialize")
+        if seconds <= 0:
             self._finish_archive(what)
             return
-        self.busy_until = time.time() + self.ARCHIVE_SECONDS
+        # 576013-637 Rev M p.4 step 9: while a SAVE runs the panel reads
+        # "ARCHIVE UTILITY / SAVE SETUP DATA: BUSY". The same manual walks a
+        # restore without any BUSY screen -- it goes straight from the
+        # confirmation to the printer's START TIME record -- so only the save
+        # gets one, and the others just stop answering.
+        self.busy_line = "SAVE SETUP DATA: BUSY" if what == "save" else None
+        self.busy_until = time.time() + seconds
         self._render()
-        self.after(int(self.ARCHIVE_SECONDS * 1000),
-                   lambda: self._finish_archive(what))
+        self.after(int(seconds * 1000), lambda: self._finish_archive(what))
 
     def _finish_archive(self, what):
         console = self.console
         self.busy_until = 0.0
+        self.busy_line = None
         if what == "save":
             n = console.archive_save()
-            msg = f"{n} VALUE(S) SAVED" if n >= 0 else "SAVE FAILED"
+            if n >= 0:
+                # 576013-637 Rev M p.5 step 10: "After this task is
+                # completed, the printer prints" the END TIME record, with
+                # the size of what went into the chip under it. Nothing is
+                # printed for a save that failed: the manuals draw no
+                # failure record for the Archive Utility at all.
+                self.paper_out(printer.archive_record(
+                    console, "save", "END TIME", console.archive_bytes()))
+                self.log("-- PRINT: archive save END TIME")
         elif what == "restore":
             n = console.archive_restore()
-            msg = f"{n} VALUE(S) RESTORED" if n >= 0 else "NO ARCHIVE SAVED"
             if n >= 0:
+                # 576013-637 Rev M p.16: "When the restoring process is
+                # complete the printer prints out" the END TIME record, and
+                # "this information is followed by a complete printout of the
+                # system setup" -- in that order, the record first.
+                self.paper_out(printer.archive_record(console, "restore",
+                                                      "END TIME"))
+                self.log("-- PRINT: archive restore END TIME")
                 # "The system also prints a complete listing of all restored
                 # setup data."
                 self.paper_out(printer.setup(console))
                 self.log("-- PRINT: restored setup data")
         else:
             n = console.archive_clear()
-            msg = (f"{n} VALUE(S) CLEARED" if n >= 0 else "CLEAR FAILED")
-        self.log(f"-- archive {what}: {msg.lower()}")
+        self.log(f"-- archive {what}: {n} value(s)" if n >= 0
+                 else f"-- archive {what}: nothing")
+        # **The comment below was already right and the line under it was
+        # not.** 576013-637 p.8 step 11 draws the display after the save
+        # completes, and it is the screen the function started on:
+        # `ARCHIVE UTILITY` over `PRESS <STEP> TO CONTINUE`. This flashed a
+        # COUNT there instead -- `{n} VALUE(S) SAVED`, and `SAVE FAILED`,
+        # `NO ARCHIVE SAVED` and `CLEAR FAILED` for the ways it can go
+        # wrong, none of which any page draws. The count is in the bench log
+        # now, which is where a number about what the simulator did belongs.
+        # See FIDELITY U5.
+        #
         # "When the save is completed, the system returns the original
         # message: ARCHIVE UTILITY / PRESS <STEP> TO CONTINUE."
         self.step = HEADER
         self.armed = self.sure = False
         self._refresh_site()
-        self._flash("ARCHIVE UTILITY" + chr(10) + msg[:COLS])
+        self.refresh_traffic()
+        self._flash("ARCHIVE UTILITY" + chr(10) + "PRESS <STEP> TO CONTINUE")
 
     def k_alarm(self):
         """ALARM/TEST, which does less than people expect.
@@ -4039,34 +7575,96 @@ class SimApp(tk.Tk):
         else:
             self._alarm_presses = 0
         fn = self.cur_function()
-        if MODES[self.mode] == "NORMAL" and self._entered and fn                 and fn["function"] == "TEST OUTPUT RELAYS":
+        if (MODES[self.mode] == "NORMAL" and self._entered and fn
+                and fn["function"] == "TEST OUTPUT RELAYS"
+                and self.step >= 0):
             # "This key also activates and deactivates output relays when
             # using the Output Relay Test function."
+            #
+            # **And not one screen earlier than that.** 576013-610 Rev AC
+            # p.2-5 walks the whole function in four rows -- FUNCTION to
+            # `TEST OUTPUT RELAYS`, STEP to `ENTER RELAY NUMBER`, then
+            # ALARM/TEST -- so the key is reached AFTER a STEP has left the
+            # function screen. This branch tested the mode, `_entered` and
+            # the function's name and not the step, so ALARM/TEST on the
+            # function's own header -- a screen whose whole second line is
+            # `PRESS <STEP> TO CONTINUE` -- closed relay 1. A relay is a
+            # physical contact that runs a pump, a horn or a shutdown, and
+            # teaching that the key is safe to press anywhere in the
+            # function is the kind of training this simulator exists not to
+            # give. `HEADER` is -1 and every real step is 0 or more.
             n = self.device
             self.console.relays[n] = not self.console.relays.get(n)
             state = "ON" if self.console.relays[n] else "OFF"
             self.log(f"-- relay {n} switched {state} by ALARM/TEST")
-            self._flash(f"RELAY {n} {state}"
-                        + chr(10) + "PRESS ANY KEY FOR SETUP")
+            # 576013-610 Rev AC p.23 draws this screen, and both of this
+            # console's lines were its own: `RELAY 1 ON` over `PRESS ANY KEY
+            # FOR SETUP` where the page has `R 1: (Device Name)` over
+            # `ON - PRESS ANY KEY`. The device line is the same `R n:LABEL`
+            # every other relay screen on the console draws, and the second
+            # line is the manual's own words for what to do next.
+            #
+            # *The page draws ON and does not draw OFF*: its flow is press
+            # ALARM/TEST, the relay energizes, press any key and you are
+            # back at ENTER RELAY NUMBER. This console lets ALARM/TEST
+            # toggle, so it needs a word for the other half and uses the
+            # same line with OFF in it. See FIDELITY U5.
+            # `RELAY n` when the site has not labelled it, which is what
+            # every other caller in this package falls back to -- `relays`,
+            # `printer` and `console` all do. This was a bare `""`, so
+            # `R 2: RELAY 2` became `R 2:` on the very next keystroke and
+            # the console contradicted itself one key apart. The manual
+            # draws `R 1: (Device Name)`, 576013-610 Rev AC p.22-1.
+            # FIDELITY U8.
+            label = self.console.outputs.label(n)
+            self._flash(f"R {n}: {label}"[:COLS]
+                        + chr(10) + f"{state} - PRESS ANY KEY")
+            # And the screen's second line is an instruction the console
+            # has to honour: "Press any key to printout Relay Setup"
+            # (p.2-5, the same four-row walk). The line was drawn and
+            # nothing came off the roll for any key -- only PRINT printed,
+            # and it printed the function's own report rather than Relay
+            # Setup. `printer.relays` IS that report, headed OUTPUT RELAY
+            # SETUP, and it existed all along with nothing on this walk
+            # calling it. `_keyed` runs at the top of every key handler, so
+            # the NEXT key -- whichever it is -- is where this is cashed.
+            self.relay_setup_due = True
             return
         # "If your system has a printer, it will print an alarm or warning
         # report when this button is pressed."
         self.paper_out(printer.alarms(self.console))
-        shown, still, cleared = self.console.acknowledge(self.mt_key)
-        if not shown:
-            self._flash("ALARM TEST" + chr(10) + "ALL FUNCTIONS NORMAL")
-            return
-        if self.console.has("mt") and not self.mt_key and shown != cleared:
-            self._flash(f"{shown} PROTECTED ALARM(S)"
-                        + chr(10) + "INSERT KEY IN PORT")
-        elif still and cleared:
-            self._flash(f"{cleared} CLEARED, {still} STILL"
-                        + chr(10) + "ACTIVE - CORRECT CAUSE")
-        elif still:
-            self._flash(f"{still} ALARM(S) SILENCED"
-                        + chr(10) + "STILL ACTIVE")
-        else:
-            self._flash(f"{cleared} ALARM(S)" + chr(10) + "ACKNOWLEDGED")
+        shown, _still, cleared = self.console.acknowledge(
+            self.console.mt_logged_in())
+        # **The console does not report what the keypress did.** Four
+        # messages stood here and all four were this project's -- a count of
+        # what was cleared, a count of what is still standing, the word
+        # SILENCED, the word ACKNOWLEDGED. 576013-610 Rev AC says what
+        # happens instead, twice and unambiguously:
+        #
+        #   p.3-2  "ALARM/TEST silences the alarm. It does not clear the
+        #           alarm message from the display or disable the alarm."
+        #   p.29-2 "Warning and Alarm Messages display until you correct the
+        #           cause of the problem. After you correct the cause, you
+        #           must press the ALARM/TEST button to acknowledge the alarm
+        #           and clear the display. The system will then display the
+        #           ALL FUNCTIONS NORMAL message."
+        #
+        # So there are two outcomes and the resting screen already draws
+        # both of them: an alarm whose cause still stands keeps its own
+        # message on the glass, and a console with nothing standing reads
+        # ALL FUNCTIONS NORMAL. Flashing anything here overwrote the very
+        # message the manual says must stay. Say nothing, and `_lines` is
+        # right either way.
+        #
+        # The one thing that IS drawn is the Maintenance Tracker's refusal,
+        # because that is a screen 576013-610 chapter 33 draws: a key has to
+        # be presented before a protected alarm can be acknowledged at all.
+        # Its count line went with the others.
+        #
+        # See FIDELITY U5.
+        if (shown and self.console.has("mt")
+                and not self.console.mt_logged_in() and shown != cleared):
+            self._flash("INSERT KEY IN PORT" + chr(10) + "PRESS <ENTER>")
 
     # =====================================================================
     # the printer
@@ -4083,6 +7681,27 @@ class SimApp(tk.Tk):
         self.log("-- console paper: "
                  + ("shown" if self.live_paper.get() else "hidden"))
 
+    def _set_lever(self):
+        """Push the feed roller release down, or back up.
+
+        "Swing up the printer cover and push the paper feed release lever
+        down" is how a roll is changed, and a lever left down is PRINTER
+        ERROR: "Printer feed roller release is open. Push the release lever
+        ... to the up position." The printer is inoperative while it is
+        down. BENCH.md P6.
+        """
+        self.console.printer_lever_open = bool(self.lever_down.get())
+        # The console's own channel for this is the ALARM -- `PRINTER
+        # ERROR` is `alarmlabels.json`'s own words for 01/02, read off the
+        # manual -- so the light comes on and the display carries it. The
+        # flash was a second, invented phrasing of a condition the console
+        # already words correctly. Same for the paper below, whose docstring
+        # says so already. See FIDELITY U5.
+        self.log("-- printer: feed release lever "
+                 + ("DOWN (PRINTER ERROR)" if self.console.printer_lever_open
+                    else "up"))
+        self._render()
+
     def _set_paper(self):
         """Take the roll out, or put a new one in.
 
@@ -4094,9 +7713,6 @@ class SimApp(tk.Tk):
         self.console.out_of_paper = bool(self.no_paper.get())
         if self.console.out_of_paper:
             self.cut_paper()
-            self._flash("PRINTER OUT OF PAPER" + chr(10) + "LOAD PAPER")
-        else:
-            self._flash("PAPER LOADED")
         self.log("-- printer: "
                  + ("out of paper" if self.console.out_of_paper else "loaded"))
         self._draw_printer()
@@ -4117,7 +7733,14 @@ class SimApp(tk.Tk):
         if self.console.out_of_paper:
             self.log("-- nothing printed: out of paper")
             return
-        folded = printer.fit(lines)
+        if self.console.printer_lever_open:
+            # "or the printer is inoperative": with the feed roller
+            # released there is nothing driving the paper
+            self.log("-- nothing printed: feed release lever is down")
+            return
+        # A real console signs off every report, which is what tells you
+        # where one stops on a continuous roll.
+        folded = printer.fit(lines) + ["", printer.END_MARK]
         try:
             self.paper.insert("end", "\n".join(folded) + "\n\n")
             self.paper.see("end")
@@ -4176,6 +7799,37 @@ class SimApp(tk.Tk):
         self.console.recon_kind = kind
         self.console.recon_previous = previous
 
+    def _chosen_day(self):
+        """The day typed on SELECT DAY, or None for the one in progress.
+
+        It only means anything on the daily RECONCILIATION report: the shift
+        and periodic screens are toggles, and so is the variance chapters'
+        daily one. See FIDELITY Q1.
+        """
+        kind, _previous = self._recon_period()
+        fn = self.cur_function() or {}
+        if kind != "daily" or fn.get("function") != "DISPLAY AND PRINT":
+            return None
+        return self.sel.get("day")
+
+    def _recon_day(self):
+        """The day a SELECT DAY screen is naming, as a moment.
+
+        The typed day if one was typed; otherwise the day the toggle is on --
+        the one in progress, or the day the last closed daily row belongs to,
+        falling back to the calendar day before this one on a console that
+        has never closed a day.
+        """
+        chosen = self._chosen_day()
+        if chosen is not None:
+            return chosen
+        now = time.mktime(self.console.now())
+        _kind, previous = self._recon_period()
+        if not previous:
+            return now
+        row = self.console.bir.last(self.device, "daily")
+        return row["closed"] if row else now - 86400.0
+
     def _recon_word(self, step):
         """The screen's own wording, which follows the period chosen.
 
@@ -4199,7 +7853,7 @@ class SimApp(tk.Tk):
             # (576013-610 Rev AC p.28-19 and p.28-20; function codes 79B and
             # 79C answer "CURRENT SHFT ADJ" and "MAR 26  ADJ VOL")
             if word == "DAILY":
-                fill = time.strftime("%b %d", self.console.now()).upper()
+                fill = clock_date(self.console.now(), year=False)
             else:
                 fill = str(self.sel.get("which", "CURRENT"))
             said = said.replace("%S", fill)
@@ -4248,10 +7902,35 @@ class SimApp(tk.Tk):
         if step.get("sel"):
             value = str(self.sel.get(step["sel"], ""))
             if word.startswith("SELECT DAY"):
-                # "SELECT DAY: (Date)": the day itself, not the word
-                value = self.console.recon_reading("close_date", self.device)
+                # "SELECT DAY: (Date)", and p.28-20 draws the same screen as
+                # `SELECT DAY: (Current Date)`. It used to read the selected
+                # ROW's closing date, so a console with no previous day put a
+                # status message on it and the display cut it mid-word:
+                # `SELECT DAY: NO DATA AVAI`. A day selector names a day
+                # whether or not there is a row for it; whether there IS one
+                # is what the report says. See FIDELITY Q1.
+                value = clock_date(time.localtime(self._recon_day()))
+                if self.editing and self._typed_day(step):
+                    value = self._edit_text()
             return [head[:COLS], f"{word}: {value}"[:COLS]]
-        live = self.console.recon_reading(step["live"][6:], self.device)             if step.get("live") else ""
+        live = ""
+        if step.get("live"):
+            live = self.console.recon_reading(step["live"][6:], self.device,
+                                              day=self._chosen_day())
+        # **This clips, and a clipped number is a wrong number.**
+        # `CALCULATED INVNTRY: 14000 GALS` is thirty characters against a
+        # twenty-four column display, so the glass reads `CALCULATED
+        # INVNTRY: 1400` on a tank holding fourteen thousand -- silently,
+        # and only when the figure has five digits, so the same screen is
+        # right for the next tank along.
+        #
+        # 576013-610 Rev AC p.28-2 prints every one of these on TWO lines,
+        # the label and then the value, precisely because they do not fit on
+        # one; what the PANEL does with them is on no page here. Abbreviating
+        # the label to make room was tried and reverted: it draws text no
+        # manual draws, which `tests/test_citations.py` refuses and FIDELITY
+        # U5 is the rule for. Left clipping, and open as FIDELITY O14, until
+        # a real console or a page says what the short form is.
         return [head[:COLS], f"{word}: {live.strip()}"[:COLS]]
 
     def _recon_report(self, name, step):
@@ -4260,7 +7939,8 @@ class SimApp(tk.Tk):
         console = self.console
         self._recon_sync()
         kind, previous = self._recon_period()
-        device = self.device if (step or {}).get("print_scope") == "device"             else None
+        device = (self.device if (step or {}).get("print_scope") == "device"
+                  else None)
         tanks = [device] if device else None
         fn = self.cur_function()
         which = (fn or {}).get("print")
@@ -4270,6 +7950,9 @@ class SimApp(tk.Tk):
                   "variance_analysis": printer.variance_analysis}.get(which)
         if report is None:
             return name, printer.status(console)
+        if report is printer.reconcile:
+            return name, report(console, tanks, kind, previous,
+                                self._chosen_day())
         return name, report(console, tanks, kind, previous)
 
     def _report(self):
@@ -4289,9 +7972,25 @@ class SimApp(tk.Tk):
         step = self.cur_step()
         console = self.console
 
+        if self.maint_report:
+            # The white key's screen says `PRESS <PRINT>` and this is what
+            # answers it. 576013-610 Rev AC Figure 32-2 prints function
+            # 119's own report, which the wire has served all along as
+            # `MAINTENANCE HISTORY` -- the paper's title, where
+            # `MAINTENANCE REPORT` is the screen's. See W13 and R3.
+            return "MAINTENANCE HISTORY", printer.maintenance(console)
+
         if mode == "SETUP":
             if self.step == MODE_SCREEN:
                 return "SETUP DATA REPORT", printer.setup(console)
+            if (step or {}).get("report") == "metermap":
+                # "Press PRINT to output a report of the current meter map
+                # for reference before proceeding", 576013-623 Rev AN
+                # p.17-5, said of this screen and of no other -- so it is
+                # the one place in Setup where PRINT is not the function's
+                # own programming. The paper's own 24-column layout, not
+                # `I7B100`'s 34: see `screens.map_lines`.
+                return ("METER MAP", screens.map_lines(console))
             return name, printer.setup(console, name)
 
         if mode == "DIAGNOSTIC":
@@ -4310,7 +8009,8 @@ class SimApp(tk.Tk):
             # "press PRINT while the monitor is displaying the status message"
             return "INVENTORY REPORT", printer.inventory(console)
         kind = (fn or {}).get("print")
-        device = self.device if (step or {}).get("print_scope") == "device"             else None
+        device = (self.device if (step or {}).get("print_scope") == "device"
+                  else None)
         return name, self._operating_report(kind, device, step)
 
     def _operating_report(self, kind, device=None, step=None):
@@ -4320,6 +8020,8 @@ class SimApp(tk.Tk):
         step = step or {}
         if step.get("history"):
             # "press STEP to display Q #: PRESS PRINT FOR HISTORY"
+            if step["history"] == "sump":
+                return printer.sump_history(console, device)
             return printer.leak_history(console, step["history"], device)
         # "PRINT - Last load report for selected tank" on the load screen,
         # "Last 40 load reports" on the ones above it
@@ -4328,6 +8030,14 @@ class SimApp(tk.Tk):
             return printer.status(console)
         if kind.startswith("sensors:"):
             return printer.sensors(console, kind.split(":")[1], device)
+        if kind == "fuel":
+            # "All information displayed is for products, not tanks": PRINT
+            # gives the report for the tanks carrying the product that is on
+            # the screen. The SHORT report is what the first screen offers;
+            # every other screen's PRINT adds the seven average-sales rows,
+            # which is the report p.7-3 draws in full. FIDELITY O4.
+            return printer.fuel(console, console.fuel_tanks(self.device),
+                                long=step.get("print_scope") != "short")
         return {
             "inventory": lambda: printer.inventory(console, tanks),
             "deliveries": lambda: printer.deliveries(console, tanks),
@@ -4391,18 +8101,37 @@ class SimApp(tk.Tk):
                     "PRESS <STEP> TO CONTINUE"]
         return ["", ""]
 
+    def _stand_on_console(self, token, depth=0):
+        """Put the panel on the step whose `console` setting is `token`.
+
+        Wherever it is: Setup Mode has levels, so a screen a flow wants to
+        drop the operator onto is not always a step of the function.
+        """
+        path = list(self.subs)
+        for i, st in enumerate(self.steps()):
+            self.subs = list(path)
+            self.step = i
+            if st.get("console") == token:
+                return True
+            parent = self._branch_at() if depth < 3 else None
+            if parent is not None:
+                self.subs = list(path) + [parent]
+                if self._stand_on_console(token, depth + 1):
+                    return True
+        self.subs = list(path)
+        return False
+
     def _isdflow_start(self, which):
         """ENTER on one of the mapping steps opens its flow."""
         c = self.console
         if which == "addhose":
-            # the new hose drops you onto its own FUEL POS LABEL screen
+            # the new hose drops you onto its own FUEL POS LABEL screen,
+            # which is a level DOWN now: p.20-13 puts it under EDIT FUEL
+            # HOSE 1, which is itself under FUEL HOSE TABLE SETUP. This
+            # searched one level and so found nothing and went nowhere.
             n = c.isd_add_hose()
             self.device = n
-            steps = self.steps()
-            for i, st in enumerate(steps):
-                if st.get("console") == "set.evr_fuel_pos":
-                    self.step = i
-                    break
+            self._stand_on_console("set.evr_fuel_pos")
             self.log(f"-- hose {n} added; enter its fuel position label")
             self._render()
             return
@@ -4477,22 +8206,49 @@ class SimApp(tk.Tk):
         """Diagnostic prints what the screen in front of you says it does."""
         console = self.console
         line = (step or {}).get("text", "")
-        if (step or {}).get("diagprint"):
+        what = (step or {}).get("diagprint")
+        if what == "meter_events":
+            # "Prints Last 4 Meter Events", Figure 6-25's own P
+            return name, printer.meter_events(console)
+        if what == "tank_history":
+            # 576013-818 Rev AB Figure 6-9 annotates the three PRINT screens
+            # of this function separately, and they are not the same
+            # printout: the two rate screens say "Printout contains static
+            # tank test results" and this one says "**This printout gives
+            # the tank result for every month**". Every screen of the
+            # function answered PRINT with the same leak-test report, so the
+            # monthly history was not reachable from the panel at all --
+            # though `leak_history_lines` builds it correctly and `I207`
+            # has served it over the wire all along. See FIDELITY H13.
+            return name, printer.tank_leak_history(console, self.device)
+        if what in ("tank_periodic", "tank_annual"):
+            # "Printout contains static tank test results", per rate
+            return name, printer.leak_tests(console, "tank", self.device)
+        if what:
             # "press STEP until the 3.0 Diag screen appears, and press Print"
             return name, printer.line_diag(console, self._diag_kind(),
-                                           self.device, step["diagprint"])
+                                           self.device, what)
         if name == "SYSTEM DIAGNOSTIC":
             # "press the PRINT key and the printer prints: SOFTWARE REVISION
             # LEVEL ..."
             return name, printer.revision(console)
         if name == "SERVICE REPORT":
             return name, printer.service_codes(console)
+        if name == "MAINT HARDWARE KEY BLOCK":
+            # Figure 6-4 annotates its first screen: "Press PRINT to
+            # printout a list of blocked keys." See FIDELITY D13.
+            return name, printer.blocked_keys(console)
         if name == "ALARM HISTORY REPORT":
             # "SYSTEM ALARM HISTORY" is the console's own; every other screen
             # is headed with its device code, "T X:", "L X:", "Q X:"
             if line.startswith("SYSTEM"):
                 return name, printer.alarm_history(console, system=True)
-            return name, printer.alarm_history(console, line[:1])
+            # "Press PRINT to print the report for the tank DISPLAYED. Press
+            # TANK/SENSOR to access other tanks in the system": the screen
+            # says `T 3: ALARM HISTORY` and this printed every tank in the
+            # log. See FIDELITY W24.
+            return name, printer.alarm_history(console, line[:1],
+                                               device=self.device)
         if name == "BIR DIAGNOSTICS":
             return name, printer.meters(console)
         if name.startswith("CSLD"):
@@ -4503,23 +8259,70 @@ class SimApp(tk.Tk):
             # "13. <Control-A> IB9400 AccuChart Calibration History" and
             # "17. <Control-A> I@B600 AccuChart Diagnostics - Calibration
             # Status" are what tech support asks for, so PRINT gives both.
-            return name, (printer.accuchart(console, [self.device], "status")
-                          + [""]
-                          + printer.accuchart(console, [self.device],
-                                              "history")[3:])
+            return name, printer.under_one_header(
+                printer.accuchart(console, [self.device], "status"),
+                printer.accuchart(console, [self.device], "history"))
         if name.startswith("SMART SENSOR"):
             return name, printer.sensors(console, "smart")
-        return name, printer.status(console)
+        # Everything else prints its own screens. 576013-818 Rev AB, walking
+        # a probe fault: "Press Function until In-Tank Diagnostics appear.
+        # Press Print. (If the console does not have a printer, manually
+        # record the diagnostic data from each diag screen)" -- so the
+        # report IS the screens, the way the setup report is the setup
+        # screens. This used to fall through to the system status report,
+        # which meant 154 of the 295 diagnostic screens printed something
+        # with nothing to do with what was in front of you. FIDELITY U1.
+        return name, self._diag_screen_dump(name)
+
+    def _diag_screen_dump(self, name):
+        """Every screen of the diagnostic function you are standing in.
+
+        Rendered by walking the function's screens through `_lines`, which
+        is the only thing that knows how to draw one, so the paper says
+        exactly what the panel says. The step is put back afterwards: PRINT
+        does not move you.
+        """
+        keep = self.step
+        out = printer.header(self.console, name)
+        last_head = None
+        try:
+            for n in range(len(self.steps())):
+                self.step = n
+                drawn = [str(x).rstrip() for x in self._lines()]
+                if len(drawn) > 1 and screens.KEYPRESS.match(drawn[1].strip()):
+                    # a screen that asks for a key is a way in, not a
+                    # reading, and a report has no way in -- the same rule
+                    # the setup report follows
+                    continue
+                drawn = [x for x in drawn if x]
+                if len(drawn) > 1:
+                    # the device head once, not over every reading, the way
+                    # the setup report heads a tank once
+                    head = printer.report_head(drawn[0])
+                    if head == last_head:
+                        drawn = drawn[1:]
+                    else:
+                        drawn = [head] + drawn[1:]
+                        last_head = head
+                out.extend(drawn)
+        finally:
+            self.step = keep
+        return out
 
     def k_print(self):
-        self._keyed()
+        maint = self.maint_report          # `_keyed` clears it; PRINT is the
+        self._keyed()                      # key chapter 32's screen asks for
+        self.maint_report = maint
         title, lines = self._report()
         self.paper_out(lines)
         if self.console.out_of_paper:
-            self._flash("PRINTER OUT OF PAPER" + chr(10) + "LOAD PAPER")
+            # `PAPER OUT` is already standing as alarm 01/01 and the display
+            # carries it; pressing PRINT does not draw a second message, and
+            # no page shows the display changing when it prints at all.
+            # See FIDELITY U5.
+            self.log("-- PRINT refused: out of paper")
             return
         self.log(f"-- PRINT: {title}")
-        self._flash("PRINTING" + chr(10) + title[:COLS])
 
     def k_paper(self):
         """PAPER FEED: blank paper, out of the slot, one line a press.
@@ -4532,34 +8335,123 @@ class SimApp(tk.Tk):
         """
         self._keyed()
         if self.console.out_of_paper:
-            self._flash("PRINTER OUT OF PAPER" + chr(10) + "LOAD PAPER")
+            self.log("-- PAPER FEED refused: out of paper")
             return
         if not self.live_paper.get():
             # the paper is being fed whether or not the bench is showing it
             self.live_paper.set(True)
         self._slip_feed([""])
-        self._flash("PAPER FEED")
+        self.log("-- PAPER FEED")
 
     def k_blue(self):
         """The blue Maintenance Tracker key.
 
-        The manual's own sequence: the key reads DISABLED the first time and
-        ENABLED after, then asks for the Contractor's ID key in the MT Comm
-        card. Without the board there is nothing to log in to.
+        576013-610 chapter 33, step by step: "Press the blue key on the front
+        panel. The display will read 'Disabled' or 'Enabled'. 'Disabled'
+        appears the very first time Maintenance Tracker is accessed.
+        'Enabled' appears thereafter. Press Step and the display will read"
+        `INSERT KEY IN PORT / PRESS <ENTER>`. "You have one minute to plug
+        your ID key into the MT Comm card and press Enter, or the system will
+        timeout." Without the board there is nothing to log in to.
+
+        Pressing it again while somebody is logged in takes the key out --
+        "when all codes are entered for this work session, remove your
+        Contractor's ID key". See FIDELITY D13.
         """
         self._keyed()
         if not self.console.has("mt"):
-            self._flash("MAINTENANCE TRACKER" + chr(10) + "NO MT COMM")
+            # `NO MT COMM` is an ALARM -- Table 29-2 -- and not a screen
+            # the blue key draws. A console with no MT Comm board has
+            # nothing to log in to and says nothing about it.
+            # See FIDELITY U5.
+            self.log("-- blue key: no MT Comm board")
             return
-        self.mt_key = not self.mt_key
-        if self.mt_key:
-            self._flash("MAINTENANCE TRACKER" + chr(10) + "LOGGED IN 004217")
-        else:
-            self._flash("MAINTENANCE TRACKER" + chr(10) + "KEY REMOVED")
+        if self.console.mt_logged_in():
+            self.console.remove_tracker_key()
+            self.mt_login = None
+            # "when all codes are entered for this work session, remove
+            # your Contractor's ID key" -- the removal is the act, and no
+            # page draws a screen acknowledging it. See FIDELITY U5.
+            self.log("-- blue key: tracker key removed")
+            self._render()
+            return
+        self.mt_login = "prompt"
+        self._render()
+
+    def _mt_lines(self):
+        """The two lines the login sequence is showing, if it is showing."""
+        if self.mt_login == "prompt":
+            return ["MAINTENANCE TRACKER",
+                    "ENABLED" if self.mt_ever else "DISABLED"]
+        if self.mt_login == "insert":
+            return ["INSERT KEY IN PORT", "PRESS <ENTER>"]
+        return ["MAINTENANCE TRACKER", self.mt_login or ""]
+
+    def _log_visit(self):
+        text = (self.service_var.get() if hasattr(self, "service_var")
+                else "").strip()
+        if not text or text == "--":
+            self.bell()
+            return
+        code = text.split()[0]
+        ident = (self.key_id.get() if hasattr(self, "key_id") else "").strip()
+        self.console.log_service(code, ident)
+        self.log(f"-- service visit logged: {text} by key {ident or '??????'}")
+
+    def _mt_present(self):
+        """ENTER with a key in the port: what the console makes of it."""
+        ident = (self.key_id.get() if hasattr(self, "key_id") else "").strip()
+        label = (self.key_label.get() if hasattr(self, "key_label")
+                 else "").strip()
+        expired = bool(hasattr(self, "key_expired") and self.key_expired.get())
+        said = self.console.present_tracker_key(ident, label, expired)
+        self.mt_ever = True
+        self.mt_login = said
+        self.log(f"-- maintenance tracker: {said.lower()}")
+        self._render()
+
+    def _mt_timed_out(self):
+        """"or the system will timeout", one console minute after the ask."""
+        if self.mt_login != "insert" or self.mt_asked is None:
+            return False
+        import time as _time
+        if (_time.mktime(self.console.now()) - self.mt_asked
+                < self.console.KEY_PROMPT_SECONDS):
+            return False
+        self.mt_login = None
+        self.mt_asked = None
+        self.log("-- maintenance tracker: key insertion timed out")
+        return True
 
     def k_white(self):
+        """The white Maintenance Report key. 576013-610 Rev AC chapter 32.
+
+        This drew `MAINT REPORT` over `NO HISTORY`, on every screen, in
+        every mode, on every console -- with the history enabled, with the
+        NVMEM203 in, and with records in the log. `NO HISTORY` is on no page
+        of any manual on the shelf.
+
+        p.32-1: "The Maintenance Report feature is available in the TLS-350
+        with version 27 software and a NVMEM 203 card installed. Maintenance
+        History must be enabled in System Setup for this feature to
+        function. To access the Maintenance Report menu, press the white key
+        on the front panel left keypad". p.32-3 draws what comes up:
+
+            MAINTENANCE REPORT
+            PRESS <PRINT>
+
+        What a console WITHOUT the three does is not on any page, so it does
+        nothing and says so to the bench log only -- the same reading FIDELITY
+        U5 settled for the chart passcode, where `INVALID PASSCODE` was this
+        project's invention and a real console is silent. See R3.
+        """
         self._keyed()
-        self._flash("MAINT REPORT" + chr(10) + "NO HISTORY")
+        if not self.console.maintenance_report_ready():
+            self.log("-- white key: no maintenance report on this console")
+            return
+        self.maint_report = True
+        self.confirm = ["MAINTENANCE REPORT", "PRESS <PRINT>"]
+        self._render()
 
     def k_alnum(self, key):
         self._keyed()
@@ -4577,6 +8469,36 @@ class SimApp(tk.Tk):
                 self.buf = self.buf[:-1]
             self._render()
             return
+        if self.editing and (self.cur_step() or {}).get("buf"):
+            # A Contractor's ID key is six characters and they are not all
+            # digits: "cccccc - Six digit ID code (ASCII)", and the manual's
+            # own are A12345 and A54321.
+            if key == "+":
+                self.buf = self.buf[:-1]
+            elif key.isalnum() and len(self.buf) < self.console.KEY_ID_WIDTH:
+                self.buf += key.upper()
+            self._render()
+            return
+        if (self.cur_step() or {}).get("pick") == "device":
+            # **The digits go straight in, with no CHANGE first.**
+            # 576013-610 Rev AC p.22-1: "Press STEP. The system displays the
+            # message: `TEST OUTPUT RELAYS` / `ENTER RELAY NUMBER #`. Enter
+            # the number of the relay you want to test, then press ENTER."
+            # There is no CHANGE in that sentence and no field behind the
+            # step, so nothing echoed and ENTER did not advance: the only
+            # route to relay 12 was to STEP past the screen that asks for a
+            # number and press TANK/SENSOR eleven times. A documented panel
+            # action that could not be performed at all, on the function a
+            # technician uses to prove a pump contactor. See FIDELITY U8.
+            if key.isdigit():
+                self.editing = True
+                # two digits is every relay a TLS-350 can carry
+                self.buf = (self.buf + key)[-2:]
+            elif key == "+":
+                self.buf = self.buf[:-1]
+                self.editing = bool(self.buf)
+            self._render()
+            return
         if not self.editing:
             step = self.cur_step() or {}
             if step.get("load") == "number" and key in (",", "+"):
@@ -4585,10 +8507,35 @@ class SimApp(tk.Tk):
                 # arrives as "," (same key as the decimal), not ".".
                 records = self.console.loads.all(self.device)
                 if records:
-                    self.load = (self.load + (1 if key == "," else -1))                         % len(records)
+                    self.load = ((self.load + (1 if key == "," else -1))
+                                 % len(records))
                 self._render()
             return
+        if (self.cur_step() or {}).get("map"):
+            # p.17-5's own two keys. The map row has cells, not a text
+            # cursor, and the right arrow arrives as "," -- one key, arrow
+            # and decimal both.
+            if key == ",":
+                self.slot = (self.slot + 1) % len(MAP_CELLS)
+            elif key == "+":
+                self.slot = (self.slot - 1) % len(MAP_CELLS)
+            self._render()
+            return
         f = self.cur_field() or {}
+        if f.get("kind") in ("enum", "flag"):
+            # **A pick-list is not an entry.** 576013-623 Rev AN p.6-2 is
+            # explicit for the one this was found on: "To choose another
+            # Baud Rate, press CHANGE until you see the correct baud rate.
+            # Then press ENTER to confirm your choice." The keypad has no
+            # part in it, and p.2-3 gives the keys a lettering job only
+            # "when you can enter either alphabetic or numeric characters".
+            #
+            # A technician typing 9600 -- the rate Table 6-1 gives for two
+            # of the shipped modems -- got `BAUD RATE: WM00`, because 9 and
+            # 6 multi-tap to W and M, and then a silent refusal from ENTER.
+            # No console can display that. The keys do nothing here now,
+            # which is what a list of five fixed choices can take.
+            return
         if f.get("kind") == "slots":
             # The right-arrow key arrives as "," -- one key, arrow and
             # decimal both, and k_alnum is handed the "," face. This
@@ -4607,6 +8554,7 @@ class SimApp(tk.Tk):
             # Select either AM or PM by using the arrow keys." Both arrows,
             # and there are only two halves to a day, so either one swaps it.
             self.meridiem = "PM" if self.meridiem == "AM" else "AM"
+            self.on_meridiem = True
             self._tap = None
             self._render()
             return
@@ -4626,7 +8574,8 @@ class SimApp(tk.Tk):
             # "The Right-Arrow key lets you advance the cursor to the right
             # when making alphanumeric entries ... The . (decimal) is used in
             # numeric entries as required."
-            if f.get("kind") == "float":
+            if (f.get("kind") == "float"
+                    or (self.cur_step() or {}).get("offset")):
                 self._put(".")
             else:
                 self.cur = min(len(self.buf), self.cur + 1)
@@ -4682,7 +8631,8 @@ class SimApp(tk.Tk):
              "t": self.k_tank, "p": self.k_print, "BackSpace": self.k_backup}
         if self.editing and (ev.char.isalnum() or ev.char in "-. /:"):
             kind = (self.cur_field() or {}).get("kind")
-            if kind in ("int", "float", "time", "date", "digits")                     and not (ev.char.isdigit() or ev.char in "-./:"):
+            if (kind in ("int", "float", "time", "date", "digits")
+                    and not (ev.char.isdigit() or ev.char in "-./:")):
                 return
             self._put(ev.char.upper())
             self._tap = None

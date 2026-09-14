@@ -38,8 +38,22 @@ def _tank(values, tank, label, code, full, diameter, limits):
     values[f"S603{tank:02d}"] = f"{tank:02d}{code}"
     values[f"S604{tank:02d}"] = _float(tank, full)
     values[f"S607{tank:02d}"] = _float(tank, diameter)
-    values[f"S609{tank:02d}"] = _float(tank, 0.00070)      # thermal coeff
+    # The PRODUCT's coefficient, from 576013-623 Rev AN Table 7-1, not one
+    # figure for the whole site: this wrote unleaded's 0.00070 into every
+    # tank, so the truck stop's diesel was 56% high. FIDELITY Y6.
+    values[f"S609{tank:02d}"] = _float(
+        tank, _console.Console.thermal_coefficient(label) or 0.00070)
     values[f"S610{tank:02d}"] = f"{tank:02d}05"            # 5 minute delivery delay
+    # FLOAT SIZE, which every programmed tank has and only one preset wrote.
+    # Without it `probe_type` falls back to "a tank programmed with a float
+    # size has a float, and only a Mag has one", so two of the three presets
+    # reported CAP0 PROBE -- on consoles running version 33, where the CAP
+    # probes stopped at version 17. A CAP0 tank reads a different gradient
+    # band, a forty sample window and one fewer leak rate, so it is not a
+    # label. 2 inch because it is the one column every Mag circuit code in
+    # 576013-818 Table 9-2 has, including the Mag-D rows that have no other.
+    # See FIDELITY R11.
+    values[f"S62F{tank:02d}"] = f"{tank:02d}1"            # FLOAT SIZE: 2.0 IN.
     for code_, value in limits.items():
         values[f"S{code_}{tank:02d}"] = _float(tank, value)
 
@@ -47,9 +61,9 @@ def _tank(values, tank, label, code, full, diameter, limits):
 def _limits(full):
     """The alarm limits a site would actually programme, from the tank size."""
     return {"628": full,               # max or label volume
-            "623": full * 0.95,        # overfill
-            "622": full * 0.90,        # high product
-            "629": full * 0.25,        # delivery needed
+            "623": 90.0,               # overfill, a PERCENT of the label volume
+            "622": 95.0,               # high product, ABOVE overfill: see below
+            "629": 25.0,               # delivery needed, a percent
             "621": full * 0.10,        # low product
             # "Typically, you should set this limit at 25 gallons or 100
             # litres, or higher", and the Leak Alarm Limit takes 1 to 99
@@ -59,8 +73,15 @@ def _limits(full):
             "626": 8.0,                # leak alarm
             "624": 2.0,                # high water
             "627": 1.0,                # water warning
-            "636": full * 0.20,        # periodic test minimum
-            "62A": full * 0.50}        # annual test minimum
+            "636": 20.0,               # periodic test minimum, a percent
+            "62A": 50.0}               # annual test minimum, a percent
+    # High Product sits ABOVE Overfill, which is the way round a real tape
+    # has them and the way 576013-623 Rev AN describes them: "Set this limit
+    # at a percentage that is between the Overfill Limit percentage and
+    # 95%". High Product is the backstop for a fill too gradual to be
+    # recognised as a delivery -- "whether or not a delivery is in
+    # progress" -- so it is the later alarm, not the earlier one. This
+    # console had the two swapped.
 
 
 def _header(values, *lines):
@@ -88,11 +109,24 @@ def two_tank_retail():
         values[f"S703{sensor:02d}"] = f"{sensor:02d}1"     # tri-state
         values[f"S704{sensor:02d}"] = f"{sensor:02d}5"     # STP sump
     return {
-        "modules": {"probe": 1, "liquid": 1, "plld": 1, "rs232": 1},
-        "software": {"plld020": True, "plld010": True},
+        # An EDIM and the BIR key, because this is the site the simulator
+        # opens on and a forecourt that cannot sell fuel is a poor first
+        # thing to see. On this bench fuel leaves a tank only through a
+        # meter the console can account for -- `Bir._dispense` is the one
+        # thing that draws a tank down from a sale, and it wants a DIM in
+        # the cage and the key in the console -- so without them the
+        # traffic generator ran, counted its cars, lifted the handles, and
+        # moved nothing. Two nozzles on each grade is the forecourt a
+        # two-tank site has.
+        "modules": {"probe": 1, "liquid": 1, "plld": 1, "rs232": 1,
+                    "edim": 1},
+        "software": {"plld020": True, "plld010": True, "bir": True},
         "values": values,
         "tanks": {1: {"volume": 6200.0, "water": 0.5},
                   2: {"volume": 3100.0, "water": 0.0}},
+        "meters": {1: 1, 2: 1, 3: 2, 4: 2},
+        "card": {"ip": "10.14.5.20", "gateway": "10.14.5.1",
+                 "netmask_bits": 8, "port": 10001},
     }
 
 
@@ -141,6 +175,8 @@ def truck_stop():
                   3: {"volume": 7000.0, "water": 0.0},
                   4: {"volume": 900.0, "water": 0.0}},
         "meters": {1: 1, 2: 1, 3: 2, 4: 3},
+        "card": {"ip": "192.168.42.15", "gateway": "192.168.42.1",
+                 "netmask_bits": 8, "port": 10001},
     }
 
 
@@ -171,8 +207,18 @@ def compliance_site():
         # an NVMEM203 board, because this site has a Maintenance Tracker in
         # it and that is the memory card Maintenance Tracker wants
         "board": "E6",
-        "modules": {"probe": 1, "liquid": 1, "gw": 1, "rs232": 1, "mt": 1},
-        "software": {"csld": True},
+        # The EDIM and the BIR key are what let this site SELL, and a CSLD
+        # site that cannot sell is a contradiction: CSLD's whole input is
+        # the shape of the day -- 576013-818 Figure 11-2, "Tank goes idle
+        # and must remain so for 8 minutes" -- and there is no idle to
+        # measure on a site where the tank never moves. This preset had
+        # CSLD on all three tanks, no DIM, no meters and no BIR key, so
+        # the traffic generator could run on it all day and not shift a
+        # gallon. On this bench fuel only leaves a tank through a meter
+        # the console can account for; see `Bir._dispense`.
+        "modules": {"probe": 1, "liquid": 1, "gw": 1, "rs232": 1, "mt": 1,
+                    "edim": 1},
+        "software": {"csld": True, "bir": True},
         "values": values,
         # tank 3 has water over its limit and is losing product, so the
         # console has something to find
@@ -180,6 +226,11 @@ def compliance_site():
                   2: {"volume": 5000.0, "water": 0.0},
                   3: {"volume": 9000.0, "water": 2.5}},
         "leaks": {3: 0.35},
+        # two nozzles on the regular tank and one on each of the others,
+        # which is the forecourt a three-tank site actually has
+        "meters": {1: 1, 2: 1, 3: 2, 4: 3},
+        "card": {"ip": "172.20.8.30", "gateway": "172.20.8.1",
+                 "netmask_bits": 8, "port": 10002},
     }
 
 
@@ -190,12 +241,32 @@ PRESETS = {
 }
 
 
-def load(console, name):
-    """Put a whole example console in place of whatever is there."""
+def card_of(name):
+    """The TCP/IP card settings an example site is programmed with.
+
+    Each site has its own address, as real ones do: switching preset should
+    mean going and finding the new card, not carrying on at the old address.
+    """
+    build = PRESETS.get(name)
+    return dict((build() or {}).get("card") or {}) if build else {}
+
+
+def load(console, name, card=None):
+    """Put a whole example console in place of whatever is there.
+
+    `card` is the XPort configuration to program alongside it, so the site
+    comes up on its own address the way it would in the field.
+    """
     build = PRESETS.get(name)
     if build is None:
         return False
     site = build()
+    if card is not None and site.get("card"):
+        spec = site["card"]
+        card.reset_card(ip=spec.get("ip"), gateway=spec.get("gateway"),
+                        netmask_bits=spec.get("netmask_bits"))
+        if spec.get("port"):
+            card.program(port=spec["port"])
     console.reset(keep_clock=True)
     console.version = site.get("version", _console.DEFAULT_VERSION)
     console.board = site.get("board", _console.DEFAULT_BOARD)

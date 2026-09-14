@@ -9,6 +9,14 @@ launch_err.txt
 # account number. tests/test_tape.py skips when it is not there.
 tests/tape/
 
+# One developer's tool settings, not the project's. Committed by accident
+# once and taken back out; it holds nothing secret, it just is not the
+# repository's business which permissions somebody's editor was given.
+# By BASENAME rather than by path, so the rule does not have to spell the
+# tool's name -- which is a string the public snapshot refuses to carry,
+# and this file ships.
+settings.local.json
+
 # python
 __pycache__/
 *.py[cod]
@@ -50,3 +58,23 @@ tests/real_backups/
 
 # stray editor file
 New Text Document*.txt
+
+# a sync client writes these beside the file it could not merge, and one
+# got committed as a 5,291 line copy of wire.py
+*(# Edit conflict *#)*
+# the same client's other name for the same thing. It made three of these
+# while xport.py was being written, and each one silently took some of the
+# edits meant for the real file: a change lands in the copy, the file keeps
+# the old text, and the tests pass on neither.
+*(# Name clash *#)*
+
+# a capture taken off a real TCP/IP card, for tests/test_xport_capture.py.
+# Same rule as reference/*.pdf: it is the device's own output and it takes a
+# card to make. tools/capture_xport.py remakes it; the test skips without it.
+tests/xport_capture/
+
+# a capture taken off a real TLS-350 through its TCP/IP card, for checking
+# the console emulation against hardware. Same rule as reference/*.pdf and
+# tests/xport_capture/: it is the console's own output and it takes a console
+# to make. tools/capture_console.py remakes it; the tests skip without it.
+tests/console_capture/

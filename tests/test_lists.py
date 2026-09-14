@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tls350sim import fieldio, presets, wirelists          # noqa: E402
 from tls350sim.console import Console, FIELDS              # noqa: E402
+from tls350sim.meterid import MeterId                      # noqa: E402
 from tls350sim.wire import Handler                         # noqa: E402
 
 
@@ -42,7 +43,7 @@ def send(h, cmd):
 
 
 def body(h, cmd):
-    return send(h, cmd).strip(chr(1) + chr(3))
+    return send(h, cmd).strip(chr(1) + chr(3) + chr(13) + chr(10))
 
 
 def refused(h, cmd):
@@ -116,29 +117,39 @@ class SevenBOne(unittest.TestCase):
         self.assertTrue(refused(h, "i7B100"))
         self.assertTrue(refused(h, "s7B100" + "3030010" + "01"))
 
-    def test_a_slot_outside_its_own_bus_is_refused(self):
-        """"Bus 2: 09-16, Bus 3: 01-06"."""
-        _c, h = a_site()
+    def test_a_slot_outside_its_own_bus_is_marked(self):
+        """"Bus 2: 09-16, Bus 3: 01-06", and a slot in the wrong one comes
+        back as `??` in the slot column rather than a 9999 -- see G6a."""
+        c, h = a_site()
         self.assertFalse(refused(h, "S7B100" + "3" + "03" + "00" + "10" + "01"))
         self.assertFalse(refused(h, "S7B100" + "2" + "09" + "00" + "11" + "01"))
-        self.assertTrue(refused(h, "S7B100" + "3" + "09" + "00" + "12" + "01"))
-        self.assertTrue(refused(h, "S7B100" + "2" + "03" + "00" + "13" + "01"))
+        for cmd in ("S7B100" + "3" + "09" + "00" + "12" + "01",
+                    "S7B100" + "2" + "03" + "00" + "13" + "01"):
+            rows = [r for r in send(h, cmd).splitlines() if r.strip(
+                    chr(1) + chr(3))]
+            self.assertIn(wirelists.MAP_BAD, rows[-1], cmd)
+        self.assertEqual(sorted(k.meter for k in c.meter_map), [10, 11])
 
     def test_it_carries_the_fueling_position_nothing_else_knows(self):
+        """And the position is part of the KEY, not a field beside it:
+        "The meter must be identified by bus, slot, real FP, and real M".
+        FIDELITY G7."""
         c, h = a_site()
         send(h, "S7B100" + "3" + "04" + "07" + "10" + "02")
-        self.assertEqual(c.fueling_position(10), 7)
-        self.assertEqual(c.meters[10], 2)
+        key = MeterId(3, 4, 7, 10)
+        self.assertEqual(c.fueling_position(key), 7)
+        self.assertEqual(c.meters[key], 2)
         self.assertIn("FUEL_P", send(h, "I7B100"))
 
     def test_tank_00_unmaps_and_minus_one_is_probeless(self):
         c, h = a_site()
+        key = MeterId(3, 3, 0, 10)
         send(h, "S7B100" + "3" + "03" + "00" + "10" + "01")
-        self.assertIn(10, c.meters)
+        self.assertIn(key, c.meters)
         send(h, "S7B100" + "3" + "03" + "00" + "10" + "-1")
-        self.assertEqual(c.meters[10], -1)          # probeless, still mapped
+        self.assertEqual(c.meters[key], -1)         # probeless, still mapped
         send(h, "S7B100" + "3" + "03" + "00" + "10" + "00")
-        self.assertNotIn(10, c.meters)              # unmapped entirely
+        self.assertNotIn(key, c.meters)             # unmapped entirely
 
 
 class TheyRoundTrip(unittest.TestCase):

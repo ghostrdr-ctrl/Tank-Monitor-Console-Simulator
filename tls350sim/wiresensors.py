@@ -36,6 +36,8 @@ from .console import STATUS_TYPES
 
 # display format "includes all the necessary formatting characters such as
 # carriage returns, line feeds, nulls, spaces, labels"
+from . import wiretables
+
 SEP = chr(13) + chr(10)
 
 
@@ -57,11 +59,10 @@ FAMILY = {
     "3wire":  ("12", "746", "747", "3 WIRE CL", "3 WIRE CL SENSOR #{n}"),
     # i10100 calls category 13 the Universal Sensor, and 34B, 34C and B4B
     # report it exactly as the five families above are reported. The card is
-    # the part this cage does not stock: there is no Universal Sensor Module
-    # in console.MODULES, so no console this simulator can build ever has one
-    # to report on. The family stays here whole, and the three codes stay out
-    # of CODES until the card is in the cage, because a code this console
-    # claims has to be a code it can serve.
+    # in console.MODULES and the bench can fit one, so the family stays here
+    # whole and its three codes are in CODES below -- a code this console
+    # claims has to be a code it can serve, and with the card fittable it can.
+    # No preset carries one, because nobody could buy one. See UNKNOWNS C3.
     "universal": ("13", "74B", "74C", "UNIVERSAL", "UNIVERSAL SENSOR #{n}"),
 }
 
@@ -90,7 +91,11 @@ INPUT_AA = "05"
 
 # What the manual's own samples call an input and a relay nobody has labelled
 INPUT_LABEL = "* EXTERNAL INPUT {n} *"
-RELAY_LABEL = "* RELAY {n} *"
+# p.153 sets the closing asterisk 12.01 points -- exactly two characters at
+# this manual's 6.0 pitch -- after the number, where I401's `* EXTERNAL INPUT
+# 1 *` on p.149 sets its own one character away. The number is left justified
+# in a field two wide, so relay 10 fills it and relay 1 leaves the space.
+RELAY_LABEL = "* RELAY {n:<2} *"
 
 CODES = {"301", "302", "306", "307", "311", "312", "315", "316", "322",
          "323", "333", "341", "342", "346", "347",
@@ -195,11 +200,11 @@ def _incidents(console, aa, number):
 def _sample_counter(console):
     """"Cntr = Number of times system has looked at Value."
 
-    A counter, so it counts: the module looks at each sensor about once a
-    second and the screen has room for two digits of it. Running the bench
-    clock fast runs the counter fast, the same as everything else here.
+    `Console.sample_counter` is the counter; this is the float the wire
+    sends. The panel used to hold its own hardcoded one, so the two
+    disagreed. See FIDELITY L9.
     """
-    return float(int(time.mktime(console.now())) % 100)
+    return float(console.sample_counter())
 
 
 def _reference(console, token, number, nominal, key="ref"):
@@ -305,18 +310,43 @@ def _history_report(handler, code, aa, devices, label_of, title,
     return handler._frame(code, body)
 
 
-def _sensor_rows():
-    """The column layout every sensor status and history report prints in.
+# The column layout every sensor status and history report prints in, read
+# off 576013-635 Rev AA's own samples rather than counted by hand: p.105,
+# p.107, p.109, p.121, p.123 and p.125 all draw
+#
+#     SENSOR  LOCATION               STATUS
+#          1  LIQUID # 1             SENSOR NORMAL
+#
+# with the number right aligned to column 5, the location at 8 and the status
+# at 31. This console had them at 8, 11 and 33 -- three columns out on two of
+# the three, which is what FIDELITY S5 counted and what a page settles. The
+# alarm history is the same left edge, with its incident lines indented to
+# the location column and the alarm words at 38 (p.106, p.111, p.122).
+SENSOR_COLUMN = 6           # the device number, right aligned in six
+LOCATION_COLUMN = 8
+STATUS_COLUMN = 31
+HISTORY_WORDS = 38
 
-    "SENSOR     LOCATION              STATUS" over "        1  LIQUID # 1
-    SENSOR NORMAL": the number is right aligned in nine, the location starts
-    at column 11 and the status at column 33.
+STATUS_HEADER = ("SENSOR".ljust(LOCATION_COLUMN)
+                 + "LOCATION".ljust(STATUS_COLUMN - LOCATION_COLUMN) + "STATUS")
+HISTORY_HEADER = "SENSOR".ljust(LOCATION_COLUMN) + "LOCATION"
+
+
+def _sensor_rows(status_column=STATUS_COLUMN):
+    """The row builders for one family of sensors.
+
+    `status_column` is 21 rather than 31 on the smart sensors, which p.111
+    draws narrower than the rest of the family and which is the one place
+    this layout is not shared.
     """
+    width = status_column - LOCATION_COLUMN
+
     def status_row(number, label, words):
-        return f"{number:9d}  {label:<22.22s}{words}"
+        return (f"{number:{SENSOR_COLUMN}d}  "
+                f"{label:<{width}.{width}s}{words}")
 
     def history_row(number, label):
-        return f"{number:9d}  {label:<22.22s}"
+        return f"{number:{SENSOR_COLUMN}d}  {label}"
 
     return status_row, history_row
 
@@ -328,17 +358,79 @@ def _sensor_rows():
 # 0008=Mag Sensor, 0009=Vac Sensor, 0010=Atmospheric Sensor". The console
 # numbers the same list differently at S723, SMART SENSOR CATEGORY, so the
 # two numberings have to be mapped rather than assumed equal.
+#
+# **Category 08, the vapour valve, was missing.** 723's own note ends
+# "08=vapor valve  (Version 29)" and `consoledata.json` carries it, so the
+# panel could hold a category the wire had no word for: a sensor programmed
+# as a vapour valve came back `UNKNOWN` / `0000` from `I333`, `IB34`, `IB35`
+# and `IB36`, on a console that answers `IB61` VAPOR VALVE DIAGNOSTIC and
+# `IB62` for the same sensor. See FIDELITY L4.
+#
+# *The NAME is certain and the CODE is inferred.* B34's own TTTT list stops
+# at 0010 and has no vapour valve in it -- it predates the category, which
+# arrived in Version 29 -- but B62's does: "TT - Smart Sensor Type (Hex) ...
+# 0E = Vapor Valve", the same field under a shorter name. `000E` is that
+# code in B34's width. Nothing on this shelf prints a B34 row for a vapour
+# valve, so what a console really sends there is worth checking against one.
 SMART_TYPE = {
     "01": ("0001", "AIR FLOW METER"),
     "02": ("0002", "VAPOR PRESSURE"),
     "03": ("0008", "MAG SENSOR"),
     "04": ("0009", "VAC SENSOR"),
     "05": ("0010", "ATMOSPHERIC SENSOR"),
+    "08": ("000E", "VAPOR VALVE"),
 }
 SMART_UNKNOWN = ("0000", "UNKNOWN")
 
-# The three categories with a diagnostic report of their own
-MAG, VAC, ATMP = "03", "04", "05"
+# The two smart sensor categories ISD reads, and the letters its own index
+# table puts in the middle of their serial numbers.
+AIR_FLOW, VAPOR_PRESSURE = "01", "02"
+ISD_TAG = {AIR_FLOW: "AF", VAPOR_PRESSURE: "PS"}
+
+
+def isd_serial(console, number):
+    """The ten-character serial V43's index table answers with.
+
+    Five digits, the two letters that say which kind of ISD device it is,
+    and the position. 577013-800 Rev P Figure 7 draws exactly ten of them
+    on the panel -- `SN#: (10 char)` over the AIRFLOW METER SELECT and
+    PRESSURE SENSOR SELECT screens -- and this was the wire's alone, built
+    inline where nothing else could reach it, so the panel drew `SN#:` with
+    nothing after it on a console that could answer the same question over
+    the port. *Panel and port do not disagree about a device's serial.*
+    """
+    kind = console.sensor_type("smart", number) or ""
+    if not kind:
+        # A position nobody has told the console about is not a device, and
+        # a device that is not there has no serial. The panel walks these
+        # -- Setup Mode is where a position gets switched on -- so it has to
+        # be able to draw one that is empty.
+        return ""
+    return (f"{readings.digits(5, 'isdsn', number)}"
+            f"{ISD_TAG.get(kind, 'HC')}{number:03d}")
+
+
+def isd_in_use(console, number):
+    """Is that smart sensor switched on for ISD? V43's own flag."""
+    return (console.values.get(f"SV43{int(number):02d}") or "0") == "1"
+
+
+def set_isd_in_use(console, number, on):
+    """V43's door, which the panel's own ENABLE/DISABLE screen goes through.
+
+    "SS - Smart Sensor Index number", "f - In use flag 1=Yes 0=No". The
+    panel kept its own `evr_afm` and `evr_ps` settings beside this and
+    nothing joined them, so a technician who enabled an air flow meter on
+    the glass left V43 answering that it was not in use -- and V43 is what
+    ISD's own MISSING VAPOR FLOW MTR alarm is raised against. Two stores
+    for one fact, which is FIDELITY F9's shape.
+    """
+    console.values[f"SV43{int(number):02d}"] = "1" if on else "0"
+
+# The four categories with a diagnostic report of their own. 723's own
+# category list is the source for all of them: "03=mag sensor, 04=vac Sensor,
+# 05=atmospheric sensor, 08=vapor valve", 576013-635 Rev AA p.327.
+MAG, VAC, ATMP, VALVE = "03", "04", "05", "08"
 
 
 def _smart_kind(console, number):
@@ -380,6 +472,16 @@ def _mag_values(console, number):
     tokens = ("ss_total_ht", "ss_fuel_ht", "ss_water_ht", "ss_install",
               "ss_fluid_temp", "ss_board_temp")
     return [_number(console.diag_reading(t, number)) for t in tokens]
+
+
+def _vac_stamp(console, ago):
+    """The date line B38 stands in front of a reading, in its own form.
+
+    `4-12-04 11:28AM` on p.534: two digit year, and no space before the
+    meridiem. It is a line of its own -- see `_vac_diagnostic`.
+    """
+    return time.strftime("%m-%d-%y %I:%M%p",
+                         time.localtime(time.mktime(console.now()) - ago))
 
 
 def _vac_pressures(console, number):
@@ -438,7 +540,9 @@ def _channels(console, number):
 
 def _channel_grid(values):
     """The ten-across table the last sample report draws them in."""
-    rows = ["          " + " ".join(f"{i:8d}" for i in range(10))]
+    # p.529 numbers the ten columns at 8, 13, 18 and so on, five apart,
+    # over four character values -- not the eight this was spacing for
+    rows = ["    " + "".join(f"{i:5d}" for i in range(10))]
     for start in range(0, max(len(values), 1), 10):
         rows.append(f"{start:02d} " + " ".join(
             _float(v) for v in values[start:start + 10]))
@@ -498,6 +602,7 @@ MONITORED = {"11": ("R", "807"), "15": ("S", None), "16": ("P", "760"),
 # "If Stuck Delay, select from 5 to 600 seconds (60 is default). If Max Run
 # Time, select from 1 to 24 hours (8 is default)."
 STUCK_DELAY = 60.0
+MAX_RUN_HOURS = 8.0
 
 
 def _monitored(console, number):
@@ -510,9 +615,16 @@ def _monitored(console, number):
 
 
 def _pump_out(console, kind, device):
-    """The PUMP (OUT) column: is the console calling for that pump?"""
+    """The PUMP (OUT) column: is the pump running?
+
+    What the console is calling for, from the device it watches -- and a
+    welded contactor is a pump that runs whatever the console calls for,
+    which is the case the monitor exists to catch. BENCH.md P3.
+    """
+    if kind and console.outputs.is_welded(kind, device):
+        return True
     if kind == "11":
-        return bool(console.relays.get(device))
+        return console.outputs.energised(device)
     if kind == "15":
         return console.pump_state(device) == "ON"
     if kind in ("16", "21", "26"):
@@ -549,45 +661,145 @@ def _stuck_seconds(console, number):
     delay, and one that is has been stuck for the delay plus however long the
     alarm has stood, which the alarm history is the record of.
     """
-    standing = [r for r in console.compute_alarms()
-                if r[:2] == PUMPMON_AA and r[2:4] == "02"
-                and r[4:6] == f"{number:02d}"]
-    if not standing:
+    # The console counts from the moment the relay was told to open with the
+    # pump still running, which `monitor_watch` keeps. This used to work it
+    # out backwards from the alarm history -- no alarm meant not stuck for
+    # longer than the delay -- which was the best available while nothing
+    # raised the alarm at all.
+    since = console.pumpmon_since.get((number, "stuck"))
+    if since is None:
         return 0.0
-    delay = console.limit("7C7", number) or STUCK_DELAY
-    posted = _incidents(console, PUMPMON_AA, number)
-    if not posted:
-        return delay
-    try:
-        since = time.mktime(console.now()) - time.mktime(
-            time.strptime(posted[0]["at"], "%y%m%d%H%M"))
-    except ValueError:
-        since = 0.0
-    return delay + max(since, 0.0)
+    return max(time.mktime(console.now()) - since, 0.0)
+
+
+def monitor_watch(console, now):
+    """Keep each pump relay monitor's two clocks, one tick at a time.
+
+    576013-623 Rev AN gives the monitor both of its jobs and both of its
+    delays: "if the pump continues to run after it is instructed to turn
+    off, for longer than a 5 - 600 second selectable delay (Stuck Delay), an
+    alarm is posted", and "monitor the pump each time it switches on, and if
+    it is still running after a 1 - 24 hour delay (Max Run Time delay), to
+    post an alarm". Both want a moment to count from, which is what this
+    keeps: when the relay was told to open with the pump still running, and
+    when the pump last switched on. See FIDELITY D1 and N1.
+    """
+    since = console.pumpmon_since
+    for number in range(1, max(console.capacity("pumpmon"), 0) + 1):
+        kind, device = _monitored(console, number)
+        running = _pump_out(console, kind, device)
+        stuck = running and kind and not _relay_in(console, number)
+        for what, on in (("stuck", stuck), ("run", running)):
+            key = (number, what)
+            if not on:
+                since.pop(key, None)
+            else:
+                since.setdefault(key, now)
+
+
+def monitor_conditions(console):
+    """[AANNTT] for the Pump Relay Monitor's own alarm.
+
+    576013-610 Rev AC Table 29-21 gives one alarm for both conditions --
+    "PUMP RELAY ALARM ... If pump relay assigned - pump continues to run
+    after it was instructed to" stop -- and the setup manual gives the two
+    delays it waits. Nothing raised it: `relay_stuck` was read by the status
+    line alone, and the diagnostic that exists to show it had no reader.
+    """
+    out, now = [], time.mktime(console.now())
+    for number in range(1, max(console.capacity("pumpmon"), 0) + 1):
+        kind, _device = _monitored(console, number)
+        if not kind:
+            continue
+        stuck = console.pumpmon_since.get((number, "stuck"))
+        delay = console.limit("7C7", number) or STUCK_DELAY
+        if stuck is not None and now - stuck >= delay:
+            out.append(PUMPMON_AA + "02" + f"{number:02d}")
+            continue
+        ran = console.pumpmon_since.get((number, "run"))
+        most = console.limit("7C8", number) or MAX_RUN_HOURS
+        if ran is not None and now - ran >= most * 3600.0:
+            out.append(PUMPMON_AA + "02" + f"{number:02d}")
+    return out
+
+
+def monitored_kind(console, number):
+    """Is a pump relay ASSIGNED to this monitor, and what kind?
+
+    Figure 6-16's two columns are headed "If pump relay assigned" and "If
+    pump relay = NONE", and S7C6 is what says which: "00 none".
+    """
+    return _monitored(console, number)[0]
+
+
+def _run_time(console, number, wide=False):
+    """"PUMP RUN TIME: HH:MM", and HHH:MM on the other branch.
+
+    "If PUMP = ON, total time pump has been running" -- the same clock 7C9
+    reports, drawn as hours and minutes instead of the letters H and M.
+    """
+    hours = _run_hours(console, number)
+    whole = int(hours)
+    minutes = int(round((hours - whole) * 60.0)) % 60
+    width = 3 if wide else 2
+    return f"PUMP RUN TIME: {whole:0{width}d}:{minutes:02d}"
+
+
+def monitor_diag(console, token, number):
+    """The PUMP RELAY MONITOR DIAG screens, read rather than drawn.
+
+    576013-818 Figure 6-16 draws this function twice over and annotates
+    every value on it: PUMP (OUT) is "OFF or ON (See Diagram A below)",
+    RELAY (IN) is "OFF or ON", STUCK RELAY is "If RELAY =OFF and PUMP = ON,
+    time pump has been on since relay was supposed to open", and PUMP RUN
+    TIME is "If PUMP = ON, total time pump has been running". Every one of
+    those was already computed for 7C4's report, and this function had no
+    reader at all -- three screens of the flow chart drawn literally, with
+    `999 SEC`, `HH:MM` and `HHH:MM` on them for ever. See FIDELITY D1.
+    """
+    kind, device = _monitored(console, number)
+    out = "ON" if _pump_out(console, kind, device) else "OFF"
+    if token == "pumpmon_out":
+        letter = MONITORED.get(kind, ("R", None))[0]
+        state = "ON" if _relay_in(console, number) else "OFF"
+        return (f"r {number}: PUMP (OUT): {out}" + chr(10)
+                + f"{letter} {device}: RELAY (IN): {state}")
+    if token == "pumpmon_stuck":
+        seconds = min(int(_stuck_seconds(console, number)), 999)
+        return (f"r {number}: STUCK RELAY: {seconds:3d} SEC" + chr(10)
+                + _run_time(console, number))
+    if token == "pumpmon_label":
+        # the branch with no relay assigned: the label takes the top line and
+        # the pump state moves under it
+        return f"PUMP (OUT): {out}"
+    if token == "pumpmon_run":
+        return _run_time(console, number, wide=True)
+    return ""
 
 
 def _run_hours(console, number):
     """How long the pump this monitor watches has been running.
 
     "monitor the pump each time it switches on, and if it is still running
-    after a 1 - 24 hour delay (Max Run Time delay), to post an alarm." The
-    console keeps no separate pump run clock, so a pump that is running now
-    has been running since the console came up, which is the clock the test
-    needed warnings count from as well.
+    after a 1 - 24 hour delay (Max Run Time delay), to post an alarm" -- so
+    it is counted from the switch-on, which `monitor_watch` notes. This used
+    to answer the console's UPTIME, because there was no pump run clock to
+    read: a pump that started an hour ago on a console that came up
+    yesterday reported a day.
     """
-    kind, device = _monitored(console, number)
-    if not _pump_out(console, kind, device):
+    since = console.pumpmon_since.get((number, "run"))
+    if since is None:
         return 0.0
-    return console._uptime_hours()
+    return max(time.mktime(console.now()) - since, 0.0) / 3600.0
 
 
 # ---------------------------------------------------------------------------
 # The external inputs and the output relays
 # ---------------------------------------------------------------------------
-# S80C, "External input type and orientation": 21 and 22 are the two
-# generator orientations, which is what I403's own heading means by "Setup
-# parameters determine whether an input is from a generator."
-GENERATOR_TYPES = ("21", "22")
+# S80C, "External input type and orientation": type 2 is a generator, in
+# either orientation, which is what I403's own heading means by "Setup
+# parameters determine whether an input is from a generator." The reading
+# is `inputs.Inputs.setup`, which is the same one the engine acts on.
 
 # "aaaa - Alarm type number: ... 0004=Generator Off, 0005=Generator On": the
 # two extra values I403 has and I402 does not, which an input programmed as a
@@ -597,8 +809,11 @@ GENERATOR_WORDS = {"02": "GENERATOR OFF", "03": "GENERATOR ON"}
 
 
 def _is_generator(console, number):
-    raw = (console.values.get(f"S80C{number:02d}") or "").strip()
-    return raw[-2:] in GENERATOR_TYPES
+    # the engine's reading of S80C, which knows a tank list can follow the
+    # type: `raw[-2:]` read the last TANK of a generator on tanks 1 and 2
+    # as its type and reported the run as an ordinary input alarm
+    from . import inputs
+    return console.inputs.kind(number) == inputs.GENERATOR
 
 
 def _relay_count(console):
@@ -617,11 +832,7 @@ def _relay_closed(console, number):
     S809 says which way round that is: a NORMALLY CLOSED relay reads closed
     when nothing has energised it.
     """
-    energised = bool(console.relays.get(number))
-    raw = (console.values.get(f"S809{number:02d}") or "").strip()
-    if raw[-1:] == "2":
-        return not energised
-    return energised
+    return console.outputs.closed(number)
 
 
 # ---------------------------------------------------------------------------
@@ -629,14 +840,24 @@ def _relay_closed(console, number):
 # ---------------------------------------------------------------------------
 # What each module's own typical response prints for its reference channels,
 # which is the only figure the manual gives for them.
+#
+# **HIGH REF is the manual's LEFT column and not the larger number.** On four
+# of the seven codes it happens to be both, and on the three chlorine ones it
+# is not: 576013-635 Rev AA prints `B41` as `1 5 1815 7823 4193` under
+# `SENSOR COUNTER HIGH REF LOW REF VALUE`, and `B46` and `B4B` as
+# `1 5 8900 32000 5200 100000`. This table held all three the other way
+# round -- tidied, at some point, into larger-first by somebody meeting a row
+# where HIGH was the smaller figure -- so the console printed the two columns
+# swapped on exactly those three. See FIDELITY L3. The order here is the
+# manual's column order; do not sort it.
 #           code    high     low
 REFERENCE = {"B01": (1072.0, 193.0),
              "B06": (1080.0, 208.0),
              "B11": (5440.0, 930.0),
              "B21": (1086.0, 215.0),
-             "B41": (7823.0, 1815.0),
-             "B46": (32000.0, 8900.0),
-             "B4B": (32000.0, 8900.0)}
+             "B41": (1815.0, 7823.0),
+             "B46": (8900.0, 32000.0),
+             "B4B": (8900.0, 32000.0)}
 
 # Which family each resistance diagnostic reads, how many channels it reads,
 # whether the second channel has reference channels of its own, and the title
@@ -711,21 +932,31 @@ def _diagnostic_report(handler, code, tok, dev):
                            _reference(c, tok, number, low, "low2")]
             values += [last2, avg2]
             shown.append(last2)
-        rows.append(f"{number:6d}{counter:9.0f}{hi1:11.0f}{lo1:11.0f}"
-                    + "".join(f"{v:15.0f}" for v in shown))
+        rows.append(f"{number:6d}{counter:8.0f}{hi1:9.0f}{lo1:10.0f}"
+                    + "".join(f"{v:13.0f}" for v in shown))
         body += f"{number:02d}" + _floats(values)
     if code[0].isupper():
         return handler._frame(code, SEP.join(rows))
     return handler._frame(code, body)
 
 
+# 576013-635 Rev AA p.523 and p.524, counted off the rendered page. The two
+# word headings stack, and the second line's columns are the row's:
+#
+#             SAMPLE     HIGH       LOW
+#     SENSOR COUNTER      REF       REF        VALUE
+#          1        5     1072       193       145727
+#
+# SENSOR at 0, COUNTER at 7, the two REFs at 20 and 30, and the value held
+# right against 45 -- with a second channel's held right against 58. This
+# console had every one of those a column or more out.
 def _diag_header(channels):
-    """"SAMPLE COUNTER  HIGH REF  LOW REF  VALUE": two lines, because the
-    console stacks the two word headings."""
-    names = ["VALUE"] if channels == 1 else ["VALUE1", "VALUE2"]
-    return [f"{'':6s}{'SAMPLE':>9s}{'HIGH':>11s}{'LOW':>11s}",
-            f"{'SENSOR':<6s}{'COUNTER':>9s}{'REF':>11s}{'REF':>11s}"
-            + "".join(f"{n:>15s}" for n in names)]
+    """The two heading lines these six reports stack."""
+    first = " " * 8 + "SAMPLE" + " " * 5 + "HIGH" + " " * 7 + "LOW"
+    second = "SENSOR COUNTER" + " " * 6 + "REF" + " " * 7 + "REF"
+    if channels == 1:
+        return [first, second + " " * 8 + "VALUE"]
+    return [first, second + " " * 7 + "VALUE1" + " " * 7 + "VALUE2"]
 
 
 # ---------------------------------------------------------------------------
@@ -757,13 +988,12 @@ def handle(handler, tok, dev, code, data):
         if tok in STATUS_CODE:
             return (_status_report(
                 handler, code, aa, devices, label_of,
-                f"{title} STATUS REPORT",
-                f"{'SENSOR':<11s}{'LOCATION':<22s}STATUS",
+                f"{title} STATUS REPORT", STATUS_HEADER,
                 status_row), "sensor status")
         return (_history_report(
             handler, code, aa, devices, label_of,
             f"{title} ALARM HISTORY REPORT",
-            f"{'SENSOR':<11s}LOCATION", history_row, 11, 45),
+            HISTORY_HEADER, history_row, LOCATION_COLUMN, HISTORY_WORDS),
             "sensor alarm history")
 
     # ---- the smart sensors -------------------------------------------------
@@ -784,25 +1014,43 @@ def handle(handler, tok, dev, code, data):
         if not c.has("vapor"):
             return handler._nine(code), "no vapor sensor module fitted"
         devices = _devices(c, "vapor", "706", dev)
+        # p.525: SENSOR at 0, PPM at 13, and the reading right aligned
+        # to column 15
         rows = ["VAPOR DIAGNOSTIC REPORT - VAPOR CONCENTRATION", "",
-                f"{'SENSOR':<14s}PPM"]
+                f"{'SENSOR':<13s}PPM"]
         body = ""
         for number in devices:
             # "1. Vapor concentration (ppm)", which is the second channel of
             # the vapor module read as a concentration rather than a
             # resistance, and the same number the panel's screen shows
             ppm = _number(c.diag_reading("sensor_ppm", number))
-            rows.append(f"{number:12d}  {ppm:.0f}")
+            rows.append(f"{number:{SENSOR_COLUMN}d}{ppm:10.0f}")
             body += f"{number:02d}" + _floats([ppm])
         if display:
             return handler._frame(code, SEP.join(rows)), "vapor concentration"
         return handler._frame(code, body), "vapor concentration"
 
-    # ---- the ground temperature sensor, which is on the groundwater card ---
+    # ---- the ground temperature thermistor, which belongs to VLLD ---------
     if tok == "B21":
-        if not c.has("gw"):
-            return handler._nine(code), "no groundwater sensor module fitted"
-        devices = _devices(c, "gw", "711", dev)
+        # It was gated on the GROUNDWATER card, and enumerated from
+        # groundwater config 711, on the strength of the word "ground" in
+        # two unrelated names. 576013-879 Rev W p.60: "When using volumetric
+        # line leak detection (VLLD), only one ground temperature thermistor
+        # is needed per site and the thermistor must be wired to thermistor
+        # position number 1 (positions 2 - 4 are not used)."
+        #
+        # `diagdata.json` already had it right -- GROUND TEMP DIAGNOSTIC is
+        # `requires: vlld` -- so the panel and the wire disagreed about the
+        # same screen: on a console with VLLD and a probe module, exactly the
+        # console p.60 is describing, the panel offered the diagnostic and
+        # IB2100 answered 9999. FIDELITY M4 and L10.
+        if not c.has("vlld"):
+            return handler._nine(code), "no VLLD module fitted"
+        # One thermistor per site, on position 1. The card that carries it is
+        # 635's function 102 `0A=Four Probe w/ Ground Temp Module`, which this
+        # console does not model as its own type -- see FIDELITY M4, still
+        # open on that point.
+        devices = [1] if dev in ("00", "01") else []
         high, low = REFERENCE["B21"]
         rows = ["GROUNDTEMP DIAGNOSTIC REPORT", ""] + _diag_header(1)
         body = ""
@@ -812,8 +1060,20 @@ def handle(handler, tok, dev, code, data):
             lo = _reference(c, tok, number, low, "low")
             # "Value = resistance measured by thermistor", which is what the
             # panel's own GROUND TEMP screen reads out
-            last = _tail(c.diag_reading("sensor_groundtemp", number))
-            average = readings.fixed(480.0, 620.0, "gt", number)
+            # See console.ground_ohms: 480 to 620 is a value Figure 6-22
+            # calls a shorted thermistor, and B21 agreed with the panel so
+            # there was no second opinion.
+            from .console import ground_ohms
+            average = ground_ohms(c.product_temperature(number))
+            # "Last Reading" and "Current Average Value" are two of B21's
+            # own five fields, and both were this one expression -- so the
+            # two floats of its computer response came back bit-identical,
+            # where every other diagnostic on this card puts the sample to
+            # sample noise of a single A/D conversion on one of them. Same
+            # noise, same key shape, as `_sensor_pair`. See FIDELITY L10.
+            last = average * (1.0 + readings.wander(
+                c, -0.01, 0.01, "sample", "gw", number, 1,
+                swing=1.0, period=30.0))
             rows.append(f"{number:6d}{counter:9.0f}{hi:11.0f}{lo:11.0f}"
                         f"{last:15.0f}")
             body += f"{number:02d}" + _floats([counter, hi, lo, last, average])
@@ -833,12 +1093,15 @@ def handle(handler, tok, dev, code, data):
         devices = _devices(c, "relay", "806", dev)
         if not devices and dev == "00":
             devices = list(range(1, _relay_count(c) + 1))
-        rows = [f"{'RELAY':<8s}{'LOCATION':<25s}STATUS"]
+        # p.153: RELAY at 0, LOCATION at 8 and STATUS at 31, with the number
+        # right against column 4. Measured off the word boxes, not counted --
+        # this used to put LOCATION at 8 and STATUS at 33.
+        rows = [f"{'RELAY':<8s}{'LOCATION':<23s}STATUS"]
         body = ""
         for number in devices:
             closed = _relay_closed(c, number)
             label = _label(c, "807", number, RELAY_LABEL)
-            rows.append(f"{number:6d}  {label:<25.25s}"
+            rows.append(f"{number:4d}    {label:<23.23s}"
                         + ("CLOSED" if closed else "OPEN"))
             body += f"{number:02d}" + ("0002" if closed else "0001")
         if display:
@@ -858,7 +1121,11 @@ def _inputs(handler, tok, dev, code):
 
     if tok == "401":
         standing = _standing(c, INPUT_AA)
-        rows = [f"{'INPUT':<11s}{'LOCATION':<22s}STATUS"]
+        # p.149: INPUT at 0, LOCATION at 8 and STATUS at 31, the number right
+        # against column 5. 402 and 403 put the same number against column 4
+        # on their own pages, one to the left of this one -- each page is
+        # followed as it is drawn rather than averaged with its neighbours.
+        rows = [f"{'INPUT':<8s}{'LOCATION':<23s}STATUS"]
         body = ""
         for number in devices:
             nn = _worst(INPUT_AA, standing.get(number, []))
@@ -867,7 +1134,7 @@ def _inputs(handler, tok, dev, code):
             # reads rather than the way its alarm number does
             words = {None: "OFF", "02": "OFF", "03": "ON"}.get(
                 nn, _words(INPUT_AA, nn, "OFF"))
-            rows.append(f"{number:8d}   {label_of(number):<22.22s}{words}")
+            rows.append(f"{number:5d}   {label_of(number):<23.23s}{words}")
             body += f"{number:02d}" + _status_value(INPUT_AA, nn or "02")
         if code[0].isupper():
             return handler._frame(code, SEP.join(rows)), "input status"
@@ -877,9 +1144,11 @@ def _inputs(handler, tok, dev, code):
     title = "INPUT / GENERATOR ALARM HISTORY REPORT" if generator else ""
 
     def row(number, label):
-        return f"{number:6d}     {label:<22.22s}"
+        # pp.150 and 151 both: the number right against column 4 and the
+        # label at 8, under a head whose LOCATION is at 8 as well
+        return f"{number:4d}    {label:<23.23s}"
 
-    header = f"{'INPUT':<11s}LOCATION"
+    header = f"{'INPUT':<8s}LOCATION"
     if code[0].isupper():
         rows = [title, "", header] if title else [header]
         for number in devices:
@@ -889,7 +1158,7 @@ def _inputs(handler, tok, dev, code):
                 words = _words(INPUT_AA, one["nn"])
                 if generator and _is_generator(c, number):
                     words = GENERATOR_WORDS.get(one["nn"], words)
-                rows.append(f"{'':11s}{_when(one['at']):<22s}{words}")
+                rows.append(f"{'':8s}{_when(one['at']):<30s}{words}")
         return handler._frame(code, SEP.join(rows)), "input alarm history"
     body = ""
     for number in devices:
@@ -915,18 +1184,31 @@ def _pumpmon(handler, tok, dev, code, display):
         return (_history_report(
             handler, code, PUMPMON_AA, devices, label_of,
             "PUMP RELAY MONITOR ALARM HISTORY REPORT",
-            "DEVICE LABEL",
+            "DEVICE  LABEL",
             lambda number, label: label,
             14, 45, "%02X"), "pump relay alarm history")
 
     standing = _standing(c, PUMPMON_AA)
-    head = (f"{'DEVICE':<11s}{'LABEL':<22s}{'PUMP':<12s}"
-            + (f"{'PUMP RELAY':<13s}STATUS" if tok == "322"
-               else f"{'PUMP RELAY':<12s}{'STUCK':<9s}RUN"))
-    second = (f"{'':33s}{'(OUT)':<12s}(IN)" if tok == "322"
-              else f"{'':33s}{'(OUT)':<12s}{'(IN)':<12s}{'RELAY':<9s}TIME")
+    # 576013-635 Rev AA p.118 and p.549, read off the word boxes rather than
+    # off the text extraction, which interleaves these two columns:
+    #
+    #                                   PUMP   PUMP RELAY    STUCK     RUN
+    #     DEVICE  LABEL                 (OUT)     (IN)       RELAY     TIME
+    #          1  PUMP RELAY UNLEADED    OFF    Q 1: OFF     0 SEC    00:00
+    #
+    # **The upper line is the one with PUMP on it, and this console had the
+    # two the other way round** -- DEVICE and LABEL on top with the
+    # parenthesised halves under them. `_diag_header` gets the same shape
+    # right for the six resistance diagnostics, so it was a slip and not a
+    # misunderstanding. The columns were out as well, by three and by six.
+    # See FIDELITY L6.
+    upper = (" " * 30 + f"{'PUMP':<7s}"
+             + ("PUMP RELAY" if tok == "322"
+                else f"{'PUMP RELAY':<14s}{'STUCK':<10s}RUN"))
+    lower = (f"{'DEVICE':<8s}{'LABEL':<22s}{'(OUT)':<10s}{'(IN)':<11s}"
+             + ("STATUS" if tok == "322" else f"{'RELAY':<10s}TIME"))
     rows = ["PUMP RELAY MONITOR STATUS REPORT" if tok == "322"
-            else "PUMP RELAY MONITOR DIAGNOSTIC", "", head, second]
+            else "PUMP RELAY MONITOR DIAGNOSTIC", "", upper, lower]
     body = ""
     for number in devices:
         kind, device = _monitored(c, number)
@@ -936,8 +1218,8 @@ def _pumpmon(handler, tok, dev, code, display):
         b = "1" if relay else "0"
         if tok == "322":
             nn = _worst(PUMPMON_AA, standing.get(number, []))
-            rows.append(f"{number:9d}  {label_of(number):<22.22s}"
-                        f"{'ON' if pump else 'OFF':<12s}"
+            rows.append(f"{number:6d}  {label_of(number):<23.23s}"
+                        f"{'ON' if pump else 'OFF':<7s}"
                         f"{_monitor_text(c, number):<13s}"
                         + _words(PUMPMON_AA, nn, "NORMAL"))
             body += (f"{number:02d}{a}{b}"
@@ -945,16 +1227,24 @@ def _pumpmon(handler, tok, dev, code, display):
             continue
         stuck = _stuck_seconds(c, number)
         hours = _run_hours(c, number)
-        rows.append(f"{number:9d}  {label_of(number):<22.22s}"
-                    f"{'ON' if pump else 'OFF':<12s}"
-                    f"{_monitor_text(c, number):<12s}"
+        # the run time is held RIGHT against 64, where the stuck delay
+        # runs left from 51: `0 SEC    00:00` on the sample's own row
+        rows.append(f"{number:6d}  {label_of(number):<23.23s}"
+                    f"{'ON' if pump else 'OFF':<7s}"
+                    f"{_monitor_text(c, number):<13s}"
                     f"{f'{stuck:.0f} SEC':<9s}"
-                    f"{int(hours):02d}:{int(hours % 1.0 * 60):02d}")
+                    f"{f'{int(hours):02d}:{int(hours % 1.0 * 60):02d}':>5s}")
         body += f"{number:02d}{a}{b}" + _floats([stuck, hours])
     note = "pump relay status" if tok == "322" else "pump relay diagnostic"
     if display:
         return handler._frame(code, SEP.join(rows)), note
     return handler._frame(code, body), note
+
+
+SMART_STATUS_COLUMN = 21
+SMART_STATUS_HEADER = ("SENSOR".ljust(LOCATION_COLUMN)
+                       + "LOCATION".ljust(SMART_STATUS_COLUMN
+                                          - LOCATION_COLUMN) + "STATUS")
 
 
 def _smart(handler, tok, dev, code, display):
@@ -968,19 +1258,20 @@ def _smart(handler, tok, dev, code, display):
         """"s 1: SUMP 1", the way a smart sensor screen heads itself."""
         return f"s {number}:{label_of(number)}"
 
-    if tok == "315":
-        return (_status_report(
-            handler, code, SMART_AA, _smart_devices(c, dev), label_of,
-            "SMART SENSOR STATUS REPORT",
-            f"{'SENSOR':<11s}{'LOCATION':<22s}STATUS",
-            lambda n, label, words: f"{n:9d}  {label:<22.22s}{words}"),
-            "smart sensor status")
-    if tok == "316":
+    if tok in ("315", "316"):
+        # p.111 draws the smart sensors' STATUS column at 21 where the rest
+        # of the family draws it at 31, and the alarm history at p.112 is the
+        # family's own again. Both are the manual's, not a tidier rule.
+        smart_status, smart_history = _sensor_rows(SMART_STATUS_COLUMN)
+        if tok == "315":
+            return (_status_report(
+                handler, code, SMART_AA, _smart_devices(c, dev), label_of,
+                "SMART SENSOR STATUS REPORT", SMART_STATUS_HEADER,
+                smart_status), "smart sensor status")
         return (_history_report(
             handler, code, SMART_AA, _smart_devices(c, dev), label_of,
             "SMART SENSOR ALARM HISTORY REPORT",
-            f"{'SENSOR':<11s}LOCATION",
-            lambda n, label: f"{n:9d}  {label:<22.22s}", 11, 45),
+            HISTORY_HEADER, smart_history, LOCATION_COLUMN, HISTORY_WORDS),
             "smart sensor alarm history")
 
     if tok == "333":
@@ -990,8 +1281,9 @@ def _smart(handler, tok, dev, code, display):
         # counts its test needed warnings from.
         devices = _smart_devices(c, dev)
         began = c._commissioned or time.mktime(c.now())
-        rows = ["SMART SENSOR INSTALL LOG", "",
-                f"{'DATE':<18s}{'SENSOR':>6s}    {'SERIAL NUMBER':<17s}TYPE"]
+        # p.120: SENSOR right against 23, SERIAL NUMBER at 27 and TYPE at
+        # 43, with the hour space padded the way it is everywhere else
+        rows = ["SMART SENSOR INSTALL LOG", "", wiretables.heading("333")]
         body = f"{len(devices):03d}"
         for number in devices:
             when = began - readings.fixed(0.0, 7200.0, "install", number)
@@ -999,9 +1291,11 @@ def _smart(handler, tok, dev, code, display):
             serial = _smart_serial(c, number)
             type_code, type_name = SMART_TYPE.get(_smart_kind(c, number),
                                                   SMART_UNKNOWN)
-            shown = time.strftime("%m-%d-%y %H:%M:%S", time.localtime(when))
-            rows.append(f"{shown:<18s}{number:6d}    "
-                        f"{serial:<17d}{type_name}")
+            at = time.localtime(when)
+            shown = (time.strftime("%m-%d-%y", at)
+                     + f"{at.tm_hour:3d}" + time.strftime(":%M:%S", at))
+            rows.append(f"{shown:<17s}{number:7d}   "
+                        f"{serial:<16d}{type_name}")
             # "ffff - Smart Sensor Model Number": four characters in the
             # manual's own message template, whatever its note calls it
             body += packed + f"{number:02d}" + _float(serial) + type_code
@@ -1050,9 +1344,11 @@ def _smart(handler, tok, dev, code, display):
         # "nn - Number of 8-byte values to follow": the model, the serial
         # number, the date code and the protocol version, all four of them
         # numbers the sensor itself answers with
+        # p.530: LABEL at 8, TYPE at 28, SERIAL NUMBER at 40 and DATE
+        # CODE at 55, with the two numbers held right against 52 and 63
         rows = ["SMART SENSOR SERIAL NUMBER", "",
-                "SENSOR LABEL                TYPE"
-                "             SERIAL NUMBER DATE CODE"]
+                "SENSOR  LABEL               TYPE"
+                "        SERIAL NUMBER  DATE CODE"]
         body = ""
         for number in _smart_devices(c, dev):
             type_code, type_name = SMART_TYPE.get(_smart_kind(c, number),
@@ -1061,9 +1357,16 @@ def _smart(handler, tok, dev, code, display):
             serial = _smart_serial(c, number)
             date_code = readings.integer(10000, 60000, "ssdate", number)
             protocol = readings.integer(1, 9, "ssproto", number)
-            rows.append(f"{number:2d} {label_of(number):<20.20s} "
-                        f"{type_code[1:]}-{type_name:<22.22s}"
-                        f"{serial:>6d}  {date_code:>6d}")
+            # the two numbers are held RIGHT against 52 and 63, which is
+            # where p.530 puts them: `123456` under SERIAL NUMBER at 40-52
+            # and `26214` under DATE CODE at 55-63. The serial field was
+            # twelve wide, two past its column -- and this console's smart
+            # serials are eight digits where the sample's is six, so the
+            # field overflowed and carried DATE CODE along with it whenever
+            # a serial changed width. See FIDELITY L10.
+            rows.append(f"{number:2d} {label_of(number):<21.21s}"
+                        f"{type_code[1:]}-{type_name:<15.15s}"
+                        f"{serial:>10d}{date_code:>11d}")
             body += (f"{number:02d}04{model:08X}{serial:08X}"
                      f"{date_code:08X}{protocol:08X}")
         if display:
@@ -1097,15 +1400,24 @@ def _smart(handler, tok, dev, code, display):
         body = ""
         for number in _smart_devices(c, dev, VAC):
             events = _evacuations(c, number)
+            # p.537, the same inversion as B72 and the same source:
+            #
+            #                            DURATION
+            #     START DATE/TIME        HH:MM:SS
+            #     04-05-04 09:06:58       0:02:24
+            #
+            # DURATION alone on the upper line, START DATE/TIME with the
+            # HH:MM:SS under it, and the times held right against 30.
             rows += [head(number), "",
-                     f"{'START DATE/TIME':<22s}DURATION",
-                     f"{'':22s}HH:MM:SS"]
+                     f"{'':23s}DURATION",
+                     f"{'START DATE/TIME':<23s}HH:MM:SS"]
             for when, seconds in events:
+                clock = (f"{int(seconds) // 3600:d}"
+                         f":{int(seconds) % 3600 // 60:02d}"
+                         f":{int(seconds) % 60:02d}")
                 rows.append(time.strftime("%m-%d-%y %H:%M:%S",
                                           time.localtime(when))
-                            + f"{int(seconds) // 3600:7d}"
-                            + f":{int(seconds) % 3600 // 60:02d}"
-                            + f":{int(seconds) % 60:02d}")
+                            + f"{clock:>14s}")
             rows.append("")
             body += f"{number:02d}{len(events):02d}"
             body += "".join(time.strftime("%y%m%d%H%M", time.localtime(when))
@@ -1210,29 +1522,72 @@ def _vac_diagnostic(handler, dev, code, display, head):
         at_psi = readings.fixed(-5.0, -3.0, "vacratiopsi", number)
         rows += [head(number), "",
                  "VAC SENSOR",
-                 f"{'SERIAL NUMBER':<16s}{serial:>10d}",
+                 # `SERIAL NUMBER        24` -- the number is held right
+                 # against 22, where this had it against 25
+                 f"{'SERIAL NUMBER':<13s}{serial:>10d}",
+                 # `              -9.000 PSI`: the figure runs to 19 and
+                 # the unit to 23, which is one column left of where this
+                 # console had both
                  "COMPENSATED PRESSURE:",
-                 f"{compensated:>21.3f} PSI",
+                 f"{compensated:>20.3f} PSI",
                  "UNCOMPENSATED PRESSURE:",
-                 f"{uncompensated:>21.3f} PSI",
+                 f"{uncompensated:>20.3f} PSI",
                  "EVACUATION STATE:",
-                 EVAC_WORDS[evac],
+                 # ` VACUUM OK` is indented one, the way ` NONE` and the
+                 # fault names are: a value under its own heading
+                 " " + EVAC_WORDS[evac],
                  f"FLUID STATUS: {FLUID_WORDS[fluid]}",
-                 f"VCV: {VCV_WORDS[vcv]}",
-                 "LEAK RATE:",
-                 time.strftime("%m-%d-%y %I:%M%p",
-                               time.localtime(time.mktime(c.now()) - 3600))
-                 + f"{rate:8.3f} GPH",
+                 f"VCV: {VCV_WORDS[vcv]}"]
+        # p.534, and 576013-818 Rev AB Figure 6-29 draws the same block:
+        #
+        #     4-12-04 11:28AM
+        #     LEAK RATE:     0.123 GPH
+        #     TIME TO NO VAC:
+        #               150:20 HHHH:MM
+        #     4-12-04 10:15AM
+        #     EVAC RATIO:5.2 @ -4.3PSI
+        #     SENSOR FAULTS:
+        #       RELIEF VALVE FAULT
+        #
+        # **The date is a line of its own, standing IN FRONT of the reading
+        # it stamps, and the label shares its line with the value.** This
+        # console had it the other way round -- the label alone and the date
+        # concatenated with the value -- which put a timestamp inside the
+        # measurement column:
+        #
+        #     LEAK RATE:
+        #     09-02-26 11:01AM   0.213 GPH
+        #
+        # TIME TO NO VAC is the reading with NO date on it; the second date
+        # belongs to EVAC RATIO, which is a different measurement made at a
+        # different moment. See FIDELITY L7.
+        # **A blank line before the FIRST date and not before the second.**
+        # Measured off the page rather than argued: p.534's lines are 8.6
+        # apart and the gap between `VCV: CLOSED` and `4-12-04 11:28AM` is
+        # 17.2, while the gap in front of the second date is 8.6.
+        #
+        # `wiretables.lead` places the manual's blank lines from the same
+        # measurement and cannot place this one, because it keys on a line's
+        # WORDS and this line is a date -- a console fills in its own. It
+        # gets the one in front of `SENSOR FAULTS:` and misses this one, so
+        # the blank is here. Any report whose sample breaks in front of a
+        # line made of site data has the same hole in it.
+        rows += ["",
+                 _vac_stamp(c, 3600.0),
+                 f"{'LEAK RATE:':<10s}{f'{rate:.3f} GPH':>14s}",
                  "TIME TO NO VAC:",
-                 time.strftime("%m-%d-%y %I:%M%p",
-                               time.localtime(time.mktime(c.now()) - 7200))
-                 + f"{minutes // 60:5d}:{minutes % 60:02d} HHHH:MM",
-                 "EVAC RATIO:" f"{ratio:.1f} @ {at_psi:.1f}PSI", ""]
+                 f"{f'{minutes // 60:d}:{minutes % 60:02d} HHHH:MM':>24s}",
+                 _vac_stamp(c, 7200.0),
+                 "EVAC RATIO:" f"{ratio:.1f} @ {at_psi:.1f}PSI"]
+        # **A clean sensor still prints the heading.** Figure 6-29 draws
+        # `SENSOR FAULTS:` over ` NONE`, and this printed neither -- so the
+        # one screen that answers "is anything wrong with this sensor"
+        # answered by saying nothing, which reads as a report that stopped
+        # early rather than as a sensor with nothing to report.
         named = [name for bit, name in FAULT_BITS if faults & bit]
-        if named:
-            rows.append("SENSOR FAULTS:")
-            rows += [f"   {name}" for name in named]
-            rows.append("")
+        rows.append("SENSOR FAULTS:")
+        rows += [f"  {name}" for name in named] or [" NONE"]
+        rows.append("")
         body += (f"{number:02d}{serial:08X}{evac}{fluid}{vcv}1"
                  + _stamp(c, 1.0) + _float(rate) + "1"
                  + _stamp(c, 2.0) + f"{minutes:08X}" + "1"

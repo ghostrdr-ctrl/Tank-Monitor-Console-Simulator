@@ -26,7 +26,7 @@ temperature-compensated volume, water, temperature and height.
 import time
 
 from . import packed
-from .clock import clock_words
+from .clock import clock_date, clock_words
 
 # How much the level has to climb before the console calls it a delivery
 # rather than noise. A tanker drop is thousands of gallons; a probe's own
@@ -43,11 +43,33 @@ def snapshot(console, tank, when):
     """Everything the delivery report records at one moment."""
     st = console.tank_level.get(tank, {})
     volume, water = st.get("volume", 0.0), st.get("water", 0.0)
-    full = console.full_volume(tank)
-    diam = console.limit("607", tank) or 96.0
-    return {"at": when, "volume": volume, "tc": volume * 0.998,
-            "water": water, "temp": 55.0,
-            "height": (volume / full if full else 0.0) * diam}
+    return {"at": when, "volume": volume,
+            "tc": console.tc_volume(tank),
+            "water": water,
+            "temp": console.product_temperature(tank),
+            "height": console.height_at(tank, volume)}
+
+
+def rewind(console, tank, shot, volume):
+    """The same snapshot as it was at an EARLIER volume.
+
+    A rise is noticed after it has happened, so the start of a delivery has
+    to be reconstructed: the level was `volume` a moment ago and the reading
+    taken now is of the risen tank. The temperature and the water are what
+    they were; the volume, its temperature-compensated twin and the HEIGHT
+    are not.
+
+    This used to be three lines that overwrote `shot["volume"]` and then
+    divided by it, so the scaling cancelled and the start TC came out as the
+    TC of the volume AFTER the rise -- which is why every delivery the bench
+    could make reported a TC increase of exactly zero. The height was never
+    corrected at all. See FIDELITY Y1.
+    """
+    risen = shot.get("volume") or 0.0
+    shot["tc"] = (shot["tc"] / risen * volume) if risen else volume
+    shot["volume"] = volume
+    shot["height"] = console.height_at(tank, volume)
+    return shot
 
 
 class Delivery:
@@ -88,8 +110,10 @@ class Deliveries:
         self.c = console
         self.records = {}      # tank -> [Delivery], newest first
         self.running = {}      # tank -> Delivery in progress
+        self._pending = {}     # tank -> one not yet big enough to be a drop
         self._last = {}        # tank -> (volume, when it stopped rising)
         self._rose = {}        # tank -> when the level last went UP
+        self._sets = {}        # tank -> what its siphon set held last look
 
     # ---- watching ----------------------------------------------------------
     def tick(self):
@@ -97,17 +121,50 @@ class Deliveries:
         for tank in sorted(self.c.tank_level):
             self._watch(tank, now)
 
+    def _set_total(self, tank):
+        """What the tank's siphon set holds altogether.
+
+        A siphon carries fuel BETWEEN the tanks of a set, so one of them
+        rising is not by itself product arriving at the site: a set finding
+        its own level fills the low tank out of the high one. Nothing
+        arrives unless the SET's total rises, and 576013-610 p.28-2 is the
+        same reading from the report side -- "Reconciliation Reports are
+        generated as a single product report for a manifolded set". See
+        FIDELITY G11.
+        """
+        return sum((self.c.tank_level.get(one) or {}).get("volume", 0.0)
+                   for one in self.c.siphon_set(tank))
+
     def _watch(self, tank, now):
         volume = self.c.tank_level.get(tank, {}).get("volume", 0.0)
         seen, since = self._last.get(tank, (volume, now))
         running = self.running.get(tank)
+        total, held_total = self._set_total(tank), self._sets.get(tank)
+        self._sets[tank] = total
 
         if volume > seen + 0.05:                    # the level is going up
+            if not (held_total is None or total > held_total + 0.05
+                    or running is not None or tank in self._pending):
+                # The SET is not gaining, so this is a siphon finding its
+                # own level rather than product arriving: the fuel filling
+                # this tank came out of its partner. The reading is still
+                # BOOKED -- refusing the delivery and leaving `_last` where
+                # it was makes the next real drop measure itself from a
+                # level the tank left hours ago.
+                self._last[tank] = (volume, now)
+                return
+            # A fill that has not yet reached the threshold is HELD, not
+            # thrown away and rebuilt from the last tick. Rebuilding it made
+            # the threshold a per-TICK one -- 25 gallons in a 700 ms poll,
+            # about 2,140 gallons a minute -- so a real tanker dropping 200
+            # to 400 gallons a minute was invisible. See FIDELITY Y2.
+            running = running or self._pending.get(tank)
             if running is None:
                 # the delivery started from where the tank was before it moved
-                start = snapshot(self.c, tank, since)
-                start["volume"], start["tc"] = seen, seen * 0.998
+                start = rewind(self.c, tank,
+                               snapshot(self.c, tank, since), seen)
                 running = Delivery(tank, start)
+                self._pending[tank] = running
             self._last[tank] = (volume, now)
             self._rose[tank] = now
             if volume - running.start["volume"] >= START_GALLONS:
@@ -116,9 +173,11 @@ class Deliveries:
 
         if volume < seen - 0.05:                    # dispensing, or a drain
             self._last[tank] = (volume, now)
-            if running is not None and volume <= running.start["volume"]:
+            held = running or self._pending.get(tank)
+            if held is not None and volume <= held.start["volume"]:
                 # it all went back out again, so there was no delivery
                 self.running.pop(tank, None)
+                self._pending.pop(tank, None)
                 self._rose.pop(tank, None)
                 return
         else:
@@ -128,22 +187,61 @@ class Deliveries:
         # "a delay time between the completion of a bulk delivery and the
         # Delivery Increase Report": timed from the last RISE, because a
         # forecourt goes on selling while the tanker is still on the ground,
-        # and that dispensing is what the adjusted report accounts for
-        delay = self.c.delivery_delay(tank) * 60.0
+        # and that dispensing is what the adjusted report accounts for.
+        # `settling_delay` rather than the setting: there is a four-minute
+        # floor under it that no setting turns off.
+        delay = self.c.settling_delay(tank) * 60.0
         if now - self._rose.get(tank, since) >= delay:
             self._finish(tank, now)
 
     def _finish(self, tank, now):
         run = self.running.pop(tank, None)
+        self._pending.pop(tank, None)
         self._rose.pop(tank, None)
         if run is None:
             return
         run.end = snapshot(self.c, tank, now)
         if run.amount < START_GALLONS:
             return
+        if (self.c.service_session() is not None
+                and self.c.delivery_override()):
+            # "If 'Delivery Override' is enabled then any deliveries that
+            # occur when the TLS is in a 'Service Notice' session will not
+            # go into the standard delivery history or BIR delivery
+            # history" -- 576013-623 Rev AN p.5-27. That is what the whole
+            # feature is for: a tanker that arrives while a technician is
+            # dropping fuel down a fill pipe to test a probe is not a
+            # delivery, and recording it is what breaks the reconciliation.
+            # The drop still happened and the tank still holds it; it is the
+            # two HISTORIES it stays out of. See FIDELITY D9.
+            return
+        # A truck the bench sent hands over its ticket now, against the
+        # record the console has just written for the drop it watched. A
+        # float somebody dragged has no driver and no paperwork.
+        ticket, bol = self.c.drops.claim_ticket(tank)
+        if ticket is not None:
+            run.ticket, run.bol = float(ticket), bol
         self.records.setdefault(tank, []).insert(0, run)
         del self.records[tank][10:]
         self.c.delivered(tank, run)
+
+    def book(self, tank):
+        """Take the level as it stands, without a word.
+
+        Fuel that leaves by a route the console cannot see -- water pumped
+        out, a stick reading, theft -- is what 576013-818 12-3 lists as
+        the causes of lost volume, and none of them is a delivery. So the
+        bench moves the level and tells the watcher to start looking from
+        where it now is: whatever the reconciliation makes of the gap is
+        the reconciliation's business. See BENCH.md T5.
+        """
+        now = time.mktime(self.c.now())
+        volume = self.c.tank_level.get(tank, {}).get("volume", 0.0)
+        self._last[tank] = (volume, now)
+        self._sets[tank] = self._set_total(tank)
+        self._pending.pop(tank, None)
+        self._rose.pop(tank, None)
+        self.running.pop(tank, None)
 
     def in_progress(self, tank):
         return self.running.get(tank)
@@ -220,32 +318,110 @@ class Deliveries:
         return n
 
     # ---- what the console shows and prints ----------------------------------
+    # I202's column header, read off 576013-635 Rev AA p.63 by word position.
+    # The sample is Courier at six points a character, so this is counted
+    # rather than guessed:
+    #
+    #   INCREASE 0  DATE 11  / 16  TIME 18  GALLONS 35  TC 43  GALLONS 46
+    #   WATER 54  TEMP 61  DEG 66  F 70  HEIGHT 73
+    #
+    # and the values under it right-align to 41, 52, 58, 70 and 78, with the
+    # row's own label -- END:, START:, AMOUNT: -- right-aligned to 9 and the
+    # stamp starting at 11.
+    #
+    # This console ran the whole header onto the end of the `T n:` line and
+    # dropped `INCREASE   DATE / TIME` altogether. Because the headings rode
+    # on a variable-length product label, the columns moved from tank to tank
+    # and sat over nothing in particular. See FIDELITY S4.
+    DELIVERY_HEAD = ("INCREASE   DATE / TIME             GALLONS TC GALLONS "
+                     "WATER  TEMP DEG F  HEIGHT")
+    DELIVERY_WIDTHS = (10, 11, 6, 12, 8)
+
+    # 215 is the same report with mass and density in it, and its own sample
+    # is on p.83 with its own columns -- GALLONS at 33, MASS 45, DENSITY 52,
+    # WATER 60, TEMP 68, HEIGHT 74 -- so it does NOT reuse 202's. The two
+    # reports look alike and are not the same widths, which is the trap this
+    # family sets twice.
+    MASS_HEAD = ("INCREASE   DATE / TIME           GALLONS     MASS"
+                 "   DENSITY WATER   TEMP  HEIGHT")
+    MASS_WIDTHS = (8, 9, 10, 7, 7, 8)
+
+    @staticmethod
+    def delivery_line(label, stamp="", values=(), widths=None):
+        """One row of I202 or I215, in that report's own columns.
+
+        The label is right-aligned to column 9 -- `END:`, `START:` and
+        `AMOUNT:` all end there -- and the stamp starts at 11, on both.
+        """
+        cells = ""
+        for width, text in zip(widths or Deliveries.DELIVERY_WIDTHS, values):
+            cells += f"{text:>{width}s}"
+        return f"{label + ':':>10s} {stamp:21.21s}{cells}".rstrip()
+
     def report(self, tanks, title="DELIVERY REPORT", most_recent=False):
         """I202 and I20C, in the columns the manual prints them."""
         out = [title, ""]
         for tank in tanks:
             label = self.c.text("602", tank) or f"TANK {tank}"
-            out.append(f"T {tank}:{label}"
-                       "        GALLONS TC GALLONS WATER TEMP DEG F HEIGHT")
+            out.append(f"T {tank}:{label}")
+            out.append(self.DELIVERY_HEAD)
             records = self.records.get(tank) or []
             if not records:
                 out.append("  NO DELIVERY DATA AVAILABLE")
             for record in (records[:1] if most_recent else records):
-                for name, snap in (("END", record.end), ("START", record.start)):
+                for name, snap in (("END", record.end),
+                                   ("START", record.start)):
                     if not snap:
                         continue
-                    when = clock_words(snap["at"])
-                    out.append(f"  {name:>6}: {when:22s}"
-                               f"{snap['volume']:8.0f}{snap['tc']:9.0f}"
-                               f"{snap['water']:7.2f}{snap['temp']:8.2f}"
-                               f"{snap['height']:7.2f}")
-                out.append(f"  {'AMOUNT':>6}: {'':22s}"
-                           f"{record.amount:8.0f}{record.tc_amount:9.0f}")
+                    out.append(self.delivery_line(
+                        name, clock_words(snap["at"]),
+                        (f"{snap['volume']:.0f}", f"{snap['tc']:.0f}",
+                         f"{snap['water']:.2f}", f"{snap['temp']:.2f}",
+                         f"{snap['height']:.2f}")))
+                out.append(self.delivery_line(
+                    "AMOUNT", "", (f"{record.amount:.0f}",
+                                   f"{record.tc_amount:.0f}")))
                 out.append("")
         return chr(10).join(out)
 
+    # I221's two header lines, read off 576013-635 Rev AA p.91 by word
+    # position -- the sample is Courier at six points a character, so the
+    # columns can be counted rather than guessed:
+    #
+    #   TICKET 24  GAUGE 33  DLVY 45  BEFORE 52  AFTER 60  EST DLVY 67
+    #   VOLUME 24  VOLUME 33  VAR 46  TMP 53  TMP 61  TMP 69
+    #
+    # and the values right-align to 29, 39, 49, 57, 65 and 73 under them.
+    # This console printed four columns of its own -- all three temperatures
+    # missing, and a BOL column that belongs to 222 in their place -- with
+    # the two header lines collapsed into one. See FIDELITY S3.
+    TICKETED_HEAD = (
+        " " * 24 + "TICKET   GAUGE" + " " * 7 + "DLVY   BEFORE  AFTER  "
+        "EST DLVY",
+        "DELIVERY END DATE" + " " * 7 + "VOLUME   VOLUME" + " " * 7
+        + "VAR    TMP" + " " * 5 + "TMP" + " " * 5 + "TMP",
+    )
+
+    def delivered_temperature(self, record):
+        """EST DLVY TMP: how warm the fuel that arrived must have been.
+
+        Mixing what was in the tank with what went into it -- the tank held
+        `before` gallons at the before temperature and holds `after` at the
+        after temperature, so the difference came in at whatever makes those
+        two balance. The manual's own three rows reproduce under it with
+        opening volumes of 3445, 3374 and 4299 gallons on a tank taking five
+        and six thousand at a time, which is what makes it the formula rather
+        than a guess.
+        """
+        if not record.end or record.amount <= 0.0:
+            return None
+        before = record.start["volume"]
+        after = record.end["volume"]
+        return ((after * record.end["temp"] - before * record.start["temp"])
+                / record.amount)
+
     def ticketed_report(self, tanks, previous=False):
-        """I221, the ticketed delivery report, in its own columns."""
+        """I221, the ticketed delivery report, in the manual's own columns."""
         tc = (self.c.values.get("S51D00") or "").strip().endswith("1")
         out = [("PREVIOUS" if previous else "CURRENT")
                + " PERIOD TICKETED DELIVERY REPORT",
@@ -253,22 +429,35 @@ class Deliveries:
         for tank in tanks:
             label = self.c.text("602", tank) or f"TANK {tank}"
             out.append(f"T {tank}:{label}")
-            out.append("DELIVERY END DATE        TICKET    GAUGE      VAR"
-                       "   BOL")
+            out.extend(self.TICKETED_HEAD)
             records = self.records.get(tank) or []
             if not records:
                 out.append("  NO TICKETED DELIVERY DATA")
             for record in records:
-                when = clock_words(record.end["at"])
-                ticket = ("UNAVAIL" if record.ticket is None
-                          else f"{record.ticket:.0f}")
-                gauge = "UNAVAIL" if record.inserted else f"{record.amount:.0f}"
-                var = ("" if record.variance() is None
-                       else f"{record.variance():.0f}")
-                out.append(f"{when:24s}{ticket:>8s}{gauge:>9s}{var:>8s}"
-                           f"   {record.bol}")
+                out.append(self._ticketed_line(record))
             out.append("")
         return chr(10).join(out)
+
+    def _ticketed_line(self, record):
+        """One row of I221, right-aligned to the sample's own columns.
+
+        A value the console has not got is UNAVAIL rather than a number,
+        which is the word this report already used for a gauged volume it
+        cannot supply -- an inserted delivery has no gauge reading behind it
+        and a delivery with no ticket has no variance.
+        """
+        when = clock_words(record.end["at"]) if record.end else ""
+        ticket = ("UNAVAIL" if record.ticket is None
+                  else f"{record.ticket:.1f}")
+        gauge = "UNAVAIL" if record.inserted else f"{record.amount:.1f}"
+        var = ("UNAVAIL" if record.variance() is None
+               else f"{record.variance():.1f}")
+        before = f"{record.start['temp']:.1f}" if record.start else ""
+        after = f"{record.end['temp']:.1f}" if record.end else ""
+        est = self.delivered_temperature(record)
+        est = "" if est is None else f"{est:.1f}"
+        return (f"{when:21.21s}{ticket:>9.9s}{gauge:>10.10s}{var:>10.10s}"
+                f"{before:>8.8s}{after:>8.8s}{est:>8.8s}")
 
     def record_data(self, tanks):
         """I202 computer format: TT p dd start end NN then ten floats."""
@@ -314,6 +503,140 @@ class Load:
         return max(self.start["tc"] - self.end["tc"], 0.0)
 
 
+class Drop:
+    """A tanker on the ground, dropping into one tank.
+
+    `compartments` is what is still to come, in gallons, newest first;
+    `gap` is the minutes between one compartment closing and the next
+    opening, which is exactly the interval S610's DELIVERY DELAY exists to
+    bridge -- "prevents generation of false reports during the intervals
+    between multi-compartment drops to one tank".
+    """
+
+    def __init__(self, tank, compartments, rate, ticket=None, bol="",
+                 gap=2.0):
+        self.tank = tank
+        self.compartments = [float(g) for g in compartments if float(g) > 0]
+        self.rate = max(1.0, float(rate))          # gallons a minute
+        self.ticket = ticket
+        self.bol = bol
+        self.gap = float(gap)
+        self.total = sum(self.compartments)
+        self.dropped = 0.0
+        self.pause = 0.0                            # minutes of gap left
+
+    @property
+    def done(self):
+        return not self.compartments and self.pause <= 0.0
+
+
+class Drops:
+    """The trucks the bench has sent, and what they are doing right now.
+
+    A console is never told a tanker has arrived: it watches the level
+    (`Deliveries`, above). So a truck on the bench does the one thing a
+    truck does -- it puts fuel in the tank at a rate, over console time --
+    and the watcher notices exactly as it would on a site. Dragging the
+    float is a JUMP, and 577013-814 p.22 is explicit that a jump is not a
+    delivery: "move the float 1-2 in/sec ... If you move the float too
+    quickly the system may not register the delivery flag." See BENCH.md
+    T1 and T2.
+    """
+
+    # a real drop is a few hundred gallons a minute; the manual's own
+    # example on p.22 moves the float an inch or two a second
+    RATE = 300.0
+
+    def __init__(self, console):
+        self.c = console
+        self.running = {}      # tank -> Drop
+        self._tickets = {}     # tank -> (ticket, bol) waiting for the record
+
+    def start(self, tank, compartments, rate=None, ticket=None, bol="",
+              gap=None):
+        """Send a truck. `compartments` is a list of gallons, one per hose
+        change; `ticket` is what the driver's paperwork says, or None.
+
+        `gap` is the minutes between one compartment closing and the next
+        opening; None takes `Drop`'s own default. There was no way to pass
+        it at all, so the auto-tanker's documented four minute gap was
+        silently two -- and with S610's DELIVERY DELAY set to 2 or 3 that
+        is the difference between a multi-compartment load booking as one
+        delivery and as several.
+        """
+        tank = int(tank)
+        drop = (Drop(tank, compartments, rate or self.RATE, ticket, bol)
+                if gap is None else
+                Drop(tank, compartments, rate or self.RATE, ticket, bol,
+                     gap))
+        if not drop.compartments:
+            return None
+        self.running[tank] = drop
+        return drop
+
+    def stop(self, tank):
+        """Send it away mid-drop. What is in the tank stays in the tank."""
+        drop = self.running.pop(int(tank), None)
+        if drop is not None and drop.ticket is not None:
+            # the driver still hands over the paperwork he came with
+            self._tickets[int(tank)] = (drop.ticket, drop.bol)
+        return drop
+
+    def tick(self, hours):
+        """Pour, at each truck's own rate, for the console time that passed."""
+        if hours <= 0:
+            return
+        minutes = hours * 60.0
+        for tank, drop in list(self.running.items()):
+            st = self.c.tank_level.get(tank)
+            if st is None:
+                self.running.pop(tank)
+                continue
+            left = minutes
+            full = self.c.full_volume(tank)
+            while left > 0 and not drop.done:
+                if drop.pause > 0:
+                    used = min(drop.pause, left)
+                    drop.pause -= used
+                    left -= used
+                    continue
+                can = drop.rate * left
+                want = drop.compartments[0]
+                pour = min(can, want)
+                room = max(0.0, full - st.get("volume", 0.0))
+                pour = min(pour, room)
+                st["volume"] = st.get("volume", 0.0) + pour
+                drop.dropped += pour
+                drop.compartments[0] -= pour
+                left -= pour / drop.rate if drop.rate else left
+                if drop.compartments[0] <= 1e-6 or room - pour <= 1e-6:
+                    drop.compartments.pop(0)
+                    if drop.compartments:
+                        drop.pause = drop.gap
+                    else:
+                        drop.compartments = []
+                if room - pour <= 1e-6:
+                    # the tank is full: the driver shuts the valve
+                    drop.compartments = []
+            if drop.done:
+                self.running.pop(tank)
+                if drop.ticket is not None:
+                    self._tickets[tank] = (drop.ticket, drop.bol)
+
+    def claim_ticket(self, tank):
+        """The paperwork for the drop the watcher has just written up."""
+        return self._tickets.pop(int(tank), (None, ""))
+
+    def describe(self, tank):
+        """One line for the bench: what the truck is doing on this tank."""
+        drop = self.running.get(int(tank))
+        if drop is None:
+            return ""
+        if drop.pause > 0:
+            return f"next compartment in {drop.pause:.0f} min"
+        return f"dropping  {drop.dropped:,.0f} of {drop.total:,.0f} gal"
+
+
 class Loads:
     """Tanker Load Reports, which are deliveries the other way up.
 
@@ -332,6 +655,7 @@ class Loads:
         self.c = console
         self.records = {}      # tank -> [Load], newest first
         self.running = {}      # tank -> Load in progress
+        self._pending = {}     # tank -> one not yet big enough to be a load
         self._last = {}        # tank -> (volume, when it stopped falling)
         self._day = {}         # tank -> the day its numbering belongs to
 
@@ -353,10 +677,15 @@ class Loads:
         running = self.running.get(tank)
 
         if volume < seen - 0.05:                    # the level is going down
+            # Held across ticks, and its start snapshot rewound properly:
+            # the same two defects as the delivery watcher above, copied.
+            # See FIDELITY Y1 and Y2.
+            running = running or self._pending.get(tank)
             if running is None:
-                start = snapshot(self.c, tank, since)
-                start["volume"], start["tc"] = seen, seen * 0.998
+                start = rewind(self.c, tank,
+                               snapshot(self.c, tank, since), seen)
                 running = Load(tank, self._next_number(tank, now), start)
+                self._pending[tank] = running
             self._last[tank] = (volume, now)
             if running.start["volume"] - volume >= self.LOAD_GALLONS:
                 self.running[tank] = running        # big enough to be a load
@@ -365,14 +694,30 @@ class Loads:
         if volume > seen + 0.05:                    # a delivery, not a load
             self._last[tank] = (volume, now)
             self.running.pop(tank, None)
+            self._pending.pop(tank, None)
             return
 
         self._last[tank] = (seen, since)
         if running is None:
             return
+        # The SETTING and not the settling floor: 576013-939's four minutes
+        # are stated for the delivery report -- "between the end of the
+        # delivery and the printing of the report while the console waits for
+        # the fuel level in the tank to stabilize" -- and no page on this
+        # shelf says anything of the kind about a tanker load. The physics
+        # would be the same and the citation is not, so this waits what it is
+        # told to wait. See FIDELITY Y3.
         delay = self.c.delivery_delay(tank) * 60.0
         if now - since >= delay:
             self._finish(tank, now)
+
+    def book(self, tank):
+        """Take the level as it stands: not a load either."""
+        now = time.mktime(self.c.now())
+        volume = self.c.tank_level.get(tank, {}).get("volume", 0.0)
+        self._last[tank] = (volume, now)
+        self._pending.pop(tank, None)
+        self.running.pop(tank, None)
 
     def _next_number(self, tank, now):
         """"The sequence number is reset to one at the beginning of each day"."""
@@ -384,6 +729,7 @@ class Loads:
 
     def _finish(self, tank, now):
         run = self.running.pop(tank, None)
+        self._pending.pop(tank, None)
         if run is None:
             return
         run.end = snapshot(self.c, tank, now)
@@ -406,6 +752,6 @@ class Loads:
         record = self.load(tank, index)
         if record is None:
             return f"T {tank}: NO LOAD DATA", "TOTAL =        0 GALS"
-        when = time.strftime("%b %d", time.localtime(record.end["at"])).upper()
+        when = clock_date(record.end["at"], year=False)
         return (f"T {tank}: {when} #{record.number}",
                 f"TOTAL = {record.total:8.0f} GALS")

@@ -23,6 +23,7 @@ import os
 import sys
 import textwrap
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -38,7 +39,7 @@ if sys.stderr is None:
     sys.stderr = io.StringIO()
 
 from tls350sim import APP_NAME, DISCLAIMER, PUBLISHER, __version__
-from tls350sim import paths, update, xport
+from tls350sim import paths, update, xport, xportnet
 from tls350sim.console import Console
 from tls350sim.wire import serve
 
@@ -68,7 +69,10 @@ compatible tank monitor consoles.""",
     ap.add_argument("--host", default="127.0.0.1",
                     help="127.0.0.1 (default) keeps it on this machine; "
                          "0.0.0.0 exposes it to your LAN")
-    ap.add_argument("--port", type=int, default=10001)
+    ap.add_argument("--port", type=int, default=None,
+                    help="the tunnel port. With --xport the card's own "
+                         "programmed port is used unless this overrides it; "
+                         "without it, 10001")
     ap.add_argument("--seed", metavar="FILE.vrset",
                     help="preload programming from a backup")
     ap.add_argument("--state", metavar="FILE.json",
@@ -82,9 +86,39 @@ compatible tank monitor consoles.""",
                          "then exit")
     ap.add_argument("--xport", action="store_true",
                     help="also emulate the Lantronix XPort inside the TCP/IP "
-                         "Interface Module: the setup menu on tcp/9999 and "
-                         "DeviceInstaller discovery on udp/30718. Needs "
-                         "permission to bind those ports.")
+                         "Interface Module: the setup menu on tcp/9999, the "
+                         "web manager on tcp/80 and DeviceInstaller "
+                         "discovery on udp/30718. Needs permission to bind "
+                         "those ports.")
+    ap.add_argument("--xport-web-port", type=int, default=None, metavar="PORT",
+                    help="serve the card's web manager here instead of 80, "
+                         "for when something else already has port 80")
+    ap.add_argument("--no-xport-web", action="store_true",
+                    help="emulate the card but leave its web manager off")
+    ap.add_argument("--card-ip", metavar="A.B.C.D",
+                    help="program the card with this address before it "
+                         "starts, as though someone had set it in the menu")
+    ap.add_argument("--reset-card", action="store_true",
+                    help="put the card back to its defaults, address "
+                         "included, before starting. Use this when a card "
+                         "has been programmed into a corner")
+    ap.add_argument("--card-mac", metavar="AA-BB-CC-DD-EE-FF",
+                    help="give the card this hardware address instead of "
+                         "one derived from the host name")
+    ap.add_argument("--card-trace", action="store_true",
+                    help="log every 77FEh frame the card receives, answered "
+                         "or not. For working out what a tool is asking for")
+    ap.add_argument("--blank-card", action="store_true",
+                    help="start with a card that has no address at all, as "
+                         "a new module does. Only discovery answers until "
+                         "an address is assigned with DeviceInstaller or "
+                         "arp and telnet")
+    ap.add_argument("--claim-ip", action="store_true",
+                    help="add the card's programmed address to this "
+                         "machine's network adapter, so it answers ping and "
+                         "other machines can reach it. Needs administrator "
+                         "rights; without them the card still answers on "
+                         "this machine's own addresses")
     ap.add_argument("--quiet", action="store_true")
     a = ap.parse_args()
 
@@ -96,28 +130,77 @@ compatible tank monitor consoles.""",
         n = console.seed(a.seed)
         print(f"[sim] seeded {n} value(s) from {os.path.basename(a.seed)}")
 
-    def start_xport(log):
+    def start_card(log):
+        """Bring the card up on the address it is programmed with.
+
+        With the card emulated it owns the tunnel as well as the setup menu,
+        the web manager and discovery, because on a real site they are all
+        one card at one address. Reprogram it and they all move together.
+        """
         cfg = xport.XPortConfig(paths.xport_config_file())
-        cfg.port = a.port          # the tunnel is this console's own port
-        threading.Thread(target=xport.serve, args=(cfg, a.host, log),
-                         kwargs={"powered": lambda: console.powered},
-                         daemon=True).start()
-        return cfg
+        if a.card_mac:
+            try:
+                cfg.mac = bytes.fromhex(
+                    a.card_mac.replace("-", "").replace(":", ""))
+            except ValueError:
+                print("[sim] --card-mac is not a hardware address: %s"
+                      % a.card_mac)
+        if a.blank_card:
+            cfg.blank_card()
+        elif a.reset_card:
+            cfg.reset_card(ip=a.card_ip)
+        elif a.card_ip:
+            cfg.program(ip=a.card_ip)
+        # A card with no address is left with none: that is what a new
+        # module is, and giving it one is the first job on a site.
+        if a.port:
+            cfg.program(port=a.port)
+        if a.xport_web_port:
+            # The card keeps its HTTP port like any other setting, so this
+            # has to be able to put it back to 80 as well as move it off.
+            cfg.http_port = a.xport_web_port
+        cfg.save()
+        net = xportnet.CardNetwork(console, cfg, log=log,
+                                   powered=lambda: console.powered,
+                                   claim=a.claim_ip,
+                                   web=not a.no_xport_web,
+                                   fallback_host=a.host,
+                                   trace=a.card_trace)
+        net.start()
+        return cfg, net
+
+    tunnel_port = a.port or 10001
 
     if a.headless:
         if a.xport:
-            start_xport(print if not a.quiet else None)
-        serve(console, a.host, a.port, not a.quiet)
+            log = print if not a.quiet else None
+            cfg, _net = start_card(log)
+            if not a.quiet:
+                if cfg.assigned():
+                    print("[sim] connect to %s:%d for inventory"
+                          % (cfg.ip, cfg.port))
+                else:
+                    print("[sim] the card has no address yet; assign one "
+                          "before it will answer")
+            try:
+                while True:
+                    time.sleep(3600)
+            except KeyboardInterrupt:
+                return
+        serve(console, a.host, tunnel_port, not a.quiet)
         return
 
     from tls350sim.ui import SimApp
-    app = SimApp(console, a.port)
+    app = SimApp(console, tunnel_port)
     if a.xport:
-        start_xport(app.log)
-    # Tk owns the main thread; the socket loop must not block it.
-    threading.Thread(target=serve,
-                     args=(console, a.host, a.port, not a.quiet, app.log),
-                     daemon=True).start()
+        cfg, net = start_card(app.log)
+        app.attach_card(cfg, net)
+    else:
+        # Tk owns the main thread; the socket loop must not block it.
+        threading.Thread(target=serve,
+                         args=(console, a.host, tunnel_port, not a.quiet,
+                               app.log),
+                         daemon=True).start()
     app.mainloop()
 
 

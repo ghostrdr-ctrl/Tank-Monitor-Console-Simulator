@@ -104,6 +104,11 @@ class TheTable(unittest.TestCase):
                     gated.add(choice[2])
         gated |= {"tanks16", "csldmanifold", "birmanifold", "birvariance",
                   "ethanol", "apm", "ifsf", "remotedisp"}   # gated in code
+        # The probe families gate the bench's probe list, in
+        # console.probe_codes_available: a console whose software predates a
+        # family cannot have one fitted, and one running anything modern
+        # cannot have a CAP probe at all.
+        gated |= {"cap0", "cap1", "mag012", "mag3", "mag456", "mag712"}
         self.assertEqual(set(versions.FEATURE_ROW) - gated, set())
 
 
@@ -294,6 +299,11 @@ class WhichBoardIsInIt(unittest.TestCase):
         self.assertEqual(fitted(33, "E6").most("probe"), 2)     # 8
         c = fitted(33, "E6")
         c.modules["probe"] = 0
+        # fitted() puts one of every card in, and since the PLLD interface
+        # joined the low power bay that is all eight of its slots. This test
+        # is about what the BOARD allows, not about where there is room, so
+        # take the line leak card out and ask the question cleanly.
+        c.modules["plld"] = 0
         self.assertFalse(c.set_module("probe", 3))
         self.assertTrue(c.set_module("probe", 2))
 
@@ -352,3 +362,121 @@ class ItIsSavedAndItStays(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheVersionGateOverTheWholeCensus(unittest.TestCase):
+    """FIDELITY S10 and S10a.
+
+    The gate used to hold four codes by hand while the census carried an
+    arrival version for 582, so a Version 5 console served commands that
+    arrived at Version 33. It now reads the census, and it takes the
+    platform apart from the version before it compares them.
+    """
+
+    def sweep(self, board, version):
+        """How many not-yet-invented codes a console still answers."""
+        from tls350sim.console import Console
+        from tls350sim.wire import Handler, DOCUMENTED
+        c = Console(None)
+        c.board, c.version = board, version
+        h = Handler(c, verbose=False)
+        late = answered = 0
+        for tok, entry in DOCUMENTED.items():
+            if not entry.get("inquire"):
+                continue
+            arrived = entry.get("version")
+            if arrived is None:
+                continue
+            wanted = arrived % 100 if arrived > 100 else arrived
+            if wanted <= version:
+                continue
+            late += 1
+            if b"9999FF" not in h.handle(("\x01I%s00" % tok).encode()):
+                answered += 1
+        return late, answered
+
+    def test_an_old_console_answers_none_of_them(self):
+        for board, version in (("E3", 15), ("E1", 10), ("C0", 5)):
+            late, answered = self.sweep(board, version)
+            self.assertGreater(late, 100, "the sweep found nothing to test")
+            self.assertEqual(answered, 0,
+                             "%s v%d still answers %d future codes"
+                             % (board, version, answered))
+
+    def test_the_enhanced_cpu_codes_survive_on_an_enhanced_board(self):
+        """S10a's trap: `Version 106` is the 1XX line at 06, not 106.
+
+        Compared as a plain integer it asks `106 > 33` and withdraws the
+        whole enhanced-CPU feature set from every console.
+        """
+        from tls350sim.wire import DOCUMENTED
+        high = [t for t, e in DOCUMENTED.items()
+                if (e.get("version") or 0) > 100 and e.get("inquire")]
+        self.assertGreater(len(high), 50)
+        for tok in high:
+            self.assertTrue(versions.knows_token(tok, 33, "E7"),
+                            "%s withdrawn from a 3XX console" % tok)
+
+    def test_they_are_withheld_from_a_standard_cpu(self):
+        from tls350sim.wire import DOCUMENTED
+        high = [t for t, e in DOCUMENTED.items()
+                if (e.get("version") or 0) > 100 and e.get("inquire")]
+        for tok in high:
+            self.assertFalse(versions.knows_token(tok, 33, "C0"),
+                             "%s served by a standard CPU" % tok)
+
+    def test_a_standard_cpu_does_not_outrank_an_enhanced_one(self):
+        """5XX is a standard CPU and must not beat 3XX on a numeric compare."""
+        self.assertEqual(versions.platform_of("C0"), 0)
+        self.assertLessEqual(versions.platform_of("C5"),
+                             versions.platform_of("E7"))
+
+
+class TheRemotePrinterIsGatedLikeEveryOtherCard(unittest.TestCase):
+    """FIDELITY M14. The matrix dashes it at version 1 and nothing read it."""
+
+    def fitted(self, version, board):
+        from tls350sim.console import Console
+        c = Console(None)
+        c.version, c.board = version, board
+        return c
+
+    def test_version_one_cannot_take_one(self):
+        self.assertFalse(self.fitted(1, "C0").knows_module("rprinter"))
+
+    def test_version_two_can(self):
+        self.assertTrue(self.fitted(2, "C0").knows_module("rprinter"))
+
+    def test_the_shipped_default_still_can(self):
+        self.assertTrue(self.fitted(33, "E7").knows_module("rprinter"))
+
+
+class ARowCanRunOutAsWellAsBegin(unittest.TestCase):
+    """FIDELITY M14, the half of it that was written up backwards.
+
+    The entry said the Remote Display "has a board at version 1 and every
+    version after, so there is no version for it to be gated out of". Table
+    3-4 dashes it at 33 and Table 3-5 does not carry the row at all, which
+    is the opposite: it was discontinued, and version 33 is the console this
+    simulator ships as.
+    """
+
+    def test_a_row_that_only_ever_arrives_has_no_withdrawal(self):
+        from tls350sim import versions
+        for feature in ("rprinter", "tanks16", "isd", "csld"):
+            self.assertIsNone(versions.withdrawn_in(feature), feature)
+
+    def test_the_two_cap_probes_go_out_where_the_comments_say(self):
+        """Cap 1 after version 8 and Cap 0 after 17, already relied on by
+        `probe_codes_available` -- so they are the check on the helper."""
+        from tls350sim import versions
+        self.assertEqual(versions.withdrawn_in("cap1"), 9)
+        self.assertEqual(versions.withdrawn_in("cap0"), 18)
+
+    def test_the_remote_display_goes_out_at_33(self):
+        from tls350sim import versions
+        self.assertEqual(versions.withdrawn_in("remotedisp"), 33)
+
+    def test_a_feature_that_is_not_in_the_tables_at_all(self):
+        from tls350sim import versions
+        self.assertIsNone(versions.withdrawn_in("no-such-feature"))

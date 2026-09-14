@@ -33,8 +33,13 @@ def a_site(scheduling="1", meter_data=True, mag=True, linear=False):
     c.values["S60101"] = "011"
     c.values["S60201"] = "01REGULAR UNLEADED   "
     c.values["S60701"] = "01" + struct.pack(">f", 96.0).hex().upper()
-    code = "60A" if linear else "604"
-    c.values["S" + code + "01"] = "01" + struct.pack(">f", 10000.0).hex().upper()
+    c.values["S60401"] = "01" + struct.pack(">f", 10000.0).hex().upper()
+    if linear:
+        # the PANEL's selection, not the presence of S60A: 1PT and
+        # LINEAR store the same one full volume, which is why
+        # 576013-818 Rev AB p.12-31 says the only way to tell is to
+        # run 60A. See Console.tank_profile.
+        c.tank_profiles[1] = "03"
     if meter_data:
         c.values["S61501"] = "011"
     if mag:
@@ -125,6 +130,75 @@ class TheStateMachine(unittest.TestCase):
         self.assertAlmostEqual(entry.chart.capacity, 10000.0, places=0)
 
 
+class TheE2Chip(unittest.TestCase):
+    """What the chip holds that nobody asked it to.
+
+    "AccuChart users should note that you archive system setup data only in
+    the E2 chip. If AccuChart is complete, the final calibration values are
+    automatically stored in the E2 chip and there will be no need to
+    recalibrate the tank" -- 576013-623 Rev AN, the Archive Utility chapter.
+    """
+
+    def a_cold_boot(self, console):
+        """The outage RAM does not survive: the chain breaks mid-cut."""
+        console.breaker_off()
+        console.battery_present = False
+        console.battery_changed()
+        console.battery_present = True           # refitted too late
+        console.battery_changed()
+        return console.breaker_on()
+
+    def test_a_cold_boot_keeps_a_completed_calibration(self):
+        """"there will be no need to recalibrate the tank": 56 days of work
+        is in the chip, not in the RAM the battery let go of."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = a_site()
+            c.state_path = os.path.join(d, "state.json")
+            days(c, 60)
+            entry = c.accuchart.state(1)
+            self.assertEqual(entry.mode, accuchart.MONITOR)
+            finished = entry.chart.as_dict()
+            c.archive_save()
+            self.assertEqual(self.a_cold_boot(c), "cold")
+            c.archive_restore()
+            c.tick()
+            back = c.accuchart.state(1)
+            self.assertEqual(back.chart.as_dict(), finished)
+            self.assertEqual(back.mode, accuchart.MONITOR)
+            self.assertGreater(back.updates, 0)
+
+    def test_a_calibration_still_running_is_not_in_the_chip(self):
+        """"Incomplete CSLD data, AccuChart data, BIR historical data, etc.,
+        are all stored in various RAM locations within the console, not in
+        the E2 chip"."""
+        c = a_site()
+        days(c, 30)
+        self.assertGreater(c.accuchart.state(1).updates, 0)
+        self.assertEqual(c.e2_accuchart, {})
+
+    def test_a_tank_that_never_calibrated_leaves_the_chip_empty(self):
+        """"failure to calibrate in 56 days" is not a calibration to keep."""
+        c = a_site(meter_data=True)
+        c.meter_flow = {}                        # nobody sells anything
+        days(c, 60)
+        self.assertTrue(c.accuchart.state(1).failed)
+        self.assertEqual(c.e2_accuchart, {})
+
+    def test_a_reset_clears_the_chip_as_well_as_the_profiles(self):
+        """"Selecting YES clears the AccuChart Tank Profile and the Active
+        Tank Profile and recopies the User Entered Tank Parameters into each,
+        and then restarts the 56-day Calibration period"."""
+        c = a_site()
+        days(c, 60)
+        self.assertIn(1, c.e2_accuchart)
+        c.accuchart.restart(1)
+        self.assertNotIn(1, c.e2_accuchart)
+        entry = c.accuchart.state(1)
+        self.assertEqual(entry.mode, accuchart.CALIBRATE)
+        self.assertAlmostEqual(entry.chart.capacity, 10000.0, places=0)
+
+
 class TheSchedule(unittest.TestCase):
     def test_never_calibrates_but_never_applies(self):
         """"AccuChart performs its 56-day tank calibration, but it never
@@ -165,7 +239,7 @@ class TheAlarm(unittest.TestCase):
         self.assertTrue(c.accuchart.state(1).failed)
         self.assertIn("022401", c.compute_alarms())
         self.assertEqual(describe_alarms(["022401"])[0]["description"],
-                         "AccuChart Calibration Warning")
+                         "ACCUCHART CAL WARN")
 
     def test_a_tank_that_calibrates_raises_nothing(self):
         c = a_site()
@@ -281,3 +355,66 @@ class TheDiagnosticScreens(unittest.TestCase):
         c = a_site(meter_data=False)
         self.assertEqual(c.accuchart.screen(1, "enabled"), "ACCU DISABLED")
         self.assertIn("10000", c.accuchart.screen(1, "volume"))
+
+
+class TheCalibrationTableHasTwoHeights(unittest.TestCase):
+    """FIDELITY G12. `open` was `stick_height + dropped / full_volume` --
+    gallons over gallons, a dimensionless number added to inches -- so on a
+    10,000 gallon tank the opening height came out 0.002 above the closing
+    one and every printed row read the same height twice.
+
+    576013-818 Rev AB p.12-30 draws the table it should be: 19.79 gallons
+    between 44.336 and 44.146 inches, and each row opening exactly where the
+    one above it closed.
+    """
+
+    def a_calibrating_tank(self, observations=4):
+        c = a_site()
+        for _ in range(observations):
+            c.tank_level[1]["volume"] -= 200.0
+            c.clock_offset += 3600.0
+            c.tick()
+        return c
+
+    def rows(self, c):
+        return c.accuchart.tanks[1].observations
+
+    def test_the_two_heights_are_not_the_same_reading_twice(self):
+        c = self.a_calibrating_tank()
+        got = self.rows(c)
+        self.assertTrue(got, "nothing was observed")
+        for row in got:
+            self.assertGreater(row["open"] - row["close"], 0.1,
+                               "200 gallons is more than a tenth of an inch")
+
+    def test_each_row_opens_where_the_last_one_closed(self):
+        """p.12-30's own column: 44.336/44.146, then 44.146/44.028, then
+        44.028/43.948."""
+        got = self.rows(self.a_calibrating_tank())
+        for before, after in zip(got, got[1:]):
+            self.assertAlmostEqual(after["open"], before["close"], places=6)
+
+    def test_the_height_drop_is_the_volume_through_the_chart(self):
+        """Which is what makes the column worth printing: the pair says how
+        far the level fell, and the TLS Volume beside it says how much came
+        out. p.12-30's first row is 0.190 inches for 19.79 gallons."""
+        c = self.a_calibrating_tank()
+        for row in self.rows(c):
+            fell = c.height_at(1, c.volume_at(1, row["open"]) - row["tls"])
+            self.assertAlmostEqual(fell, row["close"], places=3)
+
+    def test_the_table_is_drawn_in_the_guides_own_columns(self):
+        """Its fields end at 7, 16, 26, 35 and 46, measured off the word
+        boxes. This drew a 53 column row under a header of its own
+        invention."""
+        c = self.a_calibrating_tank()
+        drawn = c.accuchart.calibration_data_rows([1])
+        self.assertIn("Opening  Closing    TLS    Dispensed  Tank/Meter",
+                      drawn)
+        self.assertIn("Height   Height   Volume    Volume      Ratio", drawn)
+        body = [l for l in drawn if l[:8].strip().replace(".", "").isdigit()]
+        self.assertTrue(body, drawn)
+        for line in body:
+            self.assertEqual(len(line), 46, repr(line))
+            for end in (7, 16, 26, 35, 46):
+                self.assertNotEqual(line[end - 1], " ", repr(line))

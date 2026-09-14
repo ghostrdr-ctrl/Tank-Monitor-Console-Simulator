@@ -285,6 +285,17 @@ def main():
     a = ap.parse_args()
 
     print(f"[build] {APP_NAME} {__version__}")
+    # Before anything is built, not after. The probe used to sit down beside
+    # build_installer, which meant a machine without Inno Setup spent half a
+    # minute on PyInstaller and the zip, then exited -- and left the previous
+    # run's SHA256SUMS.txt beside a zip whose bytes had just changed, naming
+    # a hash that no longer matched anything. A sums file the updater trusts
+    # must never be older than the artefact it names.
+    iscc = None if a.skip_installer else find_iscc()
+    if not a.skip_installer and not iscc:
+        sys.exit("[build] Inno Setup 6 not found. Install it from "
+                 "https://jrsoftware.org/isdl.php, or re-run with "
+                 "--skip-installer to stop after the portable zip.")
     make_icon_if_missing()
     build_exe()
     # Before either package is made, so both carry the same signed binaries
@@ -301,11 +312,6 @@ def main():
               "SHA256SUMS.txt in", INSTALLER_DIR)
         return
 
-    iscc = find_iscc()
-    if not iscc:
-        sys.exit("[build] Inno Setup 6 not found. Install it from "
-                 "https://jrsoftware.org/isdl.php, or re-run with "
-                 "--skip-installer to stop after the portable zip.")
     setup = build_installer(iscc)
     if a.signtool:
         sign(a.signtool, setup)

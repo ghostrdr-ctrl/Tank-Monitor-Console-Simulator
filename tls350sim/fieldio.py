@@ -43,10 +43,44 @@ def _dev(code):
 
 
 def body_of(code, raw):
-    """The data without the device prefix the console echoes back."""
+    """The data without the device prefix the console echoes back.
+
+    A prefixed code holding exactly its two prefix characters is a field
+    somebody has programmed EMPTY, and the body is the empty string -- not
+    the prefix. `> 2` handed the device number back as the value, so a
+    receiver with no location label headed its block `D 8:08` where the
+    tape heads it `D 8:`. See FIDELITY T4.
+    """
     if raw is None:
         return ""
-    return raw[2:] if _prefixed(code) and len(raw) > 2 else raw
+    return raw[2:] if _prefixed(code) and len(raw) >= 2 else raw
+
+
+def _ceiling(field, metric=False):
+    """A field's maximum, which for a few of them depends on the units.
+
+    576013-623 Rev AN gives the water limits as "in inches (5.0 maximum) or
+    millimeters (199 maximum), depending on the units established in System
+    Setup". The metric ceiling was baked in on both, so a US console took a
+    water warning of 199 INCHES behind a mask that cannot even draw it.
+    See FIDELITY F3.
+    """
+    if metric and field.get("max_metric") is not None:
+        return field["max_metric"]
+    return field.get("max")
+
+
+def _floor(field, metric=False):
+    """The other end of the same thing, for the ranges that have two ends.
+
+    The water limits' metric form starts at zero like their US one, so F3
+    needed no floor. The switchover thresholds do: "the selectable threshold
+    range is 10 to 999 gallons (37 to 3781 liters)", and 10 LITRES is below
+    the metric minimum rather than at it. See FIDELITY F1.
+    """
+    if metric and field.get("min_metric") is not None:
+        return field["min_metric"]
+    return field.get("min")
 
 
 def _fit(field, value, width):
@@ -60,8 +94,15 @@ def _fit(field, value, width):
     return value.rjust(width, field.get("fill", "0"))
 
 
-def _encode_value(field, text, width=None):
-    """What the field itself stores, before it is placed in the data."""
+def _encode_value(field, text, width=None, metric=False, console=None,
+                  panel=False):
+    """What the field itself stores, before it is placed in the data.
+
+    `panel` is the keypad rather than the wire. The two are not the same
+    caller and one field can tell: a date typed at the panel arrives as
+    the eight digits of its template, where a Set carries the six the
+    console stores. See the date branch.
+    """
     kind = field.get("kind")
 
     if kind == "list":
@@ -70,6 +111,18 @@ def _encode_value(field, text, width=None):
         # the check lives with the codes that parse them rather than here.
         if not wirelists.validate(field.get("code", ""), text):
             raise ValueError("VALUE OUT OF RANGE")
+        blank = field.get("default")
+        if blank and len(text) < len(blank):
+            # A list that sits in a PART has to come back the width of that
+            # part, and `_fit` would pad it on the WRONG SIDE: a run of tank
+            # numbers is read left to right and right-justifying `01,03` in
+            # eleven columns puts the two tanks at the end of a field the
+            # reader starts at the front of. The template says what the rest
+            # of the run is -- `00,00,00,00`, empty slots and their commas --
+            # so a short run is finished with the template's own tail. A Set
+            # that carries `01,03` for a generator's tanks is the same thing
+            # a panel that typed them is.
+            text = text + blank[len(text):]
         return text
 
     if kind == "text":
@@ -94,7 +147,7 @@ def _encode_value(field, text, width=None):
         if not text.lstrip("-").isdigit():
             raise ValueError("NUMBERS ONLY")
         v = int(text)
-        lo, hi = field.get("min"), field.get("max")
+        lo, hi = _floor(field, metric), _ceiling(field, metric)
         if lo is not None and v < lo:
             raise ValueError(f"MIN {lo}")
         if hi is not None and v > hi:
@@ -107,7 +160,7 @@ def _encode_value(field, text, width=None):
             v = float(text)
         except ValueError:
             raise ValueError("NUMBERS ONLY")
-        lo, hi = field.get("min"), field.get("max")
+        lo, hi = _floor(field, metric), _ceiling(field, metric)
         if lo is not None and v < lo:
             raise ValueError(f"MIN {lo}")
         if hi is not None and v > hi:
@@ -147,8 +200,28 @@ def _encode_value(field, text, width=None):
         digits = "".join(ch for ch in text if ch.isdigit())
         if len(digits) == 8:
             digits = digits[6:8] + digits[0:2] + digits[2:4]
+        elif panel:
+            # **A short entry at the panel is an INCOMPLETE one.**
+            #
+            # The template a date blanks to is eight cells, `--/--/----`,
+            # and the buffer the panel hands over is the digits alone --
+            # there are no slashes in it, and there never were. So the
+            # short-form branch below, which is guarded on finding two of
+            # them, could not fire from the keypad; six typed digits fell
+            # through it and were stored AS THOUGH they were the wire's
+            # YYMMDD. Type `010226` for the 2nd of January 2026 and the
+            # console kept 01 as the year, 02 as the month and 26 as the
+            # day, and then showed you `02/26/2001`. It was silent about it
+            # whenever the digits happened to pass the range check below,
+            # which is most of the year.
+            #
+            # Every other fixed-width field here already refuses a short
+            # entry -- the time field two branches up is `ENTER HHMM` --
+            # and this is that rule, in this field's own words.
+            raise ValueError("ENTER MMDDYYYY")
         elif len(digits) == 6 and text.count("/") == 2:
-            # MM/DD/YY typed short
+            # MM/DD/YY typed short, which only a caller that writes its own
+            # separators can mean: the panel never does.
             digits = digits[4:6] + digits[0:2] + digits[2:4]
         if len(digits) != 6:
             raise ValueError("ENTER MMDDYYYY")
@@ -173,8 +246,15 @@ def _encode_value(field, text, width=None):
                 return code
         raise ValueError("NOT A CHOICE")
     if kind == "enum":
-        for c in field.get("choices") or []:
-            val, label = (c if isinstance(c, (list, tuple)) else (c, c))[:2]
+        # A `choices_from` field's list belongs to the console rather than to
+        # the manual, so it has to be asked for; every other enum keeps the
+        # field's own list, which is deliberately NOT filtered by what this
+        # console supports -- a Set over the wire is entitled to a value the
+        # panel does not offer. See FIDELITY M3.
+        pairs = (choices_of(field, console) if field.get("choices_from")
+                 else [(c if isinstance(c, (list, tuple)) else (c, c))[:2]
+                       for c in field.get("choices") or []])
+        for val, label in pairs:
             if text.upper() in (str(val).upper(), str(label).upper()):
                 return str(val)
         raise ValueError("NOT A CHOICE")
@@ -182,14 +262,15 @@ def _encode_value(field, text, width=None):
     return text
 
 
-def encode_value(field, text):
+def encode_value(field, text, metric=False, console=None):
     """Just the value, with no device prefix and no part placed.
 
     What a serial Set carries: "Display: <SOH>S60901c.cccccc" is the field on
     its own, and the console stores the same thing it would have stored from
     the keypad. Raises ValueError the same way `encode` does.
     """
-    return _encode_value(field, (text or "").strip())
+    return _encode_value(field, (text or "").strip(), metric=metric,
+                         console=console)
 
 
 # The schedule a repeating leak test runs on. 576013-635 Rev AA p.260 gives
@@ -199,10 +280,17 @@ def encode_value(field, text):
 # The month names are the console's own three-letter ones, which is what it
 # prints in every date stamp in every manual here (JAN, MAR, JUN, JUL ...).
 # The one place a manual writes a month out in this field is a single reused
-# figure on p.120, "JUNE WEEK 1 FRI"; see UNKNOWNS.md.
+# figure on p.120, "JUNE WEEK 1 FRI"; see UNKNOWNS.md A16. The same
+# MONTH/WEEK/DAY triple is drawn twice more and is three-letter both
+# times: the Daylight Savings screens of 576013-623 p.5-16 ("APR WEEK 1
+# SUN"), and serial 51B, whose wire format MMWDHHmm is 611's own
+# encoding, printing "START DATE APR WEEK 1 SUN 2:00 AM" back.
 MONTHS = ("JAN", "FEB", "MAR", "APR", "MAY", "JUN",
           "JUL", "AUG", "SEP", "OCT", "NOV", "DEC")
-DAYS = ("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+# THR, not THU. 576013-635 Rev AA heads the fuel management report
+# "SUN   MON   TUE   WED   THR   FRI   SAT" in seven separate
+# printouts, and the tape prints THR under DIAL WEEKLY.
+DAYS = ("MON", "TUE", "WED", "THR", "FRI", "SAT", "SUN")
 
 
 def schedule_text(body, shape):
@@ -295,8 +383,12 @@ def resolve_part(field, code, raw):
     return got if got else None
 
 
-def encode(field, code, text, current=None):
+def encode(field, code, text, current=None, metric=False, console=None):
     """The stored data string, or None if nothing was entered.
+
+    This is the PANEL's door -- `ui.k_enter` is its only caller -- and the
+    wire's is `encode_value`. What separates them is that the panel hands
+    over what somebody typed into a template.
 
     `current` is what the function holds already, which a part-field needs so
     that programming the end factor does not wipe the end shape beside it.
@@ -315,10 +407,12 @@ def encode(field, code, text, current=None):
         return None
 
     if not part:
-        return pfx + _encode_value(field, text)
+        return pfx + _encode_value(field, text, metric=metric,
+                                   console=console, panel=True)
 
     off, ln = part
-    value = _fit(field, _encode_value(field, text, ln), ln)
+    value = _fit(field, _encode_value(field, text, ln, metric, console,
+                                      panel=True), ln)
     body = body_of(code, current)
     fill = field.get("blank", "0")
     if len(body) < off + ln:
@@ -326,9 +420,18 @@ def encode(field, code, text, current=None):
     return pfx + body[:off] + value + body[off + ln:]
 
 
-def decode(field, code, raw):
-    """What the display should show for a stored value."""
-    if raw is None:
+def decode(field, code, raw, console=None):
+    """What the display should show for a stored value.
+
+    `field` can be None, and used to raise here rather than say so. Fifteen
+    function codes exist only as PART fields -- `consoledata.json` holds
+    `S50100.date` and `S50100.time` and no bare `S50100`, because two panel
+    prompts share one function's data -- so a caller that looked the bare
+    code up has None in its hand through no fault of its own. There is
+    nothing to decode without a field definition; the caller that wants the
+    parts has to ask for the parts. See FIDELITY S7.
+    """
+    if raw is None or not field:
         return ""
     body = body_of(code, raw)
     part = (resolve_part(field, code, raw) if field.get("part_when")
@@ -341,6 +444,8 @@ def decode(field, code, raw):
         if not body.strip():
             return ""
     kind = field.get("kind")
+    if kind == "list":
+        return wirelists.list_text(field.get("code") or code, body)
     if kind == "schedule":
         return schedule_text(body, field.get("shape", "MWD"))
     if kind == "float":
@@ -361,7 +466,12 @@ def decode(field, code, raw):
             return "DISABLED"
         if len(d) < 4 or not d[:4].isdigit():
             return d
-        # the manual's screens read "TIME: 2:00 AM", not "TIME: 02:00"
+        # the manual's screens read "TIME: 2:00 AM", not "TIME: 02:00",
+        # and the site's own tape prints ` 2:00 AM` -- right aligned in
+        # eight, which is the same clock with the same unpadded hour. A
+        # screen drawn with the zero says so on its own field and the
+        # padding happens in `screens.masked`, which the paper does not
+        # go through. See UNKNOWNS B15.
         hh, mm = int(d[:2]), d[2:4]
         half = "AM" if hh < 12 else "PM"
         return f"{hh % 12 or 12}:{mm} {half}"
@@ -380,8 +490,10 @@ def decode(field, code, raw):
         from .console import Console as _C
         return _C.PROFILE_NAME.get(body.strip()[:2], body.strip())
     if kind == "enum":
-        for c in field.get("choices") or []:
-            val, label = (c if isinstance(c, (list, tuple)) else (c, c))[:2]
+        pairs = (choices_of(field, console) if field.get("choices_from")
+                 else [(c if isinstance(c, (list, tuple)) else (c, c))[:2]
+                       for c in field.get("choices") or []])
+        for val, label in pairs:
             if body.strip() == str(val):
                 return str(label)
         return body.strip()
@@ -396,6 +508,11 @@ def choices_of(field, console=None):
     that does not, so a console walks past it rather than offering a method
     it cannot run.
     """
+    if field.get("choices_from") and console is not None:
+        # A choice list the SITE makes rather than the manual: the Vac
+        # sensor's pump is whichever PLLD, WPLLD or pump-control relay this
+        # console has been programmed with. See FIDELITY M3.
+        return console.field_choices(field["choices_from"])
     out = []
     for c in field.get("choices") or []:
         seq = c if isinstance(c, (list, tuple)) else (c, c)

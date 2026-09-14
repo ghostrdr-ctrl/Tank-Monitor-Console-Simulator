@@ -168,7 +168,7 @@ class StartingATestByType(unittest.TestCase):
 
     def test_the_computer_reply_echoes_the_line_the_type_and_the_status(self):
         _c, h = a_site()
-        got = send(h, "s08701149" + "02").strip(chr(1) + chr(3))
+        got = send(h, "s08701149" + "02").strip(chr(1) + chr(3) + chr(13) + chr(10))
         body = got.split("&&")[0][len("s08701") + 10:]
         self.assertEqual(body[0:2], "01", "line number")
         self.assertEqual(body[2:4], "02", "the type asked for")

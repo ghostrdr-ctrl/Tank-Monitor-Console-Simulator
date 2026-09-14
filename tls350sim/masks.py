@@ -91,3 +91,32 @@ def apply(mask, value):
     else:
         body = f"{int(round(number))}".rjust(width, "0")
     return f"{sign}{body}{suffix}"
+
+
+# ---------------------------------------------------------------------------
+# And a whole number is TRUNCATED, not rounded.
+#
+# 576013-610 Rev AC says so twice, on two pages, about two different
+# quantities:
+#
+#   p.4-2  MASS = 15290 LBS for 2549 GALS at 5.9987 LBS/GAL, and
+#          2549 * 5.9987 is 15290.686
+#   p.1-3  WATER VOL = 28 GALS for 1.37 inches of water in a 10,000 gallon,
+#          96 inch tank, and the chart reads 28.82 there
+#
+# Both would be 15291 and 29 rounded. `"%.0f"` rounds, and rounds to EVEN at
+# a half besides, so it was wrong in two directions at once. There is no
+# sample on this shelf that rounding fits and truncation does not.
+# See FIDELITY Y11.
+def whole(value, width=0):
+    """A whole-number quantity as a console prints it: the fraction dropped.
+
+    Toward zero rather than downward, so a negative change of -0.4 prints 0
+    and not -1: the console is dropping the digits it has no column for, not
+    taking a floor.
+    """
+    try:
+        n = int(float(value))
+    except (TypeError, ValueError):
+        n = 0
+    return f"{n:{width}d}" if width else str(n)

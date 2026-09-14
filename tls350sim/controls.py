@@ -107,6 +107,13 @@ SYSTEM_ACTIONS = {
     "031": ("confirm_clear", "CONFIRM CLEAR COMPLETE"),
 }
 
-# 031 does not use 149. It carries this instead, and no manual here says what
-# it is or why it differs -- see UNKNOWNS.
+# 031 does not use 149. It carries this instead, and no manual says what the
+# six digits mean -- but two things about the shape are sourced. Section 5.0
+# makes S03100 the six character function code and 832382 a six character
+# DATA field, the same width as 504's "aaaaaa - Security Code (6 ASCII
+# characters)": a password, not a three digit "yes I meant it". And the Setup
+# Manual says what 031 clears -- an ANNULAR SPACE interstitial alarm on an
+# international HRM installation, which "can only be cleared through the
+# CONFIRM CLEAR function in the Diagnostic Mode". A heavier gate on a
+# regulatory clear. The digits themselves stay unexplained; see UNKNOWNS A13g.
 CONFIRM_CLEAR = "832382"
