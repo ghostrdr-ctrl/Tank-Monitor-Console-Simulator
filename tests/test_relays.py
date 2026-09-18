@@ -1,3 +1,16 @@
+# Tank Monitor Console Simulator -- a training simulator for TLS-350
+# compatible tank monitor consoles.
+# Copyright (C) 2026 Verbose Software
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The output relays follow what they are assigned to, and the pump relay
 monitor can catch a welded contactor. BENCH.md P2 and P3.
 
@@ -60,8 +73,13 @@ class AStandardRelay(unittest.TestCase):
         c.compute_alarms()
         self.assertTrue(c.outputs.energised(1))
         self.assertIn(b"CLOSED", i406(c))
-        self.assertIn("HORN", "".join(printer.relays(c)))
-        self.assertIn(" ON", [r for r in printer.relays(c) if "HORN" in r][0])
+        rows = printer.relays(c)
+        self.assertIn("HORN", "".join(rows))
+        # The state is on the line UNDER the label now, the way
+        # `printer.sensors` draws the same shape: `R 1:HORN` over `ON`.
+        # It was one 26 character line that folded to the same two by
+        # accident, at whatever space came last. FIDELITY T12.
+        self.assertEqual(rows[rows.index("R 1:HORN") + 1], "ON")
 
     def test_stays_in_until_the_alarm_leaves_the_display(self):
         c = a_site()

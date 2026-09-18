@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Read every Display response in the manual off the page, columns and all.
 
 576013-635 answers a Display inquire with a titled table:
@@ -27,7 +30,7 @@ blocks are laid out in columns and the plain extraction interleaves them,
 which is the trap `../UNKNOWNS.md` section D describes and which has cost
 this project five wrong readings.
 
-**A figure or a sample is a page, and a page has coordinates.** PyMuPDF's
+A figure or a sample is a page, and a page has coordinates. PyMuPDF's
 word boxes carry theirs, so:
 
 * grouping words by their y position rebuilds the visual lines exactly;
@@ -70,7 +73,7 @@ STAMP = re.compile(r"^[A-Z]{3}\s+\d{1,2},\s*\d{4}\s+\d{1,2}:\d{2}(:\d{2})?"
 # O's where the zeros belong, and taking that literally threw the whole of
 # its twelve month table away.
 #
-# **The suffix is a RULE, not a list.** It used to be the ten placeholders
+# The suffix is a RULE, not a list. It used to be the ten placeholders
 # somebody had met -- `TT|QQ|SS|LL|PP|BB|NN|nn|00|OO` -- and Table 29-1 has a
 # letter for every device family, in whichever case that family's own pages
 # are set in. `II` for an input, `RR` for a relay, `WW` for a WPLLD line,
@@ -84,7 +87,7 @@ STAMP = re.compile(r"^[A-Z]{3}\s+\d{1,2},\s*\d{4}\s+\d{1,2}:\d{2}(:\d{2})?"
 # Every placeholder any of these pages uses is either a DOUBLED letter or two
 # digits, so that is what this matches, and the next family's letter needs no
 # edit here.
-# **And the letter is not always an I.** 40 of the manual's 582 Display
+# And the letter is not always an I. 40 of the manual's 582 Display
 # blocks echo an `S`, and 32 of them are the action codes 001 to 09B, where
 # the "Typical Response Message, Display Format" is the answer to the SET --
 # `<SOH>S052TT` over `TANK   PRODUCT LABEL` and `LEAK TEST START`. Those
@@ -132,8 +135,8 @@ def metrics(lines):
     which is robust against a word the extraction has mismeasured; the
     leading is the smallest gap between two of its lines, which is one line.
 
-    **The origin is the `<SOH>` the response opens with, and not the leftmost
-    word on the page.** A block that runs to the bottom of a page picks up
+    The origin is the `<SOH>` the response opens with, and not the leftmost
+    word on the page. A block that runs to the bottom of a page picks up
     the PAGE FOOTER, which is set three characters further left than the
     body, and taking the minimum indented every line of those blocks by three
     -- which reads exactly like a console that indents its reports and is
@@ -231,7 +234,7 @@ def response_block(page):
     # and the manual's samples print it as the four placeholders a site has
     # not programmed. Step over them: the title is what comes after.
     #
-    # **Whether they are there at all is worth recording**, because it is not
+    # Whether they are there at all is worth recording, because it is not
     # a property of the code that can be derived from anything else. This
     # console gave the header to every report, and 61 of the 118 samples in
     # the manual draw no header at all. See FIDELITY L5.
@@ -249,7 +252,7 @@ def response_block(page):
         return None
     # How many blank lines the frame is followed by. Counted rather than
     # assumed, and it is not the constant this project took it for: 512 of
-    # the 541 samples leave one and **29 leave none**, 613, 614, 902, 903 and
+    # the 541 samples leave one and 29 leave none, 613, 614, 902, 903 and
     # 905 among them, and a real console agrees with the page on every one of
     # them. The console's reply used a flat one everywhere. See FIDELITY S6.
     head_gap = max(int(round((rest[0][0] - framing_y) / leading)) - 1, 0) \
@@ -533,14 +536,13 @@ def apply_corrections(found):
 
 def main():
     try:
-        import fitz            # noqa: F401  (imported for its side effect)
+        import fitz            # the dependency check: this tool needs PyMuPDF
     except ImportError:
         print("PyMuPDF (fitz) is needed to read the word boxes", file=sys.stderr)
         return 1
     if not os.path.exists(MANUAL):
         print(f"no manual at {MANUAL}", file=sys.stderr)
         return 1
-    import fitz
     doc = fitz.open(MANUAL)
     found, pages = {}, 0
     for page in doc:

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The vacuum sensor: an interstitial space, and what a manual test says.
 
 576013-818 Figures 6-29 and 6-30 annotate every reading on this sensor,
@@ -40,6 +43,15 @@ def a_vac_site(leak=0.0):
     c.values["S72301"] = "0104"                 # smart sensor category 04
     c.values["S72201"] = "01STP SUMP VAC       "
     c.vac_leak[1] = leak
+    return c
+
+
+def a_small_zone(leak=0.0):
+    """577013-836 Rev N p.4-2's worked zone, 21.9 gallons, programmed."""
+    from tls350sim import fieldio
+    from tls350sim.console import FIELDS
+    c = a_vac_site(leak=leak)
+    c.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "21.9")
     return c
 
 
@@ -196,7 +208,7 @@ class SmartSensorSetupWalksItsTwoSubWalks(unittest.TestCase):
         got = self.steps(c)
         self.assertEqual(got[3:], [
             "Vac Sensor Setup", "Select Pump # (PLLD/WPLLD/Output Relay)",
-            "Interstitial Volume (1 to 500 gallons)",
+            "Interstitial Volume (0.1 to 500 gallons)",
             "Relief Valve (Yes/No)"])
         c.values["S72B01"] = "011"
         self.assertIn("Relief Valve Pressure (-5 to -9 PSI)", self.steps(c))
@@ -231,6 +243,24 @@ class SmartSensorSetupWalksItsTwoSubWalks(unittest.TestCase):
         self.assertIsNotNone(fieldio.encode(f, "S72A01", "500"))
         with self.assertRaises(ValueError):
             fieldio.encode(f, "S72A01", "501")
+
+    def test_and_the_floor_is_the_sensors_own_tenth_of_a_gallon(self):
+        """576013-623 Rev AN says 1 to 500; the sensor's own manuals say
+        "The permitted range is 0.1 to 500 gallons (0.378 to 1892.7
+        litres)" -- 577013-836 Rev N p.4-4 and 577013-873 Rev E p.4-2 --
+        and 836's worked example is a 2.88 gallon sump zone, so the tenth
+        is the bound. UNKNOWNS B25."""
+        from tls350sim import fieldio
+        from tls350sim.console import FIELDS
+        f = FIELDS["S72A01"]
+        self.assertIsNotNone(fieldio.encode(f, "S72A01", "0.1"))
+        with self.assertRaises(ValueError):
+            fieldio.encode(f, "S72A01", "0")
+        c = self.a_smart_site("04")
+        c.values["S72901"] = "012101"
+        c.values["S72302"] = "0205"
+        c.values["S72A01"] = fieldio.encode(f, "S72A01", "0.5")
+        self.assertNotIn("280101", c.setup_warnings())
 
     def test_the_three_vac_setup_warnings_the_chapter_states(self):
         """"You must select the pump ... or a Setup Data Warning will be
@@ -269,13 +299,21 @@ class TheFigureSOwnNumbersReplay(unittest.TestCase):
         self.assertEqual(c.diag_value("vac_rate", 1).split(chr(10))[1],
                          "LEAK RATE:    0.123 GPH")
 
-    def test_and_so_is_the_time_it_predicts(self):
-        """0.123 gph and 150:20 are Figure 6-29's own pair, and -7.14 PSI is
-        Figure 6-30's own held vacuum. Those three fix the interstitial
-        volume at 44.27 gallons, and with it the pair reads back."""
-        c = with_a_result(a_vac_site(leak=0.123))
+    def test_and_the_time_it_predicts_is_the_zone_volumes(self):
+        """This used to read back Figure 6-29's `150:20` from a derived
+        44.27 gallon constant. 577013-873 Rev E p.4-11 prints the same
+        figure with `100:00` in that cell, so the number was typesetting,
+        and 577013-836 Rev N p.4-2 says where the volume really comes from:
+        "you would enter 21.9 (round to nearest tenth of a gallon) as the
+        calculated zone volume". With that zone, 0.123 gph, and Figure
+        6-30's -7.14 psi, t = (-1 - P) * V / (14.7 * R) is 74.37 hours."""
+        from tls350sim import fieldio
+        from tls350sim.console import FIELDS
+        c = a_vac_site(leak=0.123)
+        c.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "21.9")
+        with_a_result(c)
         self.assertEqual(c.diag_value("vac_no_vac", 1).split(chr(10))[1],
-                         "NO VAC TIME:      150:20")
+                         "NO VAC TIME:       74:22")
 
     def test_and_the_ratio(self):
         c = with_a_result(a_vac_site(leak=0.123))
@@ -303,7 +341,7 @@ class TheInterstitialSpaceFills(unittest.TestCase):
         was = c.vac_psi(1)
         c.vac_tick(1.0)
         self.assertAlmostEqual(c.vac_psi(1) - was,
-                               14.7 / c.INTERSTITIAL_GALLONS, places=6)
+                               14.7 / c.vac_volume(1), places=6)
 
     def test_it_stops_at_atmosphere(self):
         c = a_vac_site(leak=50.0)
@@ -326,9 +364,108 @@ class TheInterstitialSpaceFills(unittest.TestCase):
                          "NO VAC TIME:      ---:--")
 
 
+class TheVolumeIsTheZonesOwn(unittest.TestCase):
+    """577013-836 Rev N p.4-2: "Use the Containment Volume index to
+    calculate a zone's interstice volume in gallons ... you would enter 21.9
+    (round to nearest tenth of a gallon) as the calculated zone volume."
+    The space the console works its leak rate against is S72A, not a
+    constant of the sensor. UNKNOWNS A27."""
+
+    def test_an_unprogrammed_sensor_holds_the_manuals_501(self):
+        """"Default is 501", which is also the state its Setup Data Warning
+        is posted in."""
+        c = a_vac_site()
+        self.assertEqual(c.vac_volume(1), 501.0)
+
+    def test_a_programmed_volume_is_the_one_the_physics_uses(self):
+        from tls350sim import fieldio
+        from tls350sim.console import FIELDS
+        c = a_vac_site(leak=1.0)
+        c.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "21.9")
+        self.assertAlmostEqual(c.vac_volume(1), 21.9, places=4)
+        was = c.vac_psi(1)
+        c.vac_tick(1.0)
+        self.assertAlmostEqual(c.vac_psi(1) - was, 14.7 / 21.9, places=6)
+
+    def test_a_larger_volume_is_a_longer_time_for_the_same_leak(self):
+        """"if the volume is programmed significantly larger than the
+        actual volume, a small leak will be calculated as being much larger
+        by the TLS" -- 577013-873 Rev E p.4-5. The console holds the rate
+        here and the bench sets it, so the same sentence reads the other
+        way round: the bigger the space, the longer the same leak takes."""
+        from tls350sim import fieldio
+        from tls350sim.console import FIELDS
+        small = a_vac_site(leak=1.0)
+        small.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "20")
+        big = a_vac_site(leak=1.0)
+        big.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "400")
+        self.assertAlmostEqual(big.vac_time_to_no_vac(1),
+                               20 * small.vac_time_to_no_vac(1))
+
+
+class TheGuidesOwnPostingConditions(unittest.TestCase):
+    """577013-873 Rev E p.4-4: "A Vacuum Warning will be posted under the
+    following conditions: Leak Rate > 22.4 GPH for 40 minutes; Evacuation
+    ratio of less than 1.0 during a manual evacuation when vacuum level has
+    not reached -4.0." And p.4-6 on the alarm: "posted when compensated
+    pressure is greater than -1.0 psi ... The alarm will clear when vacuum
+    pressure is less than -1.1 psi"."""
+
+    def a_wide_zone(self, leak):
+        from tls350sim import fieldio
+        from tls350sim.console import FIELDS
+        c = a_vac_site(leak=leak)
+        c.values["S72A01"] = fieldio.encode(FIELDS["S72A01"], "S72A01", "500")
+        return c
+
+    def test_over_22_4_gph_is_not_a_warning_until_forty_minutes(self):
+        c = self.a_wide_zone(leak=22.5)         # 9.3 hours of vacuum left
+        self.assertGreater(c.vac_time_to_no_vac(1), c.VAC_TIME_WARN_HOURS)
+        self.assertEqual(c.vac_conditions(), [])
+        c.clock_offset += 39 * 60
+        self.assertEqual(c.vac_conditions(), [])
+        c.clock_offset += 60
+        self.assertEqual(c.vac_conditions(), ["281601"])
+
+    def test_a_rate_that_drops_back_starts_the_forty_minutes_again(self):
+        c = self.a_wide_zone(leak=22.5)
+        c.vac_conditions()
+        c.clock_offset += 30 * 60
+        c.vac_leak[1] = 10.0
+        self.assertEqual(c.vac_conditions(), [])
+        c.vac_leak[1] = 22.5
+        c.clock_offset += 30 * 60
+        self.assertEqual(c.vac_conditions(), [])
+
+    def test_a_manual_evacuation_that_makes_no_headway_is_a_warning(self):
+        """"not 'making headway' (the vacuum level is not increasing or it
+        is increasing very slowly as indicated by an 'Evac Ratio' less than
+        1.0)", p.4-4 -- and only while the space is still above -4.0."""
+        c = self.a_wide_zone(leak=2.0)          # ratio 0.32
+        c.vac_pressure[1] = -3.0
+        self.assertEqual(c.vac_conditions(), [])
+        with_a_result(c)
+        self.assertLess(c.vac_result(1)["ratio"], 1.0)
+        self.assertEqual(c.vac_conditions(), ["281601"])
+        c.vac_pressure[1] = -5.0                # past -4.0: the test reads clean
+        with_a_result(c)
+        self.assertEqual(c.vac_conditions(), [])
+
+    def test_no_vacuum_posts_above_minus_one_and_clears_below_minus_one_point_one(self):
+        c = self.a_wide_zone(leak=0.0)
+        c.vac_pressure[1] = -0.5
+        self.assertEqual(c.vac_conditions(), ["281701"])
+        c.vac_pressure[1] = -1.05               # between the two: still posted
+        self.assertEqual(c.vac_conditions(), ["281701"])
+        c.vac_pressure[1] = -1.2                # "the 'Vacuum OK' threshold"
+        self.assertEqual(c.vac_conditions(), [])
+        c.vac_pressure[1] = -1.05               # and from below it is not
+        self.assertEqual(c.vac_conditions(), [])
+
+
 class TheTwoStatedThresholds(unittest.TestCase):
     def test_under_eight_hours_left_is_a_vacuum_warning(self):
-        c = a_vac_site(leak=3.0)                # ~6.2 hours from -7.14 psi
+        c = a_small_zone(leak=3.0)              # ~3 hours from -7.14 psi
         self.assertLess(c.vac_time_to_no_vac(1), c.VAC_TIME_WARN_HOURS)
         self.assertEqual(c.vac_conditions(), ["281601"])
 
@@ -349,7 +486,7 @@ class TheTwoStatedThresholds(unittest.TestCase):
         self.assertNotIn("281601", c.vac_conditions())
 
     def test_the_alarms_reach_the_console(self):
-        c = a_vac_site(leak=3.0)
+        c = a_small_zone(leak=3.0)
         self.assertIn("281601", c.compute_alarms())
 
     def test_a_sensor_that_is_not_a_vac_sensor_has_none_of_this(self):
@@ -431,6 +568,120 @@ class TheManualTest(unittest.TestCase):
         c = a_vac_site()
         c.values["S72301"] = "0103"
         self.assertEqual(c.diag_action("vac_test_start", 1), "NO VAC SENSORS")
+
+
+class ThePortReportsTheSensorTheConsoleModels(unittest.TestCase):
+    """FIDELITY L18. Every number in `B38` belongs to the vacuum sensor and
+    this console models all of them for the panel -- and `_vac_diagnostic`
+    read none of them. Both pressures were a `readings.wander` band near -9
+    psi whatever the bench was doing; the valve was CLOSED unless the
+    evacuation state was one the code never set, so an evac hold read
+    `VCV: OPEN` on the screen and `VCV: CLOSED` on the port; and the leak
+    rate, the minutes to no vacuum and the ratio were generated, so a sensor
+    that had never run a manual test answered with all three.
+    """
+
+    def report(self, c, code=b"\x01IB3801\r"):
+        from tls350sim.wire import Handler
+        return Handler(c, verbose=False).handle(code).decode("ascii",
+                                                             "replace")
+
+    def test_the_two_pressures_are_the_sump_the_bench_is_driving(self):
+        c = a_vac_site(leak=1.0)
+        c.vac_pressure[1] = -0.4
+        lines = self.report(c).splitlines()
+        self.assertIn("              -0.400 PSI", lines)
+        self.assertIn("-0.40 PSI", c.diag_value("vac_state", 1))
+
+    def test_the_uncompensated_reading_is_the_atmosphere_added_back(self):
+        """"COMPENSATED PRESSURE ... Pressure sensor value minus ATMP sensor
+        value", 576013-818 Rev AB Figure 6-29 -- so the uncompensated one is
+        the compensated one plus whatever the ATM P sensor reads."""
+        from tls350sim import wiresensors
+        c = a_vac_site()
+        c.values["S72302"] = "0205"                  # an ATMP sensor on 2
+        atm = float(c.diag_reading("ss_atm", 2).split(":")[1].split()[0])
+        low, high = wiresensors._vac_pressures(c, 1)
+        self.assertAlmostEqual(low, c.vac_psi(1), places=6)
+        self.assertAlmostEqual(high - low, atm, places=6)
+
+    def test_the_valve_on_the_port_is_the_valve_on_the_glass(self):
+        c = a_vac_site()
+        c.start_evac_hold(1)
+        lines = self.report(c).splitlines()
+        self.assertIn("VCV: OPEN", lines)
+        self.assertIn(" EVACUATION HOLD", lines)
+        self.assertIn("VCV: OPEN", c.diag_value("vac_state", 1))
+
+    def test_a_sensor_with_no_test_sends_three_zero_validity_flags(self):
+        """"V - Valid Leak Rate flag ... v - Valid Time to No Vacuum flag ...
+        f - Valid Evac Ratio flag", 576013-635 Rev AA pp.531-532. All three
+        were hard-coded 1, which is the console asserting three measurements
+        it had not made."""
+        c = a_vac_site(leak=1.0)
+        self.assertEqual(self.flags(c), ["0", "0", "0"])
+        with_a_result(c)
+        self.assertEqual(self.flags(c), ["1", "1", "1"])
+
+    def test_a_space_that_is_not_filling_has_no_time_and_no_ratio(self):
+        """Two of the three are valid and one is not: the rate was measured
+        and it was zero, which is not the same as no prediction."""
+        c = with_a_result(a_vac_site(leak=0.0))
+        self.assertEqual(self.flags(c), ["1", "0", "0"])
+
+    def flags(self, c):
+        """V, v and f out of the computer response, by their offsets: the
+        block is SS NNNNNNNN e F c V, then a stamp, the rate and v, then a
+        stamp, the minutes and f. 576013-635 Rev AA p.531."""
+        raw = self.report(c, b"\x01iB3801\r").strip("\x01\x03\r\n")
+        body = raw.split("&&")[0][len("iB3801") + 10:]
+        return [body[13], body[32], body[51]]
+
+    def test_the_display_form_dashes_what_it_has_not_measured(self):
+        """Not a page: 576013-818 draws Figure 6-29 fully populated and no
+        manual on this shelf says what an unrun test looks like. The dashes
+        are the panel's own form, so the screen and the paper agree, and the
+        date line goes with the reading it stamps. UNKNOWNS A73."""
+        lines = self.report(a_vac_site(leak=1.0)).splitlines()
+        self.assertIn("LEAK RATE:       --- GPH", lines)
+        self.assertIn("          ---:-- HHHH:MM", lines)
+        self.assertIn("EVAC RATIO:--- @ ---PSI", lines)
+        self.assertEqual(self.stamps(lines), [])
+
+    def stamps(self, lines):
+        """The date lines the reading block stands in front of its readings,
+        `4-12-04 11:28AM` -- not the response's own header stamp, which is
+        `JAN 22, 2004  3:25 PM` and is there whatever the sensor has done."""
+        import re
+        return [l for l in lines if re.match(r"^\d\d-\d\d-\d\d ", l)]
+
+    def test_the_stamp_is_when_the_reading_was_taken(self):
+        """It was an offset from now, so every report was stamped with the
+        hour it was asked for rather than the hour of the test."""
+        import time
+        c = with_a_result(a_vac_site(leak=1.0))
+        took = time.localtime(c.vac_result(1)["at"])
+        c.clock_offset += 6 * 3600.0                 # six hours later
+        want = time.strftime("%m-%d-%y %I:%M%p", took)
+        self.assertEqual(self.stamps(self.report(c).splitlines()),
+                         [want, want])
+
+    def test_the_wire_s_own_evac_hold_reaches_the_panel(self):
+        """097 wrote a phase and nothing else, so an evacuation hold started
+        over the port left the valve shut on the glass and on B38."""
+        c = a_vac_site()
+        self.report(c, b"\x01S09701149\r")
+        self.assertTrue(c.vac_valve_open(1))
+        self.assertIn("VCV: OPEN", c.diag_value("vac_state", 1))
+        self.report(c, b"\x01S09801149\r")
+        self.assertFalse(c.vac_valve_open(1))
+
+    def test_the_wire_s_own_manual_test_records_a_result(self):
+        c = a_vac_site(leak=1.0)
+        self.assertIsNone(c.vac_result(1))
+        self.report(c, b"\x01S09501149\r")
+        c.finish_vac_tests()
+        self.assertIsNotNone(c.vac_result(1))
 
 
 class TheAtmPressureIsADifference(unittest.TestCase):

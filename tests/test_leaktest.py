@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Leak tests: a test that measures, and an alarm that means something.
 
 The engine works in console time, so these run the clock forward by hand
@@ -97,6 +100,29 @@ class TheProbeHasAMinimumItCanMeasure(unittest.TestCase):
         c = self.a_mag_tank(volume=5000.0)
         self.assertFalse(c.fuel_below_minimum(1))
         self.assertNotIn("020801", c.compute_alarms())
+
+    def test_water_raises_the_minimum_by_its_own_depth(self):
+        """577013-940 Rev F p.43, on the Invalid Fuel field: "The invalid
+        fuel level assumes no water is present. If water is present, the
+        invalid fuel level is increased by the water level reading."
+
+        Which makes the test a SEPARATION between the two floats rather
+        than a depth -- and that is what every cause line this alarm has
+        ever carried describes. A tank whose product clears the bare
+        minimum can still have its floats too close together, because the
+        water underneath has lifted them both. UNKNOWNS A36.
+        """
+        c = self.a_mag_tank(volume=5000.0)
+        self.assertEqual(c.probe_minimums(1), (3.23, 0.867))
+        bare = c.probe_minimums(1)[0]
+        height = c.height_at(1, 5000.0)
+        self.assertGreater(height, bare, "the premise: product clears it dry")
+        self.assertFalse(c.fuel_below_minimum(1))
+        # now stand the same product on more water than the gap above it
+        c.tank_level[1]["water"] = height - bare + 1.0
+        self.assertGreater(c.water_height(1), 0.0, "the water is measurable")
+        self.assertTrue(c.fuel_below_minimum(1))
+        self.assertIn("020801", c.compute_alarms())
 
     def test_a_probe_the_table_does_not_cover_raises_nothing(self):
         """A minimum nobody published is not a minimum of zero. The CAP
@@ -743,6 +769,30 @@ class LossLimits(unittest.TestCase):
         self._drain(c, 13)
         self.assertEqual(c.leaks.result("tank", 1, "periodic").result,
                          leaktest.FAILED)
+
+    def an_unprogrammed_tank_under_test(self, leak):
+        c = a_console(leak=leak)
+        for code in ("S62501", "S62601"):
+            c.values.pop(code, None)
+        c.tick()
+        c.leaks.start("tank", 1, "periodic", hours=12.0)
+        return c
+
+    def test_an_unprogrammed_tank_has_the_limits_it_reports(self):
+        """A console out of the box reports a Sudden Loss Limit and a Leak
+        Alarm Limit of 99 gallons -- a real one on I62500 and I62600, and
+        the site tape's `LEAK ALARM LIMIT:     99` -- and enforced neither,
+        because the engine read only what had been stored. FIDELITY S18."""
+        under = self.an_unprogrammed_tank_under_test(leak=60.0)
+        self._drain(under, 1)                  # sixty gallons: inside 99
+        alarms = under.compute_alarms()
+        self.assertNotIn("020601", alarms)
+        self.assertNotIn("020201", alarms)
+        over = self.an_unprogrammed_tank_under_test(leak=120.0)
+        self._drain(over, 1)                   # a hundred and twenty: past it
+        alarms = over.compute_alarms()
+        self.assertIn("020601", alarms)
+        self.assertIn("020201", alarms)
 
 
 class TestNeeded(unittest.TestCase):
@@ -1489,6 +1539,20 @@ class EveryTestFrequencySchedulesSomething(unittest.TestCase):
         self.assertEqual(self.fires_on("2", "99", days=14), [])
 
 
+class EveryLineOnTheCardIsScheduled(unittest.TestCase):
+    """FIDELITY H16. The repetitive test walked `range(1, 5)`, and a PLLD
+    card carries six lines."""
+
+    def test_a_repetitive_test_on_line_five_starts(self):
+        c = a_console()
+        self.assertGreaterEqual(c.capacity("plld"), 5)
+        c.values["S78C05"] = "051"
+        c.leaks.tick()
+        c.clock_offset += 60.0
+        c.leaks.tick()
+        self.assertIsNotNone(c.leaks.active("plld", 5))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 
@@ -1544,3 +1608,128 @@ class WhereTheTestCameFrom(unittest.TestCase):
         self.assertTrue(run.manual_stop)
         self.assertEqual(run.origin, "schedule")
         self.assertEqual(self.line(c), "TEST BY PROGRAMMED TIME")
+
+
+class TheEmptyLeakResultSaysTheWholePhrase(unittest.TestCase):
+    """FIDELITY D31. `tank_leak_when`, the second line of IN-TANK LEAK
+    RESULT's stamp screen, answered an untested tank with `NO TEST DATA` --
+    the one place in the package that dropped the second half of the phrase,
+    against twenty-six that print it whole.
+
+    576013-818 Rev AA Figure 6-9 draws that line as `MMM DD,YYYY HH:MM:SS xM`
+    and draws no empty state at all, so what settles it is the package's own
+    vocabulary: 576013-610 Rev AC p85 lists `NO TEST DATA AVAILABLE` among
+    the Mag Sump status messages, `controls.py` and `sumpreports.py` both map
+    result code `00` to it, and it is 22 characters into a 24 column glass.
+
+    The short one survived a citation audit because it is a PREFIX of the
+    long one, so the rule matched it to the same page.
+    """
+
+    def line(self, console):
+        return console.diag_value("tank_leak_when", 1)
+
+    def test_an_untested_tank_says_the_whole_phrase(self):
+        c = a_console()
+        self.assertEqual(self.line(c), "NO TEST DATA AVAILABLE")
+
+    def test_and_it_fits_the_glass(self):
+        self.assertLessEqual(len("NO TEST DATA AVAILABLE"), 24)
+
+    def test_a_tested_tank_still_answers_with_its_stamp(self):
+        c = a_console()
+        c.leaks.start("tank", 1, "periodic", hours=2.0)
+        run_out(c, hours=3.0)
+        self.assertNotIn("NO TEST DATA", self.line(c))
+
+    def test_nothing_in_the_package_says_the_short_one(self):
+        """The count that found it, kept as a ratchet: the bare phrase is a
+        defect wherever it appears on its own."""
+        import ast
+        import glob
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        bare = []
+        for path in glob.glob(os.path.join(here, "tls350sim", "*.py")):
+            with open(path, encoding="utf-8") as fh:
+                tree = ast.parse(fh.read(), path)
+            docs = {id(ast.get_docstring(n, clean=False) and n.body[0].value)
+                    for n in ast.walk(tree)
+                    if isinstance(n, (ast.Module, ast.ClassDef,
+                                      ast.FunctionDef))}
+            for node in ast.walk(tree):
+                if not (isinstance(node, ast.Constant)
+                        and isinstance(node.value, str)) or id(node) in docs:
+                    continue
+                for part in node.value.split("NO TEST DATA")[1:]:
+                    if not part.startswith((" AVAILABLE", " AVALIABLE")):
+                        bare.append(f"{os.path.basename(path)}:"
+                                    f"{node.lineno}")
+        self.assertEqual(bare, [])
+
+
+class TheVolumetricLineTestsTakeTheirTableFiveTimes(unittest.TestCase):
+    """FIDELITY H17. 576013-849 Rev B p.39, Table 5, "Test Type Reference
+    Numbers and Times", gives every VLLD test a `Test Length (Seconds)`:
+    13.5 for the 3.0 GPH Line Test, 326 for the 0.2 GPH and 794 for the 0.1
+    GPH -- rows 3, 7 and 11, which are the three reference numbers
+    `wirelines.VLLD_LINE_TEST` has read out of the LEFT column of the same
+    table all along. The right column had never been turned to.
+
+    These were 0.05, 0.75 and 8.0 HOURS, so every test ran 13 to 36 times
+    too long and a 0.1 gph line test was eight hours where the page gives
+    thirteen minutes.
+    """
+
+    def a_line(self):
+        c = a_console()
+        c.modules["vlld"] = 1
+        c.values["S75101"] = "0101"
+        return c
+
+    def test_the_three_lengths_are_table_five_s(self):
+        self.assertEqual(leaktest.LINE_SECONDS,
+                         {"gross": 13.5, "periodic": 326.0, "annual": 794.0})
+
+    def test_a_started_test_runs_for_that_long(self):
+        c = self.a_line()
+        for rate, seconds in leaktest.LINE_SECONDS.items():
+            c.leaks.start("vlld", 1, rate)
+            run = c.leaks.running[("vlld", 1)]
+            self.assertAlmostEqual(run.hours * 3600.0, seconds, places=6)
+            c.leaks.stop("vlld", 1)
+
+    def test_the_two_columns_of_the_table_agree_with_each_other(self):
+        """`VLLD_LINE_TEST` is Table 5's reference number and
+        `VLLD_TEST_LENGTH` is that row's length, so they are one table and
+        have to name the same three rates."""
+        from tls350sim import wirelines
+        self.assertEqual(set(wirelines.VLLD_LINE_TEST),
+                         set(leaktest.LINE_SECONDS))
+        self.assertEqual(wirelines.VLLD_TEST_LENGTH, leaktest.LINE_SECONDS)
+
+    def test_a_full_length_line_test_is_not_invalid(self):
+        """The validity floor was a flat 0.01 hours -- 36 seconds -- which a
+        13.5 second test cannot clear. It is the test's OWN length where
+        that is shorter, so a full run is judged and a short one is not."""
+        c = self.a_line()
+        c.leaks.start("vlld", 1, "gross")
+        run_out(c, hours=leaktest.LINE_SECONDS["gross"] / 3600.0 + 0.001)
+        result = c.leaks.result("vlld", 1, "gross")
+        self.assertEqual(result.result, leaktest.PASSED)
+
+    def test_and_a_test_stopped_part_way_still_is(self):
+        c = self.a_line()
+        c.leaks.start("vlld", 1, "annual")
+        run_out(c, hours=0.0005)
+        c.leaks.stop("vlld", 1)
+        self.assertEqual(c.leaks.result("vlld", 1, "annual").result,
+                         leaktest.INVALID)
+
+    def test_a_tank_test_keeps_the_floor_it_had(self):
+        """Its shortest legitimate length is hours, so 0.01 still binds."""
+        c = a_console()
+        c.leaks.start("tank", 1, "periodic", hours=2.0, manual_stop=True)
+        run_out(c, hours=0.005)
+        c.leaks.stop("tank", 1)
+        self.assertEqual(c.leaks.result("tank", 1, "periodic").result,
+                         leaktest.INVALID)

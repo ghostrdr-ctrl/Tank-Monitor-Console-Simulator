@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Auto-Transmit: which events arm a transmit, when it goes, and how often.
 
 576013-623 Rev AN section 6, Auto-Transmit Setup: "The Auto-Transmit Setup
@@ -22,7 +25,7 @@ settings a console stores and does not have. This is the half that can be
 built: the trigger set, the delay before the first message, the repeat
 interval, and the connect type 888 reports while it happens.
 
-**What is NOT here is the frame.** 576013-635 documents no Auto Transmit
+What is NOT here is the frame. 576013-635 documents no Auto Transmit
 message -- no function code, no format, nothing but `04=AUTO TRANSMIT` as a
 connect type in 888's own communication diagnostic. So this engine transmits
 no bytes, for the same reason `autodial.py` dials and sends nothing: a
@@ -46,7 +49,7 @@ import time
 # `Water Out Alarm`, and `HIGH WATER ALARM` must not catch `HIGH WATER
 # WARNING`.
 #
-# **AUTO THEFT LIMIT is the console's Sudden Loss Limit.** Nothing on the
+# AUTO THEFT LIMIT is the console's Sudden Loss Limit. Nothing on the
 # TLS-350 shelf is called a theft limit; 577013-940 names them in one breath
 # -- "Sudden Loss Limit (theft alarm limit loss) immediately warns of a
 # sudden loss of fuel during a leak test" -- and 577013-950's tank setup
@@ -226,8 +229,8 @@ class AutoTransmit:
     def _drop_finished(self, live, running):
         """A repeat stops when the thing it is repeating about stops.
 
-        **This is the one inference in the file, and it is what makes the
-        repeat terminate at all.** The manual gives the repeat interval and
+        This is the one inference in the file, and it is what makes the
+        repeat terminate at all. The manual gives the repeat interval and
         never says what ends the sequence -- there is no try count the way
         527 gives autodial one. Repeating while the condition STANDS is the
         reading that needs nothing invented: the console has an alarm to

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The pressure in a pressurised line, and the tests that measure it.
 
 A PLLD console does not decide a line is leaking; it watches a transducer.
@@ -281,14 +284,13 @@ PUMP_PSI = 30.0
 # Types and Line Lengths - For DPLLD and PLLD". Keyed by the console's own
 # S788 piping-material enumeration.
 #
-# Two rows need a word. 01 is the console's single "2.0/3.0 FIBERGLASS"
-# choice where the guide publishes the two diameters separately (25,000 psi
-# and 0.204 gal/ft for 2 inch, 35,000 and 0.461 for 3 inch); the 2 inch row is
-# used, because that is the size the setup screen asks for first and the one
-# the length step defaults to. 04 "GEOFLEX II 1.5" has no row of its own in
-# the guide at all: Geoflex II is the pre-2001 product, and the guide's
-# footnote 3 says pre-2001 Geoflex piping "has a lower bulk modulus than the
-# current product ... use the values in ( )", which for 1.5 inch is 5700.
+# One row needs a word. 04 "GEOFLEX II 1.5" has no row of its own in the
+# guide at all: Geoflex II is the pre-2001 product, and the guide's footnote 3
+# says pre-2001 Geoflex piping "has a lower bulk modulus than the current
+# product ... use the values in ( )", which for 1.5 inch is 5700.
+#
+# 01 is the FIRST of two diameters, not the whole of the type -- see
+# SECOND_PIPE.
 PIPE = {
     "01": (25000.0, 0.204),     # 2.0/3.0 FIBERGLASS, 2 inch
     "02": (50000.0, 0.190),     # 2.0 STEEL
@@ -310,6 +312,51 @@ PIPE = {
     "19": (11500.0, 0.163),     # PETROTECHNIK UPP 63MM
 }
 DEFAULT_PIPE = "03"             # "The default is Enviroflex PP1501."
+
+# The SECOND diameter of the five pipe types that have one, out of the same
+# 577013-465 Rev AD table as PIPE. Four of the console's nineteen choices name
+# two sizes in the option text itself -- "2.0/3.0 IN. FIBERGLASS",
+# "ENVROFLX PP1502/2502", "ENVROFLX PP1503/2503", "1.5/2 IN. ENVIRON GFLXD" --
+# and USER DEFINED is programmed a second diameter and a second modulus of its
+# own. A line of one of these is TWO connected lengths of pipe, and the setup
+# asks for both: 576013-623 Rev AN p.10-3 heads its own block "ENTERING LINE
+# LENGTH FOR DUAL SIZE FLEXIBLE PIPE TYPES", and p.10-4 says of User Defined
+# that the second entry is for "two connected lengths of the same pipe type
+# but with different diameters, or ... two connected lengths of different pipe
+# types".
+#
+# The guide's prose says "the 2.5 inch size appears" for all three dual flex
+# types, which is a slip: Geoflex D has no 2.5 inch row in the guide's own
+# table and the console's option is named "1.5/2 IN." So the table is read
+# for the size and the prose only for the shape.
+SECOND_PIPE = {
+    "01": (35000.0, 0.461),     # FIBERGLASS (3 INCH)
+    "07": (8700.0, 0.255),      # PP2502 (2.5 INCH)
+    "11": (3100.0, 0.255),      # PP2503 (2.5 INCH)
+    "13": (11000.0, 0.163),     # GEOFLEX D (2 INCH)
+}
+USER_DEFINED = "18"
+
+
+def gallons_per_foot(diameter):
+    """Gallons a foot of pipe of that bore holds. The inverse of the bore.
+
+    A gallon is 231 cubic inches, so a foot of pipe of diameter d holds
+    pi/4 * d^2 * 12 / 231 gallons. `wirelines._diameter` has run this
+    backwards since it was written, to print the bore of a pipe the guide
+    gives only the volume for; this is the direction USER DEFINED needs,
+    because there the console has the diameter and nothing else.
+
+    It is a derivation rather than an invention, and the guide's own table
+    is the check: every FLEXIBLE row in it agrees to the printed precision
+    -- 1.5 inch is 0.092, 1.75 is 0.125, 2.0 is 0.163, 2.5 is 0.255, 3.0 is
+    0.367 -- and so does 1 inch type K copper at 0.041. The two rigid
+    fiberglass rows and the steel one do not, because their bore is wider
+    than their nominal size: 0.204 gal/ft is a 2.24 inch bore on pipe the
+    table calls 2 INCH. Those three have their own rows in PIPE and never
+    reach this.
+    """
+    return math.pi / 4.0 * diameter * diameter * 12.0 / 231.0
 
 # "IMPORTANT! The default line length must be changed to reflect the actual
 # line length or a Setup Data Warning will occur." The setup screens draw
@@ -443,15 +490,29 @@ class Line:
         self.last_start = {}        # rate_key -> when that test last began
 
     # ---- what the pipe is --------------------------------------------------
-    def pipe(self):
-        """(bulk modulus, gallons per foot) for the programmed pipe type."""
+    def raw_pipe_key(self):
+        """The `788`/`7A8` piping material as the family stores it."""
         c = self.engine.c
         code = "788" if self.kind == "plld" else "7A8"
         raw = (c.values.get(f"S{code}{self.number:02d}") or "").strip()
-        key = raw[-2:] if len(raw) >= 2 else DEFAULT_PIPE
+        return raw[-2:] if len(raw) >= 2 else DEFAULT_PIPE
+
+    def pipe_key(self):
+        """The same, as a PIPE key -- WPLLD's six mapped onto PLLD's."""
+        key = self.raw_pipe_key()
         if self.kind == "wplld":
             key = WPLLD_PIPE.get(key, DEFAULT_PIPE)
-        if key == "18":
+        return key
+
+    def pipe(self):
+        """(bulk modulus, gallons per foot) of the line's FIRST diameter.
+
+        The first of two on the five types SECOND_PIPE names, and the whole
+        of the line on the other fourteen.
+        """
+        c = self.engine.c
+        key = self.pipe_key()
+        if key == USER_DEFINED:
             # USER DEFINED: the console asks for the modulus itself, and the
             # setup screen's own default is 0, which is no line at all.
             #
@@ -465,18 +526,100 @@ class Line:
             # programmed its own pipe got the default pipe's behaviour,
             # silently. WPLLD has no bulk modulus code of its own, so both
             # kinds read this one. See FIDELITY R8.
+            #
+            # The gallons a foot are the programmed DIAMETER's, `777`, "1ST
+            # LINE DIAMETER" on the panel and "Pipe Diameter, Inches" on the
+            # wire. This returned PP1501's 1.5 inch figure whatever the
+            # technician had typed, so a user-defined 3 inch line was
+            # modelled with a third of its volume. See FIDELITY R22.
             modulus = c.limit("779", self.number) or PIPE[DEFAULT_PIPE][0]
-            return float(modulus), PIPE[DEFAULT_PIPE][1]
+            bore = c.limit("777", self.number)
+            volume = gallons_per_foot(bore) if bore else PIPE[DEFAULT_PIPE][1]
+            return float(modulus), volume
         return PIPE.get(key, PIPE[DEFAULT_PIPE])
 
+    def second_pipe(self):
+        """(bulk modulus, gallons per foot) of the SECOND diameter, or None.
+
+        None on the fourteen types that are one size, which is what makes
+        `second_length` zero for them.
+        """
+        key = self.raw_pipe_key()
+        if self.kind == "wplld":
+            # The RAW key, because `WPLLD_PIPE` maps onto PIPE and the two
+            # lists do not agree about how many diameters an option has.
+            # WPLLD's `04` is "1.5 IN. ENVIRON GEOFLX D" and PLLD's `13`,
+            # which it maps to, is "1.5/2 IN. ENVIRON GFLXD" -- the same
+            # pipe at one size and at two. Mapping first would have given a
+            # WPLLD Geoflex line a second segment its own option name says
+            # it has not got. Fiberglass is the one two-diameter choice the
+            # WPLLD setup offers, which is what console.py's WPLLD SETUP
+            # report has always said by summing `7AD` for that index alone.
+            return SECOND_PIPE["01"] if key == "01" else None
+        if key != USER_DEFINED:
+            return SECOND_PIPE.get(key)
+        modulus = self.engine.c.limit("77A", self.number)
+        bore = self.engine.c.limit("778", self.number)
+        if not modulus or not bore:
+            # "If the line consists of one pipe type, one diameter, ignore
+            # the second line length entry" -- 576013-623 Rev AN p.10-4. An
+            # unprogrammed second modulus or diameter is that case.
+            return None
+        return float(modulus), gallons_per_foot(bore)
+
     def length(self):
-        """Programmed pipe length in feet."""
+        """Feet of the FIRST diameter's pipe.
+
+        Unprogrammed and zero are different here, and reading them alike is
+        what this method used to do. "IMPORTANT! When using the Fiberglass
+        pipe type, the unused size's length must be set to zero" --
+        576013-623 Rev AN p.10-3 -- so a site with 3 inch fiberglass only
+        stores 0 in `789`, and `or DEFAULT_LENGTH` gave it 501 feet of 2 inch
+        pipe it has not got. A line with NEITHER length programmed is still
+        the setup screen's own 501.
+        """
         code = "789" if self.kind == "plld" else "7A9"
-        return self.engine.c.limit(code, self.number) or DEFAULT_LENGTH
+        feet = self.engine.c.limit(code, self.number)
+        if feet is None:
+            return 0.0 if self.second_length() else DEFAULT_LENGTH
+        return feet
+
+    def second_length(self):
+        """Feet of the SECOND diameter's pipe; 0 where the type has none.
+
+        `77F` for PLLD and `7AD` for WPLLD, whose own name in 576013-635 Rev
+        AA says what it is for: "Set WPLLD Line Leak Secondary Pipe Length
+        (only used for the larger diameter line in dual diameter piping
+        configurations)".
+        """
+        if self.second_pipe() is None:
+            return 0.0
+        code = "77F" if self.kind == "plld" else "7AD"
+        return self.engine.c.limit(code, self.number) or 0.0
+
+    def segments(self):
+        """[(bulk modulus, gallons)], one per length of pipe in the line.
+
+        One for a single-diameter line and two for a dual one, with a
+        segment of no length left out rather than carried as a zero.
+        """
+        out = [(self.pipe()[0], self.length() * self.pipe()[1])]
+        second = self.second_pipe()
+        if second is not None:
+            out.append((second[0], self.second_length() * second[1]))
+        return [(k, v) for k, v in out if v > 0.0]
 
     def volume(self):
-        """Gallons of product the line under test holds."""
-        return max(0.1, self.length() * self.pipe()[1])
+        """Gallons of product the line under test holds.
+
+        The sum over the segments, which is the guide's own arithmetic:
+        "To determine the line volume for mixed piping types, multiply the
+        line length (in feet) times the 'gallons/foot' value for each pipe
+        type and add ... Total line volume = [150 x 0.204] + [50 x 0.461] =
+        30.6 + 23.1 = 53.7 gallons", 577013-465 Rev AD footnote 1. This used
+        to be the first segment alone, so that line came out at 30.6.
+        """
+        return max(0.1, sum(gallons for _k, gallons in self.segments()))
 
     def psi_per_gallon(self):
         """K/V: how far one gallon out of this line moves the transducer.
@@ -484,8 +627,24 @@ class Line:
         dV/V = dP/K is the whole of it. A stiff, short line answers a leak
         with a steep pressure drop; a long soft one barely moves, which is why
         the console will not certify 0.1 gph testing past 1100 feet.
+
+        Two segments share one pressure, so their give adds: a gallon out of
+        the line drops it by 1/(V1/K1 + V2/K2). That is the same equation
+        applied twice rather than a new one, and on a single-diameter line it
+        is K/V exactly as before.
         """
-        return self.pipe()[0] / self.volume()
+        give = sum(v / max(k, 1.0) for k, v in self.segments())
+        if not give:
+            return self.pipe()[0] / self.volume()
+        return 1.0 / give
+
+    def modulus(self):
+        """The line's effective bulk modulus, psi.
+
+        K = V / (V1/K1 + V2/K2) -- the one number a dual line behaves as, and
+        the primary's own on a single one.
+        """
+        return self.psi_per_gallon() * self.volume()
 
     def wait_times(self, rate_key):
         """(T1, T2) in seconds. THE SIMULATOR'S OWN CURVE - see the module docstring.
@@ -495,8 +654,7 @@ class Line:
         ones and a soft one long ones. So: inversely with stiffness, and with
         the line's volume, off 2 inch steel as the reference.
         """
-        modulus, _ = self.pipe()
-        stiffness = REFERENCE_K / max(modulus, 1.0)
+        stiffness = REFERENCE_K / max(self.modulus(), 1.0)
         size = self.volume() / REFERENCE_GALLONS
         scale = max(0.5, min(12.0, stiffness * max(0.3, size) ** 0.5))
         if rate_key == "gross":
@@ -700,8 +858,8 @@ class Line:
     def status_code(self):
         return self.STATUS_CODE.get(self.status(), "00")
 
-    # **Figure 19 is PLLD's list of status words and Figure 20 is WPLLD's,
-    # and they are not the same list.** 577013-344 Rev H p.22 gives PLLD
+    # Figure 19 is PLLD's list of status words and Figure 20 is WPLLD's,
+    # and they are not the same list. 577013-344 Rev H p.22 gives PLLD
     # `RUNNING PUMP: The pump is running at the beginning of a test` and
     # `PRESSURE CHECK: Checking for high pressure after a 3.0 gph test`;
     # p.26's WPLLD list has neither, and 576013-610 Rev AC p.12-4 draws the
@@ -717,6 +875,33 @@ class Line:
                           # pressure is checked, and TEST 3.0 is on
                           # Figure 20's list where PRESSURE CHECK is not
                           "PRESSURE CHECK": "TEST 3.0"}}
+
+    # 577013-344 Rev H Figure 20, p.26: "Top line of display shows WPLLD Comm
+    # Module status", and its five words with what each means --
+    #
+    #     PENDING       Waiting to start a test
+    #     DECAY         Waiting for pressure measurement
+    #     DISPENSING    Product is being dispensed
+    #     PRESSURIZING  The line is being pressurized
+    #     MEASUREMENT   Pump is on, sensor is recording/transmitting messages
+    #
+    # Which of the engine's stages is which word is on no page, and this
+    # reading of the five meanings is the project's: the pump running up a
+    # test (or trailing a dispense) is pressurizing the line, the pump-off
+    # waits for P1 and P2 are waiting for a pressure measurement, and the
+    # pump-on precision measurements are the sensor recording. UNKNOWNS A54.
+    COMM_STATUS = {"pump": "PRESSURIZING", "trail": "PRESSURIZING",
+                   "t1": "DECAY", "t2": "DECAY", "mid1": "DECAY",
+                   "mid2": "DECAY", "spike1": "MEASUREMENT",
+                   "spike2": "MEASUREMENT"}
+
+    def comm_status(self):
+        """The WPLLD Comm Module's own word for what this line is doing."""
+        if self.handle:
+            return "DISPENSING"
+        if self.running():
+            return self.COMM_STATUS.get(self.stage, "PENDING")
+        return "PENDING"
 
     def shown_status(self):
         """The status word this KIND of line puts on the glass."""
@@ -736,7 +921,7 @@ class Line:
     def status(self):
         """Line two of the first PLLD diag screen, in the manual's words.
 
-        **A test that is running outranks the shutdown that is standing.**
+        A test that is running outranks the shutdown that is standing.
 
         This asked `disabled` first and returned unconditionally, so
         `RUNNING PUMP`, `TEST 3.0`, `PRESSURE CHECK` and `TEST ABORTED`
@@ -745,7 +930,7 @@ class Line:
         the documented way to get it back. 576013-623 Rev AN p.5-10 makes
         that the console's own default: "This feature lets you choose how
         to re-enable a line shut down by a failing line leak test. To
-        re-enable a shutdown line **only by a passed line test**, press
+        re-enable a shutdown line only by a passed line test, press
         STEP", over the screen `LINE RE-ENABLE METHOD / PASS LINE TEST`.
         576013-610 Rev AC p.29-20 says the same for VLLD -- "the pump
         remains disabled until you reenable it by running a successful Self
@@ -787,6 +972,14 @@ class Line:
         pump = "PUMP ON" if self.pump else "PUMP OFF"
         handle = "HANDLE ON" if self.handle else "HANDLE OFF"
         left = f"{self.engine.code(self.kind)} {self.number}: {shown} PSI"
+        if self.kind == "wplld":
+            # Figure 20 draws `W 1: PENDING    PUMP OFF` and says the top
+            # line is the Comm Module's status. Figure 19 puts a pressure
+            # there for PLLD and Figure 20 does not, because a WPLLD
+            # transducer talks over the STP's power line. This drew
+            # `W 1:        PSI  PUMP ON`. FIDELITY U14.
+            word = self.comm_status() if self.programmed() else ""
+            left = f"{self.engine.code(self.kind)} {self.number}: {word}"
         return self._pad(left, pump), self._pad(self.shown_status(),
                                                  handle)
 
@@ -902,8 +1095,8 @@ class Lines:
 
         576013-623 p.10-11, and it is the whole of what the manual says
         about the feature: "When a site has mechanical blenders, the lines
-        can be assigned to a blend set. **This change affects the
-        scheduling of precision line testing, 0.2 and 0.1.**" The screens
+        can be assigned to a blend set. This change affects the
+        scheduling of precision line testing, 0.2 and 0.1." The screens
         beneath it are `MECHANICAL BLENDER: YES` and then `Q 1: BLEND
         PARTNERS / Q#: 02, 03`.
 
@@ -913,7 +1106,7 @@ class Lines:
         the set at once, so a precision test on one of them is aborted by a
         dispense on any of the others. 577013-344 Rev H p.21 is the field
         symptom, cause 5 of a Periodic or Annual Test Needed warning: "If
-        the site is extremely busy, **especially if blenders are present**,
+        the site is extremely busy, especially if blenders are present,
         there may not be sufficient idle time to complete a Periodic or
         Annual test unless the station is shut down."
 
@@ -956,7 +1149,7 @@ class Lines:
         kept dispensing through it, and the one setting whose whole purpose
         is to stop fuel moving stopped nothing.
 
-        **This follows the CONDITION, not the message.** Water in a sump
+        This follows the CONDITION, not the message. Water in a sump
         assigned to shut a line down holds the line down until the water is
         gone -- not until somebody presses ALARM/TEST. The two halves of
         576013-610 Rev AC p.29-1 are the rule: "Warning and Alarm Messages
@@ -1136,8 +1329,8 @@ class Lines:
             if ln.running():
                 self._abort(ln)
             if self.disabled(kind, number):
-                # **A handle is a request to the pump, and a shut-down pump
-                # does not answer it.** The console has de-energized the STP
+                # A handle is a request to the pump, and a shut-down pump
+                # does not answer it. The console has de-energized the STP
                 # for this line -- that is what a shutdown IS -- so lifting a
                 # handle gets no pump and no pressure, and the line stays
                 # where the shutdown left it until it is re-enabled.
@@ -1320,7 +1513,7 @@ class Lines:
         # A Continuous Handle alarm."
         #
         # Only the second half can happen here, and not by choice: PLLD and
-        # WPLLD both arrive at **version 24** in the version tables, so a
+        # WPLLD both arrive at version 24 in the version tables, so a
         # console old enough for the pre-19 pair cannot have a pressurised
         # line to raise them on. The two names are still in the alarm table
         # (21/10, 26/09) and stay unproducible for that reason -- which is a

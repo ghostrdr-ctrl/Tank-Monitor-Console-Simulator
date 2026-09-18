@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """550, 551, and what a console holds for a setting nobody has changed.
 
 FIDELITY S8 and S9. The two entries are one subject from two directions: a
@@ -195,6 +198,104 @@ class ADefaultIsNotSilence(unittest.TestCase):
                      "DATA LENGTH: 7 DATA"):
             self.assertIn(want, shown)
 
+from tls350sim import screens                                # noqa: E402
+
+
+class AMaskedNumberGivesUpAZeroRatherThanADigit(unittest.TestCase):
+    """FIDELITY F16. Seven setup steps overrun 24 columns only once the
+    value is substituted, so `test_fidelity.OVERWIDE_LINES` -- which counts
+    literal strings in the JSON -- is structurally blind to every one of
+    them. `"SUDDEN LOSS LIMIT:"` is 19 characters and fits; the line does
+    not.
+
+    `S62501` is the one that matters, because the clip landed on DIGITS.
+    The console holding 25 gallons drew `SUDDEN LOSS LIMIT: 00002`, which a
+    technician reads as **2**. Every other line on the `CUT` list loses a
+    word or a unit and looks cut; this one lost a decade and looked like a
+    number.
+
+    And the console proves a 24-column spelling exists, on its own paper,
+    for the same fact at the same instant: `SUDDEN LOSS LIMIT:    25`. The
+    usual answer -- that the manual's line is wider than the glass and
+    shortening it would be inventing console text -- does not apply when
+    the console is already printing a shorter form it invented for the roll.
+    """
+
+    def line(self, value):
+        return screens.second("SUDDEN LOSS LIMIT:", value)
+
+    def test_the_value_survives_the_glass(self):
+        self.assertEqual(self.line("000025"), "SUDDEN LOSS LIMIT: 00025")
+        self.assertEqual(self.line("000025")[-2:], "25")
+
+    def test_only_as_many_zeros_go_as_the_overrun_needs(self):
+        """So the field keeps as much of 576013-623 Rev AN p.6568's own
+        `XXXXXX` mask as the glass has room for."""
+        self.assertEqual(len(self.line("000025")), 24)
+        self.assertEqual(self.line("000025").count("0"), 3)
+
+    def test_a_line_that_already_fits_is_untouched(self):
+        self.assertEqual(screens.second("LEAK ALARM LIMIT:", "000099"),
+                         "LEAK ALARM LIMIT: 000099")
+
+    def test_a_value_that_is_not_a_padded_whole_number_is_left_alone(self):
+        """A52's standing rule still covers the six that cannot be
+        shortened: a word, a unit, or a number with a decimal point in it."""
+        self.assertEqual(screens.second("TNK TST SIPHON BREAK:", "OFF"),
+                         "TNK TST SIPHON BREAK: OFF")
+        self.assertEqual(screens.second("DENSITY         :", "0.0000"),
+                         "DENSITY         : 0.0000")
+
+    def test_it_never_eats_the_last_digit(self):
+        """A value with no leading zero to give up is clipped as before,
+        rather than losing a significant one to the rule."""
+        self.assertEqual(screens.second("SUDDEN LOSS LIMIT:", "123456"),
+                         "SUDDEN LOSS LIMIT: 123456")
+
+    def test_the_right_aligned_form_gives_up_a_zero_too(self):
+        """`gap: ">"` builds the line a different way and clipped the same.
+        A nineteen character label leaves five columns for a six digit
+        value, so one zero goes and the number arrives whole."""
+        line = screens.second("SUDDEN LOSS LIMIT :", "000025", ">")
+        self.assertEqual(len(line), 24)
+        self.assertTrue(line.endswith("25"), line)
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ThreeSetupFieldsThatDrewTheWrongShape(unittest.TestCase):
+    """FIDELITY F14. In all three the LABEL matched a page and nothing ever
+    checked the VALUE, which is the failure mode this file opens with."""
+
+    def test_the_passive_flag_says_no_and_yes(self):
+        """576013-623 Rev AN p.10-5 draws `PASSIVE 0.10 GPH: NO`. The field
+        carried no `words`, so it fell back to DISABLED/ENABLED, which makes
+        the line 25 columns and the glass cuts it to `DISABL`. The page uses
+        DISABLED on purpose two screens up (`0.10 GPH TEST: DISABLED`), so
+        it is not a manual that says the word loosely."""
+        self.assertEqual(FIELDS["S77E01"].get("words"), ["NO", "YES"])
+        for word in FIELDS["S77E01"]["words"]:
+            self.assertLessEqual(len("PASSIVE 0.10 GPH: " + word), 24, word)
+
+    def test_every_tank_number_field_has_the_same_sentinel(self):
+        """576013-635 function 752 reads `tt - Tank number (00=not
+        assigned)`, the same note 785 and 7A5 carry. Three of the four
+        device-number fields had `NONE` and the VLLD one did not."""
+        for code in ("S78501", "S77201", "S7A501", "S75201"):
+            self.assertEqual(FIELDS[code].get("screen_words"), {"0": "NONE"},
+                             code)
+
+    def test_the_tank_profile_volumes_are_masked_like_their_siblings(self):
+        """`FULL VOL: 000000` is drawn on p.7-6 and the 50-point view row on
+        p.7-7 is `92.16 INCH VOL: 009800`; the percentage steps went through
+        the generic field path and printed a bare `0`. All of them are the
+        same six-digit field in the same function code."""
+        percent = [k for k in FIELDS
+                   if k.startswith(("S605", "S606", "S63C"))
+                   and isinstance(FIELDS[k], dict)
+                   and FIELDS[k].get("kind") == "float"]
+        self.assertGreaterEqual(len(percent), 22)
+        for key in percent:
+            self.assertEqual(FIELDS[key].get("mask"), "000000", key)

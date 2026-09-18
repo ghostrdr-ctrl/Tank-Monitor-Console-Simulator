@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Shape-checking for the setup codes that have no field definition.
 
 75 codes store a setting, read it back correctly, and are reachable only over
@@ -23,7 +26,7 @@ The manual writes each one's data as a template -- `QQrr.rr`, `TTYYMMDD`,
 `SSAAxxx.xx` -- and the device prefix is consumed before the data reaches
 here, so what is left is the shape to check.
 
-**This checks SHAPE, not range.** The length and the character class, nothing
+This checks SHAPE, not range. The length and the character class, nothing
 more. That is deliberate and it is the conservative direction: a wrong range
 check refuses a value the console would take, which is worse than accepting a
 value it would refuse, because it breaks restoring a real site's backup. Where
@@ -63,7 +66,7 @@ from .console import DEVICE_PREFIXED
 #
 # Five codes used to be in here for AMBIGUITY. Revision U describes 51B, 520,
 # 54C, 5BE and 5BF loosely enough that guessing was the only option, and
-# **Revision Y describes all five exactly** -- an ambiguity in the manual you
+# Revision Y describes all five exactly -- an ambiguity in the manual you
 # have is not an ambiguity in the manual. Three of the five are checked now.
 #
 # The other two joined 525 and 52F, because a live console disagrees with the
@@ -132,7 +135,7 @@ COMPUTER_TEMPLATES = {
 def _pattern(template):
     """Turn one manual template into a regex.
 
-    **The last field may arrive short; the ones before it may not.** A tool
+    The last field may arrive short; the ones before it may not. A tool
     that sends `S7B50101<stamp>5050` has truncated the trailing six-digit
     gallons field to four, and a real console takes it -- you can truncate the
     tail of one of these, you cannot truncate the middle, because a short

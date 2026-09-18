@@ -724,22 +724,37 @@
    {
     "l1": "CSLD MONTHLY REPORT",
     "l2": "SELECT: CURRENT MONTH",
-    "depth": 1
+    "depth": 1,
+    "sel": "csld_month",
+    "choices": [
+     "CURRENT MONTH",
+     "PREVIOUS MONTH"
+    ]
    },
    {
     "l1": "T #: (Product Label)",
     "l2": "CUR CSLD MONTHLY <PRINT>",
-    "depth": 1
-   },
-   {
-    "l1": "CSLD MONTHLY REPORT",
-    "l2": "SELECT: PREVIOUS MONTH",
-    "depth": 1
+    "depth": 1,
+    "when": {
+     "sel": "csld_month",
+     "is": [
+      "",
+      "CURRENT MONTH"
+     ]
+    },
+    "diagprint": "csld_current"
    },
    {
     "l1": "T #: (Product Label)",
     "l2": "PRV CSLD MONTHLY <PRINT>",
-    "depth": 1
+    "depth": 1,
+    "when": {
+     "sel": "csld_month",
+     "is": [
+      "PREVIOUS MONTH"
+     ]
+    },
+    "diagprint": "csld_previous"
    },
    {
     "l1": "CSLD DIAGNOSTIC REPORT",
@@ -1062,7 +1077,8 @@
    {
     "l1": "S 1: TANK # NONE",
     "l2": "PUMP OFF",
-    "depth": 0
+    "depth": 0,
+    "live": "pump_sense"
    }
   ]
  },
@@ -1482,42 +1498,53 @@
     "l1": "COMM BOARD: 1 S-LINK",
     "l2": "RSSI: XX BER: XX",
     "depth": 0,
-    "live": "comm_rssi"
+    "live": "comm_rssi",
+    "when": {
+     "code": "S88501",
+     "is": [
+      "03"
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "COMM BOARD: 1 S-LINK",
     "l2": "AUTO CONFIG MODEM: NO",
-    "depth": 0
-   },
-   {
-    "l1": "COMM BOARD: 1 S-LINK",
-    "l2": "AUTO CONFIG MODEM: YES",
-    "depth": 0
-   },
-   {
-    "l1": "AUTO CONFIG MODEM: YES",
-    "l2": "PRESS <STEP> TO CONTINUE",
-    "depth": 0
+    "depth": 0,
+    "act": "modem_config",
+    "then": {
+     "modem_config": "ASKED"
+    }
    },
    {
     "l1": "AUTO CONFIG MODEM: YES",
     "l2": "ARE YOU SURE? : YES",
-    "depth": 0
-   },
-   {
-    "l1": "ARE YOU SURE? : YES",
-    "l2": "PRESS <STEP> TO CONTINUE",
-    "depth": 0
+    "depth": 0,
+    "run": "modem_config_sure",
+    "when": {
+     "sel": "modem_config",
+     "is": [
+      "ASKED",
+      "WORKING"
+     ]
+    },
+    "then": {
+     "modem_config": "WORKING"
+    }
    },
    {
     "l1": "WORKING",
     "l2": "* * * * * * * *",
-    "depth": 1
-   },
-   {
-    "l1": "COMM BOARD: 1 S-LINK",
-    "l2": "MODEM: VR TLS GSM MODEM",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "sel": "modem_config",
+     "is": [
+      "WORKING"
+     ]
+    },
+    "leave": {
+     "modem_config": ""
+    }
    }
   ]
  },
@@ -1528,230 +1555,725 @@
    {
     "l1": "s 1: (Label)",
     "l2": "TYPE: MAG SENSOR",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "SERIAL NUMBER: XXXXXXXX",
     "depth": 0,
-    "live": "ss_serial"
+    "live": "ss_serial",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: MAG SENSOR DIAGS",
     "l2": "PRESS <ENTER>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "TOTAL HT      XX.X IN.",
     "depth": 1,
-    "live": "ss_total_ht"
+    "live": "ss_total_ht",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "FUEL HT       XX.X IN.",
     "depth": 1,
-    "live": "ss_fuel_ht"
+    "live": "ss_fuel_ht",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "WATER HT      XX.X IN.",
     "depth": 1,
-    "live": "ss_water_ht"
+    "live": "ss_water_ht",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "INSTALL POS   XX.X IN.",
     "depth": 1,
-    "live": "ss_install"
+    "live": "ss_install",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "FLUID TEMP  XX.X DEG F",
     "depth": 1,
-    "live": "ss_fluid_temp"
+    "live": "ss_fluid_temp",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "BOARD TEMP  XX.X DEG F",
     "depth": 1,
-    "live": "ss_board_temp"
+    "live": "ss_board_temp",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "COMM DATA PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "CONSTANTS PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Label)",
     "l2": "CHNNL PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "SMART SENSOR INSTALL LOG",
     "l2": "PRESS <PRINT>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "03",
+      "00",
+      ""
+     ],
+     "default": ""
+    }
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
     "l2": "TYPE: VAC SENSOR",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
     "l2": "SERIAL NUMBER XXXXXXXXX",
     "depth": 0,
-    "live": "ss_serial9"
+    "live": "ss_serial9",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "VAC SENSOR DIAGS",
     "l2": "PRESS <ENTER>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "VAC SENSOR MANUAL TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "START MANUAL TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 2,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "SELECT VAC SENSOR",
     "l2": "ALL VAC SENSORS",
-    "depth": 1
+    "depth": 3,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "sel": "vac_pick",
+    "choices_from": "vac_sensors"
    },
    {
     "l1": "START MANUAL TEST: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1,
-    "run": "vac_test_start"
+    "depth": 4,
+    "run": "vac_test_start",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "pick": "vac_pick"
    },
    {
     "l1": "STOP MANUAL TEST",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 2,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
+   },
+   {
+    "l1": "SELECT VAC SENSOR",
+    "l2": "ALL VAC SENSORS",
+    "depth": 3,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "sel": "vac_pick",
+    "choices_from": "vac_sensors"
    },
    {
     "l1": "STOP MANUAL TEST: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1,
-    "run": "vac_test_stop"
+    "depth": 4,
+    "run": "vac_test_stop",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "pick": "vac_pick"
    },
    {
     "l1": "VAC SENSOR EVAC HOLD",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 1,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "START EVAC HOLD",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 2,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
+   },
+   {
+    "l1": "SELECT VAC SENSOR",
+    "l2": "ALL VAC SENSORS",
+    "depth": 3,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "sel": "vac_pick",
+    "choices_from": "vac_sensors"
    },
    {
     "l1": "START EVAC HOLD: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1,
-    "run": "vac_hold_start"
+    "depth": 4,
+    "run": "vac_hold_start",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "pick": "vac_pick"
    },
    {
     "l1": "STOP EVAC HOLD",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 2,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
+   },
+   {
+    "l1": "SELECT VAC SENSOR",
+    "l2": "ALL VAC SENSORS",
+    "depth": 3,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "sel": "vac_pick",
+    "choices_from": "vac_sensors"
    },
    {
     "l1": "STOP EVAC HOLD: ALL",
     "l2": "PRESS <ENTER>",
-    "depth": 1,
-    "run": "vac_hold_stop"
+    "depth": 4,
+    "run": "vac_hold_stop",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    },
+    "pick": "vac_pick"
    },
    {
     "l1": "s 1: VACUUM OK",
     "l2": "-7.14 PSI VCV: CLOSED",
     "depth": 0,
-    "live": "vac_state"
+    "live": "vac_state",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
     "l2": "FLUID STATUS: NORMAL",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
     "l2": "LEAK RATE:    0.123 GPH",
     "depth": 0,
-    "live": "vac_rate"
+    "live": "vac_rate",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
     "l2": "NO VAC TIME:      150:20",
     "depth": 0,
-    "live": "vac_no_vac"
+    "live": "vac_no_vac",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: MM-DD-YY  HH:MM XM",
     "l2": "EVAC RATIO:5.2 @-4.1PSI",
     "depth": 0,
-    "live": "vac_ratio"
+    "live": "vac_ratio",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 1: (Vac Sensor Label)",
     "l2": "COMM DATA PRESS <PRINT>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "CONSTANTS PRESS <PRINT>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: (Vac Sensor Label)",
+    "l2": "CHANNELS PRESS <PRINT>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "SMART SENSOR INSTALL LOG",
     "l2": "PRESS <PRINT>",
-    "depth": 0
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "04"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "TYPE: ATMP SENSOR",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "SERIAL NUMBER XXXXXXXXX",
-    "depth": 1,
-    "live": "ss_serial9"
+    "depth": 0,
+    "live": "ss_serial9",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "ATM P SENSOR DIAGS",
     "l2": "PRESS <ENTER>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "ATM PRESSURE: XX.XXX PSI",
     "depth": 1,
-    "live": "ss_atm"
+    "live": "ss_atm",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "COMM DATA PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "CONSTANTS PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "s 8: (ATMP Sensor Label)",
     "l2": "CHANNELS PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
    },
    {
     "l1": "SMART SENSOR INSTALL LOG",
     "l2": "PRESS <PRINT>",
-    "depth": 1
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "05"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "COMM DATA PRESS <PRINT>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "01",
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "CONSTANTS PRESS <PRINT>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "01",
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: (Label)",
+    "l2": "CHANNELS PRESS <PRINT>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "01",
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "CALIBRATE SMARTSENSOR",
+    "l2": "PRESS <ENTER>",
+    "depth": 0,
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "CALIBRATE SMARTSENSOR",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 1,
+    "diagprint": "ps_calibration",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "s 1: VAPOR PRESSURE",
+    "l2": "PRESSURE: -XX.XXX",
+    "depth": 1,
+    "live": "ps_raw",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "ENTER ZERO REFERENCE",
+    "l2": "PRESSURE: +XX.XXX",
+    "depth": 1,
+    "live": "ps_zero_ref",
+    "buf": "ps_zero",
+    "prompt": "PRESSURE:",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "READ ZERO VALUE",
+    "l2": "PRESSURE: -XX.XXX",
+    "depth": 1,
+    "live": "ps_raw",
+    "capture": "zero",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "ENTER SPAN REFERENCE",
+    "l2": "PRESSURE: -XX.XXX",
+    "depth": 1,
+    "live": "ps_span_ref",
+    "buf": "ps_span",
+    "prompt": "PRESSURE:",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "READ SPAN VALUE",
+    "l2": "PRESSURE: -XX.XXX",
+    "depth": 1,
+    "live": "ps_raw",
+    "capture": "span",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
+   },
+   {
+    "l1": "CALB STATUS: PASS",
+    "l2": "PRESS <STEP> TO CONTINUE",
+    "depth": 1,
+    "live": "ps_calb",
+    "when": {
+     "code": "S72301",
+     "is": [
+      "02"
+     ]
+    }
    }
   ]
  },
@@ -1824,7 +2346,7 @@
   },
   "screens": [
    {
-    "l1": "PMC VERSION: 01.00",
+    "l1": "PMC VERSION: 01.03",
     "l2": "PRESS <STEP> TO CONTINUE"
    },
    {
@@ -1835,11 +2357,14 @@
    },
    {
     "l1": "VAPOR PROCESSOR MODE",
-    "l2": "AUTOMATIC"
+    "l2": "AUTOMATIC",
+    "live": "pmc_mode",
+    "vp": "membrane"
    },
    {
     "l1": "VAPOR PROCESSOR STATE",
     "l2": "VP STATE:  OFF",
+    "live": "pmc_state",
     "vp": "membrane"
    },
    {
@@ -1861,9 +2386,9 @@
     "vp": "polisher"
    },
    {
-    "l1": "VAPOR VALVE POSITION",
-    "l2": "REQUESTED: CLOSED",
-    "live": "pmc_valve_req",
+    "l1": "VAPOR PROCESSOR MODE",
+    "l2": "AUTOMATIC",
+    "live": "pmc_mode",
     "vp": "polisher"
    },
    {
@@ -1873,9 +2398,34 @@
     "vp": "polisher"
    },
    {
+    "l1": "VAPOR VALVE POSITION",
+    "l2": "REQUESTED: CLOSED",
+    "live": "pmc_valve_req",
+    "vp": "polisher"
+   },
+   {
     "l1": "TEMPERATURE SENSOR",
     "l2": "XX.XX DEG F",
     "live": "pmc_temp",
+    "vp": "polisher"
+   },
+   {
+    "l1": "CLEAR TEST AFTER REPAIR",
+    "l2": "PRESS <ENTER>",
+    "depth": 0,
+    "vp": "polisher"
+   },
+   {
+    "l1": "PROCESSOR STATUS TEST",
+    "l2": "PRESS <ENTER>",
+    "depth": 1,
+    "vp": "polisher"
+   },
+   {
+    "l1": "CLEAR TEST AFTER REPAIR",
+    "l2": "ARE YOU SURE? NO",
+    "depth": 2,
+    "act": "pmc_clear",
     "vp": "polisher"
    }
   ]
@@ -1883,11 +2433,6 @@
  {
   "function": "ARCHIVE DIAGNOSTIC",
   "requires": null,
-  "screens": [
-   {
-    "l1": "ARCHIVE",
-    "l2": "PRESS <STEP> TO CONTINUE"
-   }
-  ]
+  "screens": []
  }
 ]

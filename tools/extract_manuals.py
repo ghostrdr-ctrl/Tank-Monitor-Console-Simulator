@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Extract the reference PDFs to text, one line per line the PAGE shows.
 
 The obvious extraction -- `page.get_text()` -- returns the text runs in the
@@ -144,6 +147,70 @@ def page_lines(page):
     return out
 
 
+def _has_marks(page):
+    """Is there anything on this page but white space?
+
+    A page that extracts to nothing is one of two very different things. It
+    can be blank paper or a shared back cover, in which case there is nothing
+    to find; or it can be a scan, an engineering drawing or a typeset
+    equation stored as vector outlines, in which case **the page is full of
+    content that no grep over the `.txt` can ever reach**. Only the second
+    kind is worth telling anybody about.
+
+    Both were found on this shelf on 2026-09-17 and the difference cost real
+    work. CARB CP-201's Equations 4-1 and 4-2 are images: three separate
+    research passes reached that section, found prose with every constant
+    missing, and reported that the document did not carry the table.
+    `US5665895`'s figure sheets are the same, and UNKNOWNS A9 recorded "a
+    search of all 39 pages returns zero hits ... this route is closed" about
+    four pages a search could not see. 330160-000 is four sheets of drawing
+    with no extractable character anywhere, and nobody had read it.
+
+    Images and INKED drawings, then. The distinction that separates the two
+    kinds is clean on this shelf: 330160-000's first sheet is 298 black
+    strokes and one white fill, where the Operator's Manual's blank last page
+    and both VLLD p.4s are a white fill and nothing else. So a page painted
+    white is still a blank page, and only a stroke or a fill of some other
+    colour is a mark. Without that test this warning fires on eight pages of
+    blank paper and stops being worth reading.
+    """
+    try:
+        if page.get_images():
+            return True
+    except Exception:                                  # pragma: no cover
+        pass
+    try:
+        drawings = page.get_drawings()
+    except Exception:                                  # pragma: no cover
+        return False
+    for item in drawings:
+        if item.get("color") is not None:
+            return True                                # a stroke of any colour
+        fill = item.get("fill")
+        if fill is not None and tuple(fill) != (1.0, 1.0, 1.0):
+            return True
+    return False
+
+
+def _warn_blind(name, blind, pages):
+    """Say which pages have to be READ, because grep cannot reach them.
+
+    Loud on purpose, and only for the dangerous class. A quiet note here is
+    how a blind page becomes a closed UNKNOWNS entry: see A8, A9 and A77.
+    """
+    if not blind:
+        return
+    shown = ", ".join(str(p) for p in blind[:14])
+    if len(blind) > 14:
+        shown += f", ... ({len(blind)} pages)"
+    print(f"        !! BLIND: pp. {shown}")
+    print("        !! those pages carry marks and extract to NOTHING -- "
+          "render them to read them; no grep can.")
+    if pages and len(blind) >= 0.9 * pages:
+        print(f"        !! {name} is {len(blind)}/{pages} blind: treat the "
+              f"whole document as unsearchable.")
+
+
 def main():
     n = 0
     for pdf in sorted(glob.glob(os.path.join(REF, "*.pdf"))):
@@ -158,12 +225,17 @@ def main():
             print(f"FAIL    {os.path.basename(pdf)}: {exc}")
             continue
         parts = []
+        blind = []
         for i, page in enumerate(doc):
+            lines = page_lines(page)
             parts.append(f"\n<<<PAGE {i + 1}>>>\n")
-            parts.append("\n".join(page_lines(page)))
+            parts.append("\n".join(lines))
             parts.append("\n")
+            if not any(line.strip() for line in lines) and _has_marks(page):
+                blind.append(i + 1)
         open(out, "w", encoding="utf-8").write("".join(parts))
         print(f"wrote   {os.path.basename(pdf)}: {len(doc)} pages")
+        _warn_blind(os.path.basename(pdf), blind, len(doc))
         doc.close()
         n += 1
     print(f"{n} extracted")

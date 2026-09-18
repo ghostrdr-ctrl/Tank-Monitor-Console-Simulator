@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Business Inventory Reconciliation: meters against the probe.
 
 A shift reconciliation report is eight numbers per tank, and the manual lists
@@ -93,8 +96,8 @@ class BIR:
 
         576013-623 Rev AN p.17-4: "Select STANDARD (the default) if the
         meters are not temperature compensated. Select TC VOLUME if the
-        meters are temperature compensated (**the calculation of all BIR
-        volumes will be based on the TC value**)." 576013-818 p.12-2 says
+        meters are temperature compensated (the calculation of all BIR
+        volumes will be based on the TC value)." 576013-818 p.12-2 says
         what a wrong answer costs: "If the meters are reporting temperature
         compensated volumes, this entry must be set to YES. Incorrect
         setting of this entry will result in variance errors."
@@ -145,8 +148,8 @@ class BIR:
         """The tank a manifolded set reconciles under.
 
         576013-818 p.12-8: "In the case of manifolded tanks, the meter is
-        mapped to the primary tank. **The primary tank is defined as the
-        lowest numbered tank in the manifolded set.**" 576013-623 p.17-6
+        mapped to the primary tank. The primary tank is defined as the
+        lowest numbered tank in the manifolded set." 576013-623 p.17-6
         says it from the setup side and adds the consequence: "only the
         primary tank needs to be entered for a manifolded set of tanks ...
         If a tank number is entered that is part of a manifolded set, but it
@@ -168,10 +171,10 @@ class BIR:
         siphon carried it and none of the sales, which are mapped to the
         primary -- and showed a large permanent phantom variance.
 
-        *The tank line has two spellings in one chapter, as its title does:
+        The tank line has two spellings in one chapter, as its title does:
         p.12-27 writes `T1: BLUE WEST Primary` and p.12-30 writes
         `T 1:UNLEADED`. The console follows p.12-30 for both, so its head
-        and its columns come from one page.*
+        and its columns come from one page.
         """
         return ["T %d:%s" % (n, self.c.text("602", n) or "TANK %d" % n)
                 for n in self.set_of(tank)]
@@ -220,9 +223,9 @@ class BIR:
         contain meter transactions from a tank(s) in which there is no
         probe. Unable to match the transaction with a corresponding height
         change, the tank-meter mapping algorithm will declare the map
-        incomplete and BIR will be inhibited. **You must manually map a
+        incomplete and BIR will be inhibited. You must manually map a
         'probeless' meter into the tank/meter map before it will be declared
-        complete and BIR can begin.**"
+        complete and BIR can begin."
 
         So mapping a meter to the probeless tank is what COMPLETES the map,
         and this asked `available` about tank -1, which is not a tank and
@@ -311,7 +314,7 @@ class BIR:
         which stays unmapped until somebody maps it to tank -1 by hand. See
         `mapped` and FIDELITY G8.
 
-        **A console that has mapped nothing has an incomplete map**, and
+        A console that has mapped nothing has an incomplete map, and
         that is the captured hardware rather than a reading of the page: a
         TLS-350 running 326.01 with no meters at all answers I@A002 with
         `MAP IS INCOMPLETE`. Vacuous truth would make it complete, which is
@@ -337,8 +340,8 @@ class BIR:
         their transactions match height changes, which is what restarting
         the mapping means.
 
-        **The Adjusted Delivery Reports are the one this console cannot
-        separate**, and it is worth saying which way. It derives both that
+        The Adjusted Delivery Reports are the one this console cannot
+        separate, and it is worth saying which way. It derives both that
         report and the In-Tank Delivery Report from one store of delivery
         records, and Figure 6-24 asks for only the first. Clearing the
         store would take a report the page does not name -- the one S051
@@ -406,6 +409,21 @@ class BIR:
         return [t for t in sorted(self.c.tank_level) if self.covers(t)]
 
     # ---- what the dispensers do --------------------------------------------
+    def open_periods(self):
+        """Every reconciled tank has all four periods running.
+
+        Called BEFORE `Sales.draw` takes the interval's fuel, so a period
+        opens on what the probe read before anything in this interval moved
+        the level -- or the first interval's fuel goes missing from the
+        opening figure. `tick` opens them too, for a console whose key was
+        fitted between the two calls, but by then the fuel has moved.
+        """
+        if self._last is None or not self.enabled():
+            return
+        for tank in self.tanks():
+            for kind in KINDS:
+                self._open(tank, kind)
+
     def tick(self):
         now = time.mktime(self.c.now())
         last, self._last = self._last, now
@@ -421,7 +439,13 @@ class BIR:
         self._scheduled(now)
 
     def _dispense(self, hours):
-        """Meters sell fuel, and the tank they are mapped to goes down."""
+        """Meters sell fuel, and the sale is booked against its tank.
+
+        The fuel itself has already left: `Sales.draw` moved it, before
+        this looked, and `drawn` says how much per meter. What is decided
+        here is whether the console gets to KNOW -- which needs a DIM in
+        the cage with its link up -- and what the meter says about it.
+        """
         shutdown = self.c.isd_shutdown_active()
         # Metered transactions reach the console through a DIM; with no DIM
         # in the cage, or the DIM link faulted, there is no meter data and
@@ -463,10 +487,9 @@ class BIR:
             # what makes the flag being wrong visible.
             periods = ([self._open(owner, kind) for kind in KINDS]
                        if self.covers(owner) else [])
-            gallons = min(rate * hours, st.get("volume", 0.0))
+            gallons = float(self.c.sales.drawn.get(meter, 0.0))
             if gallons <= 0:
                 continue
-            st["volume"] = max(0.0, st["volume"] - gallons)
             # What LEFT the tank is `gallons`. What the METER says left it is
             # `gallons` adjusted by its calibration offset, and the gap
             # between those two is precisely what a reconciliation measures:
@@ -564,16 +587,70 @@ class BIR:
         for kind in KINDS:
             self._open(tank, kind)["ticketed"] += gallons
 
-    def adjust(self, tank, gallons, kind=None):
+    def adjust(self, tank, gallons, kind=None, previous=False, day=None):
         """"Manually entered adjustments for period": S79B and S79C.
 
         An adjustment against a shift is also an adjustment to the day and the
         period containing it, so it lands in all of them; naming a kind is how
         the panel says which period the operator was looking at.
+
+        And the period it names can have closed. 576013-610 Rev AC
+        p.28-19: "You can adjust the volume for the previous or current shift
+        or for any day in the period", and p.28-20 asks for "the desired
+        closing date for the adjustment". Every adjustment used to land in
+        the OPEN periods whatever the panel was pointed at, so forty gallons
+        entered on SELECT SHIFT: PREVIOUS went into the shift that was
+        running. A closed row's calculated inventory and its variance were
+        worked out when it closed, so both move with the adjustment, and so
+        does every coarser period holding that moment, closed or still open.
+        None when the panel names a period this console no longer holds.
+        See FIDELITY Q1.
         """
-        for one in KINDS:
-            self._open(self.primary(tank), one)["adjust"] += gallons
-        return self._open(tank, kind or "shift")
+        primary = self.primary(tank)
+        kind = kind or "shift"
+        target = None
+        if day is not None and kind == "daily":
+            today = time.strftime("%Y%m%d", self.c.now())
+            if time.strftime("%Y%m%d", time.localtime(day)) != today:
+                target = self._closed_on(primary, day)
+                if target is None:
+                    return None
+        elif previous:
+            target = self.last(primary, kind)
+            if target is None:
+                return None
+        if target is None:
+            for one in KINDS:
+                self._open(primary, one)["adjust"] += gallons
+            return self._open(tank, kind)
+        moment = target["closed"] - 1.0
+        for one in KINDS[KINDS.index(kind):]:
+            row = target if one == kind else self._holding(primary, one,
+                                                           moment)
+            if row is None:
+                continue
+            row["adjust"] += gallons
+            if "calculated" in row:
+                # a closed row carries the figures it closed with
+                row["calculated"] += gallons
+                row["variance"] = row["physical"] - row["calculated"]
+        return target
+
+    def _holding(self, tank, kind, moment):
+        """The period of that kind the moment falls in.
+
+        A closed row that spans it, or else the running period -- when
+        nothing of that kind has closed since the moment. A period is opened
+        the first time something touches it, so a day nobody has sold into
+        yet still holds the shift that closed inside it.
+        """
+        rows = self.closed.get((tank, kind)) or []
+        for row in rows:
+            if row["opened"] <= moment <= row["closed"]:
+                return row
+        if not rows or rows[0]["closed"] < moment:
+            return self._open(tank, kind)
+        return None
 
     # ---- closing ------------------------------------------------------------
     def _scheduled(self, now):
@@ -597,7 +674,7 @@ class BIR:
         daily = (self.c.values.get("S79300") or "").strip()
         if len(daily) == 4 and daily.isdigit():
             times.append(("daily", daily))
-        # **Every close that came due, not the first one.** This loop used
+        # Every close that came due, not the first one. This loop used
         # to `return` on the first, and `_before` then advanced past the
         # rest, so a second close due in the same window was lost for good.
         # 576013-623 p.17-2 tells a site to arrange exactly that -- "Shift
@@ -630,7 +707,7 @@ class BIR:
                 continue
             self.close(kind, at=due)
             if kind == "daily":
-                self._week_and_period(due, stamp)
+                self._week_and_period(due)
 
     def _dispensing(self):
         """Is any mapped meter selling right now? A close waits for idle.
@@ -698,9 +775,16 @@ class BIR:
                            + f"{tank:02d}")
         return out
 
-    def _week_and_period(self, due, stamp):
+    def _week_and_period(self, due):
         """The week and the period close on the day, not on a clock of their
-        own: the week on Close Day Of Week, the period monthly or rolling."""
+        own: the week on Close Day Of Week, the period monthly or rolling.
+
+        On the day the daily close came DUE, which is the day it closes.
+        This asked the moment the tick ran instead, so a close held pending
+        past midnight, or reached by a tick that crossed one, missed its
+        week and its month or took them twice. FIDELITY G14.
+        """
+        stamp = time.localtime(due)
         close_day = (self.c.values.get("S51E00") or "").strip()[-1:]
         # S51E counts from Sunday, tm_wday from Monday
         if close_day.isdigit() and stamp.tm_wday == (int(close_day) + 6) % 7:
@@ -833,6 +917,11 @@ class BIR:
         want = time.strftime("%Y%m%d", time.localtime(when))
         if want == time.strftime("%Y%m%d", self.c.now()):
             return self.current(tank, "daily")
+        return self._closed_on(tank, when)
+
+    def _closed_on(self, tank, when):
+        """The closed daily row whose closing date is that day, or None."""
+        want = time.strftime("%Y%m%d", time.localtime(when))
         for row in self.closed.get((tank, "daily")) or []:
             if time.strftime("%Y%m%d", time.localtime(row["closed"])) == want:
                 return row
@@ -846,8 +935,8 @@ class BIR:
     def analysis(self, row):
         """The seven numbers a Variance Analysis Report is made of.
 
-        **Both of the first two are SIGNED against the manual's own printed
-        samples, and the prose is not unanimous about either.** See FIDELITY
+        Both of the first two are SIGNED against the manual's own printed
+        samples, and the prose is not unanimous about either. See FIDELITY
         G9; the rule is the file's own -- an example is a test somebody else
         already wrote, and a sample beats a sentence.
 
@@ -856,8 +945,8 @@ class BIR:
         delivery volume+manual adjustments)-(closing gauged volume)", and
         576013-623 p.5-6, "the difference between book inventory and closing
         gauged volume" -- and two say the reverse, p.28-10's own bullet under
-        BOOK VARIANCE REPORTS and p.28-11's STEP walk. **Both samples settle
-        it**: `BOOK INV 9704` over `GAUGED INV 8904` prints `VAR : 800 GAL`,
+        BOOK VARIANCE REPORTS and p.28-11's STEP walk. Both samples settle
+        it: `BOOK INV 9704` over `GAUGED INV 8904` prints `VAR : 800 GAL`,
         and the Variance Analysis sample prints `BOOK VAR : 800 GAL` for the
         same site. A tank 800 gallons short of its book reads +800, which is
         also the sign a loss report wants.

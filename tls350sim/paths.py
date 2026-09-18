@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Where this program is, and where it is allowed to write.
 
 Run from a source tree, the console keeps its programming next to `run.py`,
@@ -68,6 +71,17 @@ def user_data_dir():
     d = os.path.join(base, PUBLISHER, APP_NAME)
     os.makedirs(d, exist_ok=True)
     return d
+
+
+def default_capture_file():
+    """Where an exposed console appends its capture when none was named.
+
+    Under the user's own directory, never beside the program: a capture is
+    the one thing an exposed instance writes, it grows without limit, and a
+    program directory is the wrong place for both of those. It is NOT
+    covered by the write freeze -- see `exposed.Capture`.
+    """
+    return os.path.join(user_data_dir(), "capture.jsonl")
 
 
 def default_state_file():

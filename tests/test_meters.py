@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Meter detail: the map, the offsets, and what an offset actually does.
 
 A calibration offset that nothing applies is a stored number, not a setting.
@@ -149,6 +152,10 @@ class AnOffsetMakesAVariance(unittest.TestCase):
         c.meters[1] = 1
         c.meter_flow[1] = 100.0
         before = c.tank_level[1]["volume"]
+        # the fuel leaves through `Sales.draw` and BIR books what it drew,
+        # in the order `Console.tick` runs them. `_dispense` alone moves
+        # nothing any more, and read an empty book.
+        c.sales.draw(1.0)
         c.bir._dispense(1.0)
         drop = before - c.tank_level[1]["volume"]
         return drop, c.bir.totals[1]

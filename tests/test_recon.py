@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Sections 7.5 and 7.6: reconciliation and variance analysis reports."""
 import os
 import sys
@@ -719,20 +722,41 @@ class ThePeriodicModeIsTheManualsWayRound(unittest.TestCase):
             self.assertNotIn("9999", send(h, "S79A00" + value), value)
             self.assertIn(want, send(h, "I79A00"), value)
 
-    def closes_on(self, mode, day_of_month, length_days=31):
+    def closes_on(self, mode, day_of_month=None, length_days=31,
+                  days_open=None):
         """Whether the periodic period closes when the daily one does.
 
-        `_week_and_period` is the branch under test, called with the day the
-        daily close fell on -- which is how `_scheduled` calls it.
+        `_week_and_period` is the branch under test, called with the moment
+        the daily close came due -- which is how `_scheduled` calls it.
+
+        The two branches are asked two different questions, so there are two
+        ways to say when the close came due. MONTHLY closes on a calendar
+        day, so `day_of_month` names one. ROLLING closes when its own window
+        is up, which is a DURATION and not a date, so `days_open` counts
+        from the moment the period actually opened.
+
+        Saying the rolling one as a day of the month is what broke this: the
+        assertion was `day_of_month=17` against a one-day window, which is
+        really "the 17th is at least a day after today" -- true only while
+        the console's own day of the month is 16 or less. `a_site` pins the
+        HOUR and not the DATE, so it passed until 2026-09-17 and failed
+        every day after. Counting seconds from `opened` has no such expiry,
+        and is not a DST hazard the way adding calendar days would be.
         """
         c, _h = a_site()
         c.values["S79500"] = mode
         c.values["S79600"] = f"{length_days:02d}"
-        stamp = list(time.localtime(time.mktime(c.now())))
-        stamp[2] = day_of_month
-        due = time.mktime(time.struct_time(tuple(stamp)))
+        if days_open is not None:
+            # the same `opened` the branch itself reduces over
+            first = min((p["opened"] for (_t, k), p in c.bir.period.items()
+                         if k == "periodic"), default=time.mktime(c.now()))
+            due = first + days_open * 86400
+        else:
+            stamp = list(time.localtime(time.mktime(c.now())))
+            stamp[2] = day_of_month
+            due = time.mktime(time.struct_time(tuple(stamp)))
         before = len(c.bir.closed.get((1, "periodic")) or [])
-        c.bir._week_and_period(due, time.struct_time(tuple(stamp)))
+        c.bir._week_and_period(due)
         return len(c.bir.closed.get((1, "periodic")) or []) > before
 
     def test_monthly_closes_on_the_first_of_the_month(self):
@@ -748,8 +772,17 @@ class ThePeriodicModeIsTheManualsWayRound(unittest.TestCase):
         self.assertFalse(self.closes_on("02", day_of_month=17))
 
     def test_rolling_closes_when_its_window_is_up(self):
-        self.assertTrue(self.closes_on("02", day_of_month=17,
-                                       length_days=1))
+        """"the length of the reconciliation period" is the whole of it: the
+        window is up when it has been open that many days, and not before.
+
+        The sibling above proves a rolling period is not due on a calendar
+        day; this proves the length is what decides, at the shortest window
+        and at the 31-day default.
+        """
+        self.assertFalse(self.closes_on("02", days_open=0, length_days=1))
+        self.assertTrue(self.closes_on("02", days_open=1, length_days=1))
+        self.assertFalse(self.closes_on("02", days_open=30))
+        self.assertTrue(self.closes_on("02", days_open=31))
 
     def test_a_one_character_value_means_the_same_digit(self):
         """A backup written before the width was fixed still restores to the
@@ -902,6 +935,39 @@ class TheVarianceAnalysisPrintsAllOfP2818(unittest.TestCase):
         self.assertIn("022401", c.compute_alarms())
         self.assertEqual(c.corrective_actions(1, var)[:2],
                          ["RECALIBRATE TANK CHART", "T1"])
+
+
+class TheWeekClosesOnTheDayItCameDue(unittest.TestCase):
+    """FIDELITY G14. The weekly and monthly closes asked the day the tick
+    ran rather than the day the daily close was due."""
+
+    KINDS = ("shift", "daily", "weekly", "periodic")
+
+    def counts(self, c):
+        return {k: len(c.bir.closed.get((1, k)) or []) for k in self.KINDS}
+
+    def a_stop(self, at):
+        c = Console()
+        presets.load(c, "Truck stop, four tanks and BIR")
+        c.clock_offset = time.mktime(at) - time.time()
+        for meter in c.meters:
+            c.meter_flow[meter] = 0.0
+        return c
+
+    def test_a_close_due_before_midnight_closes_its_own_week(self):
+        start = (2026, 9, 12, 23, 0, 0, 0, 1, -1)
+        c = self.a_stop(start)
+        weekday = time.localtime(time.mktime(start)).tm_wday
+        c.values["S79300"] = "2350"
+        c.values["S51E00"] = str((weekday + 1) % 7)
+        c.tick()
+        before = self.counts(c)
+        c.clock_offset += 90 * 60.0          # one tick, 23:00 to 00:30
+        c.tick()
+        after = self.counts(c)
+        self.assertEqual((after["daily"] - before["daily"],
+                          after["weekly"] - before["weekly"]), (1, 1))
+
 
 
 if __name__ == "__main__":
@@ -1435,7 +1501,13 @@ class TheVarianceSignsAreThePrintedSamples(unittest.TestCase):
         c.tank_level[1]["volume"] = row["physical"]
         delivery = printer.delivery_variance(c, [1])
         analysis = printer.variance_analysis(c, [1])
-        self.assertIn("DLVY VAR   :        99 GAL", delivery)
+        # p.28-10's own line, now that the report is drawn on that page's
+        # grid rather than three characters wider than the roll -- the
+        # sample's own 800, 899 and 99 land in the sample's own columns.
+        # FIDELITY T13.
+        self.assertIn("TICKET VOL :     800 GAL", delivery)
+        self.assertIn("GAUGED VOL :     899 GAL", delivery)
+        self.assertIn("DLVY VAR   :      99 GAL", delivery)
         self.assertIn("DLVY VAR      : -99 GAL", analysis)
         self.assertIn("BOOK VAR      : 800 GAL", analysis)
         self.assertIn("SALE VAR      : 899 GAL", analysis)

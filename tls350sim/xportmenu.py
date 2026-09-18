@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The XPort's telnet setup menu on port 9999.
 
 This is the screen a technician programs the card from, so it is reproduced
@@ -35,11 +38,13 @@ a connect mode with the host-list bit set replaces the remote-address
 prompts with the host-list editor -- which is exactly how the firmware
 behaves and exactly what a technician has to learn.
 """
+import hmac
 import socket
 import threading
 import time
 
 from . import xportrec as R
+from . import exposed
 from . import xport as _x
 
 # The two orders the firmware writes a newline in. Named so the screens below
@@ -130,6 +135,17 @@ def _octet(line, current):
     return v & 0xFF if 0 <= v <= 255 else current
 
 
+# The most of one line the setup menu keeps. The longest value any of its
+# prompts stores is an e-mail recipient, a 49-byte record field (`xportrec`
+# R1EM_OFF), so this is room for that and more. What the card itself does
+# past its own limit is not on the shelf. See CLOSED Z4.
+LONGEST_LINE = 128
+
+# The challenge shown on 9999 when a setup password is programmed. See the
+# note in `feed`: the wording is this emulator's, not the captured card's.
+PASSWORD_PROMPT = b"\r\nPassword : "
+
+
 class SetupSession:
     """One telnet session on port 9999.
 
@@ -141,11 +157,19 @@ class SetupSession:
     hardware.
     """
 
-    def __init__(self, config, send, log=None):
+    def __init__(self, config, send, log=None, capture=None):
+        # Kept for the capture: what an exposed card was asked to
+        # become by someone walking the menu, and did not.
+        self.capture = capture
+        self.deflected = []
         self.config = config
         self.send = send
         self.log = log
         self.entered = False
+        # Set once the Enter gate is passed and a password is programmed:
+        # the next line is the answer to the challenge, not a menu choice.
+        self._want_password = False
+        self._password_tries = 0
         self.opened = time.monotonic()
         self._closed = False
         self._buf = bytearray()
@@ -243,6 +267,9 @@ class SetupSession:
                     self._buf.clear()
                     self.feed(ch.decode("latin-1"))
                     continue
+                if len(self._buf) >= LONGEST_LINE:
+                    # no room for it, so it is not kept and not echoed
+                    continue
                 self._buf.append(b)
                 self.out(ch)
         return not self._closed
@@ -255,9 +282,33 @@ class SetupSession:
             # Any return within the window opens setup; the content of the
             # line does not matter, only that a return arrived.
             self.entered = True
+            if self.config.telnet_password:
+                # ... unless a password is programmed, and then the card
+                # asks for it. This menu did not: it read the password when
+                # option 1 SET one, printed it in the Security walk, and
+                # never once checked it -- so an operator who set a setup
+                # password locked the web manager (`xportweb._authorised`
+                # does enforce the same secret) and left this door wide
+                # open. One telnet and one Enter got the whole parameter
+                # dump -- address, gateway, netmask, every Security flag,
+                # the SNMP community, the hostlist, the e-mail recipients --
+                # and the Change Setup menu behind it.
+                #
+                # INFERRED, and the one thing here that is: the capture in
+                # reference/lantronix_xport_capture.md was taken from a card
+                # with no password set, so the prompt was never recorded.
+                # Real XPort firmware does challenge on 9999 -- that is what
+                # the setting is for, and what the web manager already
+                # assumes -- but the exact wording below is this emulator's
+                # and is not claimed to be the card's.
+                self._want_password = True
+                self.out(PASSWORD_PROMPT)
+                return True
             self.out(self.dump())
             self.out(MENU)
             return True
+        if getattr(self, "_want_password", False):
+            return self._answer_password(line)
         if self._walk is None:
             self._choose(line.strip())
             return not self._closed
@@ -272,6 +323,34 @@ class SetupSession:
                 self._keypress = False
                 self.out((stop.value or b"") + MENU)
         return not self._closed
+
+    def _answer_password(self, line):
+        """Check the setup password, and drop the session if it is wrong.
+
+        `hmac.compare_digest` rather than `==`: the secret is short and the
+        comparison is cheap to make constant-time, so there is no reason to
+        leave a timing signal in it.
+
+        Three tries and the connection goes, which is what stops this being
+        a free oracle over a four-character code. A real card drops the
+        session too, and the count is this emulator's choice.
+        """
+        given = (line or "").strip()
+        want = self.config.telnet_password or ""
+        if hmac.compare_digest(given, want):
+            self._want_password = False
+            self.out(self.dump())
+            self.out(MENU)
+            return True
+        self._password_tries = getattr(self, "_password_tries", 0) + 1
+        if self.log:
+            self.log("-- XPort setup: wrong password (try %d)"
+                     % self._password_tries)
+        if self._password_tries >= 3:
+            self.close()
+            return False
+        self.out(PASSWORD_PROMPT)
+        return True
 
     def _start(self, walk):
         """Run a submenu generator up to its first prompt."""
@@ -315,7 +394,28 @@ class SetupSession:
             self.out(MENU)
 
     def commit(self):
-        """Write the working copy back and save it, as option 9 does."""
+        """Write the working copy back and save it, as option 9 does.
+
+        On an exposed card this stores nothing. Option 9 still prints
+        "Parameters stored ..." and still drops the session, because a
+        setup menu that refused its own save would be the loudest possible
+        announcement that this is not a card -- but the address, the tunnel
+        port and the security flags underneath are untouched, so a stranger
+        cannot walk the menu and move the honeypot somewhere it cannot be
+        reached. The same deflection as the web manager's Apply Settings;
+        `xportweb.WebState._deflect` explains why it is a lie rather than a
+        refusal. What was attempted is kept for the capture.
+        """
+        if exposed.writes_frozen():
+            self.deflected.append((time.time(), self.edit.ip,
+                                   self.edit.port))
+            del self.deflected[:-50]
+            if self.capture is not None:
+                self.capture.event("deflected", proto="setup",
+                                   note="menu save: not applied (exposed) "
+                                        "-- asked for %s:%s"
+                                        % (self.edit.ip, self.edit.port))
+            return
         for num, data in self.edit.recs.as_dict().items():
             self.config.recs.put(num, data)
         self.config.security = dict(self.edit.security)
@@ -725,7 +825,7 @@ class SetupSession:
 
 
 def serve_setup(config, host="0.0.0.0", log=None, powered=None,
-                on_socket=None):
+                on_socket=None, policy=None, gate=None, capture=None):
     """Accept telnet sessions on 9999, one at a time as the card does.
 
     `on_socket` is handed the listening socket, so the card's network
@@ -754,32 +854,68 @@ def serve_setup(config, host="0.0.0.0", log=None, powered=None,
         if not (config.security.get("telnet_setup", True) and powered()):
             conn.close()
             continue
-        threading.Thread(target=_session, args=(config, conn, log),
-                         daemon=True).start()
+        threading.Thread(
+            target=_session, args=(config, conn, log),
+            kwargs={"peer": addr, "policy": policy, "gate": gate,
+                    "capture": capture},
+            daemon=True).start()
 
 
-def _session(config, conn, log=None):
-    try:
-        conn.settimeout(1.0)
-        s = SetupSession(config, lambda d: conn.sendall(d), log=log)
-        while not s.closed:
+def _session(config, conn, log=None, peer=None, policy=None, gate=None,
+             capture=None):
+    """One telnet setup session.
+
+    The idle timeout here is 1.0 s and always has been, but it is not a
+    session limit: it exists so the Enter gate can be timed, and once the
+    gate is PASSED `gate_expired()` is false for ever, so the loop goes
+    round on timeouts indefinitely and a connection that says nothing more
+    holds its thread until the process ends. On a bench that is a session
+    somebody forgot to close. On a public address it is the whole attack.
+    `deadline` is the ceiling that was missing.
+    """
+    ip = peer[0] if peer else None
+    deadline = None
+    if policy is not None and policy.idle_timeout:
+        # Generous next to the tunnel's: walking the menu by hand is slow,
+        # and the card's own session is meant to be sat in.
+        deadline = time.monotonic() + max(120.0, policy.idle_timeout * 4)
+    with exposed.session(gate, ip) as admitted:
+        if not admitted:
             try:
-                data = conn.recv(1024)
-            except socket.timeout:
-                # The card drops a session that never answers the gate.
-                if s.gate_expired():
-                    break
-                continue
+                conn.close()
             except OSError:
-                break
-            if not data:
-                break
-            if not s.feed_bytes(data):
-                break
-    except OSError:
-        pass
-    finally:
+                pass
+            return
         try:
-            conn.close()
+            conn.settimeout(1.0)
+            s = SetupSession(config, lambda d: conn.sendall(d), log=log,
+                             capture=capture)
+            if capture is not None:
+                capture.event("open", peer=ip, proto="setup")
+            while not s.closed:
+                if deadline is not None and time.monotonic() > deadline:
+                    break
+                try:
+                    data = conn.recv(1024)
+                except socket.timeout:
+                    # The card drops a session that never answers the gate.
+                    if s.gate_expired():
+                        break
+                    continue
+                except OSError:
+                    break
+                if not data:
+                    break
+                if capture is not None:
+                    capture.record("in", data, peer=ip, proto="setup")
+                if not s.feed_bytes(data):
+                    break
         except OSError:
             pass
+        finally:
+            if capture is not None:
+                capture.event("close", peer=ip, proto="setup")
+            try:
+                conn.close()
+            except OSError:
+                pass

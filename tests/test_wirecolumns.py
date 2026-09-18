@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Every heading this console prints, against the manual's own.
 
 FIDELITY S5 counted "about forty report headings differ in width", and the
@@ -21,6 +24,7 @@ so it can be compared straight across: a product label is a site's own and
 words and asserted on the columns, which is the only interesting part.
 """
 import os
+import re
 import struct
 import sys
 import time
@@ -340,8 +344,14 @@ class TheVacSensorDiagnosticBlock(unittest.TestCase):
     """
 
     def a_vac_sensor(self):
+        """...with a manual test on record, which is what puts the three
+        stamped readings on the paper at all. B38 carries a validity flag
+        for each of them and this block is the valid shape. FIDELITY L18."""
         console, handler = a_smart_site()
         console.values["S72301"] = "0104"                # VAC SENSOR
+        console.vac_leak[1] = 1.5                        # so the three exist
+        console.start_vac_test(1)
+        console.finish_vac_tests()
         return console, handler
 
     def block(self, handler):
@@ -660,6 +670,16 @@ class TheGroundTemperatureThermistorBelongsToVLLD(unittest.TestCase):
                 if l[:6].strip().isdigit()]
         self.assertEqual(rows, [])
 
+    def test_only_one_row_however_many_cards_are_fitted(self):
+        """"only one ground temperature thermistor is needed per site" is a
+        SITE's rule, not a card's positions: a second VLLD card does not buy
+        a second thermistor. The panel's own half of this is in
+        `test_panel.py`, which walked four. FIDELITY M4."""
+        _c, h = self.fitted(vlld=2)
+        rows = [l for l in body(h, "IB2100").splitlines()
+                if l[:6].strip().isdigit()]
+        self.assertEqual(len(rows), 1)
+
 
 # `9999FF` and not `9999`: the four digits alone appear inside real
 # readings -- B34's channel grid prints them as a raw sample -- so a
@@ -787,3 +807,190 @@ class EverySensorReportDrawsABody(unittest.TestCase):
         self.assertGreater(thin, 5, "if this console draws bodies now, the "
                                     "fixture has been programmed and L1's "
                                     "point no longer holds")
+
+
+class TheVlldDiagnosticHistoryRows(unittest.TestCase):
+    """FIDELITY H17. B51 and B52 draw a row per test under a heading this
+    file already measures, and the row was measured by nobody.
+
+    The ratchet below cannot see it: it matches a manual line to one of ours
+    by its WORDS with digits masked, and a sample row carrying the sample
+    site's date, temperatures and timings masks to a different shape from
+    any row this console draws. So the heading was the page's and the row
+    under it was not -- five of its eight fields ended one or two columns
+    away from the words naming them. Asserted here against the heading,
+    which the page has already been shown to agree with.
+    """
+
+    def a_line_with_history(self):
+        console, handler = a_full_site()
+        console.values["S75101"] = "0101"
+        for rate in ("gross", "periodic", "annual"):
+            console.leaks.start("vlld", 1, rate)
+            console.clock_offset += leaktest.LINE_SECONDS[rate] + 5.0
+            console.leaks.tick()
+        return console, handler
+
+    def field_ends(self, line):
+        return [m.end() for m in re.finditer(r"\S+", line)]
+
+    def test_every_row_sits_under_its_own_heading(self):
+        _c, h = self.a_line_with_history()
+        rows = 0
+        for tok in ("B51", "B52"):
+            lines = [l for l in body(h, f"I{tok}01").splitlines() if l.strip()]
+            head = [l for l in lines if "DATE/TIME" in l][0]
+            want = self.field_ends(head)
+            for line in lines[lines.index(head) + 1:]:
+                if "AVAILABLE" in line:
+                    continue
+                got = self.field_ends(line)
+                # the stamp is five words where DATE/TIME is one, and RSLT
+                # is a word where the row's result is a longer one
+                self.assertEqual(got[5:-1], want[1:-1],
+                                 f"{tok}\n  head |{head}|\n  row  |{line}|")
+                self.assertEqual(line.index(line.split()[-1]), want[-1] - 4)
+                rows += 1
+        self.assertEqual(rows, 3)
+
+    def test_the_lengths_are_the_test_types_own(self):
+        """`LGTH` is a property of the test type, not a band a report draws
+        from: 576013-849 Rev B Table 5 fixes it at 13.5, 326.0 and 794.0.
+        This drew `readings.fixed(10.0, 794.0)`, the envelope of all
+        fourteen rows redrawn per test, so a 0.2 gph test could print
+        `LGTH 412.7` where two documents print `326.0`."""
+        from tls350sim import wirelines
+        _c, h = self.a_line_with_history()
+        seen = {}
+        for tok in ("B51", "B52"):
+            for line in body(h, f"I{tok}01").splitlines():
+                cells = line.split()
+                if len(cells) == 13 and cells[-1] in ("PASSED", "FAILED"):
+                    seen[int(cells[5])] = float(cells[9])
+        self.assertEqual(seen, {3: 13.5, 7: 326.0, 11: 794.0})
+        self.assertEqual(set(seen), set(wirelines.VLLD_LINE_TEST.values()))
+
+    def test_the_test_column_may_exceed_the_length_and_still_pass(self):
+        """p.543's `TYP 11` row is `LGTH 794.0 / TEST 794.1 / PASSED`, and
+        `min(actual, allowed)` on a pass made that row unreachable."""
+        from tls350sim import wirelines
+        c, _h = self.a_line_with_history()
+        overs = []
+        for number in range(1, 5):
+            for result in c.leaks.history.get(("vlld", 1)) or []:
+                timings = wirelines._vlld_timings(c, number, result)
+                overs.append(timings[5] >= timings[3])
+        self.assertTrue(all(overs), overs)
+
+
+def _manual_page(number, _cache={}):
+    """One page of the serial manual in its own character grid, or None.
+
+    The PDFs are gitignored -- they are Veeder-Root's -- so a clone has
+    neither them nor PyMuPDF, and this measurement skips rather than fails.
+    Cached because thirty-seven reports share sixteen pages.
+    """
+    if number in _cache:
+        return _cache[number]
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    pdf = os.path.join(here, "reference",
+                       "576013-635_RevAA_SerialInterfaceManual.pdf")
+    if not os.path.exists(pdf):
+        _cache[number] = None
+        return None
+    sys.path.insert(0, os.path.join(here, "tools"))
+    try:
+        import pagelines
+        grid = pagelines.character_grid(pdf, number)
+    except Exception:                                       # noqa: BLE001
+        _cache[number] = None
+        return None
+    _cache[number] = {_column_key(line): line
+                      for _y, line in grid if line.strip()}
+    return _cache[number]
+
+
+def _column_key(line):
+    """What makes two lines the same line: their words, digits masked."""
+    return re.sub(r"\d", "#", " ".join(line.split())).upper()
+
+
+def _anchors(line):
+    """[(column, word)] -- a word with a DIGIT anchored where it ENDS and a
+    word of letters where it STARTS.
+
+    A numeric field on these reports is right-aligned and a label is
+    left-aligned, so anchoring a number by its start would compare the width
+    of the VALUE and not the width of the field: p.523's `5` and p.527's `50`
+    sit in the same eight-column field and start a column apart, which is
+    the console agreeing with the manual rather than differing from it.
+    """
+    out = []
+    for m in re.finditer(r"\S+", line):
+        out.append((m.end(), m.group()) if re.search(r"\d", m.group())
+                   else (m.start(), m.group()))
+    return out
+
+
+class EveryReportSitsInTheColumnsItsOwnPageDraws(unittest.TestCase):
+    """FIDELITY L11, which asked for an enumeration and got a count.
+
+    S5 recorded "about forty report headings differ in width" and named
+    none, so the claim could not be re-run: it could not go stale loudly,
+    only quietly, which is what happened. L11 then measured this module,
+    found sixteen, fixed four and could not say what the other twelve were,
+    because it had not listed them either.
+
+    This measures all thirty-seven, every time, against the manual's own
+    pages -- so the number is never written down again. A line of ours is
+    paired with the manual's line of the same words, digits masked, and
+    every word's column compared. What it cannot see is a line the manual
+    draws and this console does not; that is `test_coverage`'s job.
+
+    **The origin validates itself.** Every one of these reports prints
+    labels at column 0, and a page whose pitch or origin were read wrongly
+    would shift those too and fail here first. So a run in which only VALUE
+    columns differ is a run whose measurement is sound.
+    """
+
+    def setUp(self):
+        if _manual_page(523) is None:
+            raise unittest.SkipTest(
+                "no reference/576013-635_RevAA PDF, or no PyMuPDF: this "
+                "measures against the manual's own pages")
+
+    def test_no_word_of_any_report_sits_in_a_column_the_page_does_not(self):
+        import json
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(here, "tls350sim", "wiretitles.json"),
+                  encoding="utf-8") as fh:
+            titles = json.load(fh)
+        from tests.test_wirebodies import a_programmed_site
+        _c, handler = a_programmed_site()
+        wrong, compared, reports = [], 0, 0
+        for tok in sorted(wiresensors.CODES):
+            page = (titles.get(tok) or {}).get("page")
+            manual = _manual_page(page) if page else None
+            if not manual:
+                continue
+            seen = 0
+            for line in body(handler, "I" + tok + "00").splitlines():
+                if not line.strip():
+                    continue
+                want = manual.get(_column_key(line))
+                if want is None:
+                    continue
+                ours, theirs = _anchors(line), _anchors(want)
+                if len(ours) != len(theirs):
+                    continue
+                seen += 1
+                for (got, word), (expect, _w) in zip(ours, theirs):
+                    if got != expect:
+                        wrong.append("%s p.%d  %-14s ours %3d  manual %3d"
+                                     % (tok, page, word, got, expect))
+            compared += seen
+            reports += 1 if seen else 0
+        self.assertEqual(wrong, [], "\n".join([""] + wrong))
+        # a floor, so the measurement cannot quietly stop measuring
+        self.assertGreater(reports, 30, "reports compared")
+        self.assertGreater(compared, 90, "lines compared")

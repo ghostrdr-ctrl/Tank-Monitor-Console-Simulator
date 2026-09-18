@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """What a Display inquire on a SETUP code actually answers with.
 
 576013-635 does not answer `I621TT` with a number. It answers with a titled
@@ -30,7 +33,7 @@ aggregate before the display side was reached at all -- so `I62100` came back
 `0144FA00000244FA0000...` on the display side, which is the computer format
 wearing the display's envelope. See FIDELITY S1.
 
-**The columns are read off the page and not guessed.** `tools/
+The columns are read off the page and not guessed. `tools/
 build_wire_titles.py` takes the x coordinate of every word in the manual's
 own sample and divides by the page's character pitch, so `GALLONS` is at
 column 33 because that is where it is printed, and `1000` right-aligns to 38
@@ -238,7 +241,7 @@ def station_header(tok):
     ISD C-series, the Troubleshooting Guide's `@` reports and the handful
     of others whose pages are in another manual.
 
-    **It is not derivable from anything else**, which is why it is read off
+    It is not derivable from anything else, which is why it is read off
     the page. The obvious rule -- that a section 7.4 DIAGNOSTIC has no
     header and a 7.2 or 7.3 report does -- is wrong twenty-seven times:
     A15, A81, A91, B62 and BB1 are diagnostics that draw one, and 207, 212,
@@ -306,7 +309,7 @@ def _part_rows(handler, tok, device, layout, label):
     and that is the shape every part-field table takes. The run has to divide
     by the columns.
 
-    **Not every one of these tables carries a label column.** 605, 606 and
+    Not every one of these tables carries a label column. 605, 606 and
     631 head their second column PRODUCT LABEL; 60E's p.260 sample heads
     its four straight across from the tank -- `TANK    WATER OFFSET
     FUEL OFFSET      INVALID FUEL     WATER MINIMUM` over
@@ -357,7 +360,7 @@ def _row(handler, tok, device, layout, kind):
         # that HAS been labelled still prints its label, which is why this
         # reads the store rather than dropping the column.
         #
-        # **A receiver was the exception and is not.** L14 gave the eight
+        # A receiver was the exception and is not. L14 gave the eight
         # autodial addresses `RECEIVER 1` to `RECEIVER 8` where every other
         # unlabelled device goes blank, on the reading that a receiver is one
         # of the console's own addresses rather than something somebody

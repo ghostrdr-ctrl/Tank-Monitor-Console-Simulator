@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The console dialing out: auto-dial, its retries, and its one failure.
 
 A real console with a SiteFax/modem card dials a programmed receiver when an
@@ -55,7 +58,9 @@ class Autodial:
         tries = (self.c.values.get(f"S526{receiver:02d}") or "").strip()
         delay = (self.c.values.get(f"S527{receiver:02d}") or "").strip()
         tries = int(tries[-2:]) if tries[-2:].isdigit() else 3
-        delay = int(delay[-2:]) if delay[-2:].isdigit() else 1
+        # an unprogrammed delay is the field's default, three minutes, which
+        # is what a real console reports and waits -- FIDELITY S18
+        delay = int(delay[-2:]) if delay[-2:].isdigit() else 3
         return max(tries, 1), max(delay, 1)
 
     def wanted_by(self, alarm):
@@ -87,8 +92,8 @@ class Autodial:
         said "call nobody", and the two want different behaviour. With no
         assignment anywhere the first configured receiver is called, which
         is what this engine did for every alarm before the table was read;
-        with any assignment present the table decides. **The fallback is the
-        one invention here** -- the manuals describe programming the list and
+        with any assignment present the table decides. The fallback is the
+        one invention here -- the manuals describe programming the list and
         not what a console does before anybody has.
         """
         return any(self.c.receiver_alarms.get(n)

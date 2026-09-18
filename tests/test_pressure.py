@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """PLLD and WPLLD: a line that holds a pressure, and tests that measure it.
 
 Everything here is checked against the PLLD & WPLLD Troubleshooting Guide,
@@ -86,6 +89,156 @@ class ThePipeDecidesTheArithmetic(unittest.TestCase):
         self.assertGreater(short.psi_per_gallon(), long_.psi_per_gallon())
 
 
+class ALineOfTwoDiameters(unittest.TestCase):
+    """FIDELITY R22. Five of the console's nineteen pipe types are TWO sizes
+    of pipe, and four of them say so in the option text: "2.0/3.0 IN.
+    FIBERGLASS", "ENVROFLX PP1502/2502", "ENVROFLX PP1503/2503", "1.5/2 IN.
+    ENVIRON GFLXD". The setup asks for both lengths -- 576013-623 Rev AN
+    p.10-3 heads its own block "ENTERING LINE LENGTH FOR DUAL SIZE FLEXIBLE
+    PIPE TYPES" -- and the model used the first alone.
+    """
+
+    def a_fiberglass_line(self, two_inch, three_inch):
+        c = a_line(pipe="01", length=two_inch)
+        c.values["S77F01"] = "01" + struct.pack(">f",
+                                                three_inch).hex().upper()
+        return c.lines.line("plld", 1)
+
+    def test_the_guides_own_mixed_piping_example(self):
+        """577013-465 Rev AD footnote 1, in full: "To determine the line
+        volume for mixed piping types, multiply the line length (in feet)
+        times the 'gallons/foot' value for each pipe type and add ... Total
+        line volume = [150 x 0.204] + [50 x 0.461] = 30.6 + 23.1 = 53.7
+        gallons."
+
+        53.65 rather than 53.7, because the guide adds its own two halves
+        after rounding each to a tenth: 50 x 0.461 is 23.05, which it prints
+        as 23.1. This asserts the arithmetic, not the printing.
+        """
+        ln = self.a_fiberglass_line(150.0, 50.0)
+        self.assertAlmostEqual(ln.volume(), 53.65, places=3)
+
+    def test_the_first_segment_alone_is_what_it_used_to_be(self):
+        """30.6 of the 53.65, so the line was modelled at 57% of its size."""
+        ln = self.a_fiberglass_line(150.0, 50.0)
+        self.assertAlmostEqual(ln.length() * ln.pipe()[1], 30.6, places=3)
+
+    def test_the_unused_size_is_zero_and_not_unprogrammed(self):
+        """"IMPORTANT! When using the Fiberglass pipe type, the unused
+        size's length must be set to zero" -- 576013-623 Rev AN p.10-3. A
+        3 inch only line stored 0 in `789`, and `or DEFAULT_LENGTH` gave it
+        501 feet of 2 inch pipe it has not got."""
+        ln = self.a_fiberglass_line(0.0, 200.0)
+        self.assertAlmostEqual(ln.volume(), 92.2, places=3)
+        self.assertAlmostEqual(ln.modulus(), 35000.0, places=3)
+
+    def test_a_line_nobody_programmed_is_still_501_feet(self):
+        """The setup screen's own default, which the zero rule must not
+        take away from the fourteen single-diameter types."""
+        ln = a_line(pipe="03").lines.line("plld", 1)
+        self.assertEqual(ln.length(), 501.0)
+
+    def test_a_single_diameter_line_is_unchanged(self):
+        """K/V exactly as before, because one segment's give is V/K."""
+        ln = a_line(pipe="02", length=120.0).lines.line("plld", 1)
+        self.assertAlmostEqual(ln.volume(), 22.8, places=3)
+        self.assertAlmostEqual(ln.psi_per_gallon(), 50000.0 / 22.8, places=3)
+        self.assertAlmostEqual(ln.modulus(), 50000.0, places=3)
+
+    def test_the_two_moduli_add_as_give_not_as_stiffness(self):
+        """Two segments share one pressure, so 1/K_eff = (V1/K1 + V2/K2)/V.
+        The 2 inch half is softer, so the pair comes out between the two and
+        nearer the half holding more of the volume."""
+        ln = self.a_fiberglass_line(150.0, 50.0)
+        self.assertLess(ln.modulus(), 35000.0)
+        self.assertGreater(ln.modulus(), 25000.0)
+        give = 30.6 / 25000.0 + 23.05 / 35000.0
+        self.assertAlmostEqual(ln.psi_per_gallon(), 1.0 / give, places=6)
+
+    def test_the_fourteen_single_types_have_no_second_segment(self):
+        for key in sorted(pressure.PIPE):
+            ln = a_line(pipe=key).lines.line("plld", 1)
+            if key in pressure.SECOND_PIPE:
+                self.assertIsNotNone(ln.second_pipe(), key)
+            else:
+                self.assertIsNone(ln.second_pipe(), key)
+                self.assertEqual(ln.second_length(), 0.0, key)
+
+    def test_the_wplld_list_is_not_the_plld_list(self):
+        """`WPLLD_PIPE` maps the wireless family's six options onto PIPE's
+        keys, and the two lists disagree about DIAMETERS: WPLLD's `04` is
+        "1.5 IN. ENVIRON GEOFLX D" where the `13` it maps to is "1.5/2 IN.
+        ENVIRON GFLXD". Keying the second segment off the mapped value gave
+        a WPLLD Geoflex line a size its own option name denies."""
+        for key, dual in (("01", True), ("02", False), ("03", False),
+                          ("04", False), ("05", False), ("06", False)):
+            ln = a_line(pipe=key, kind="wplld").lines.line("wplld", 1)
+            self.assertEqual(ln.second_pipe() is not None, dual, key)
+
+    def test_the_second_diameters_are_the_guides_own_rows(self):
+        """FIBERGLASS (3 INCH), PP2502 (2.5 INCH), PP2503 (2.5 INCH) and
+        GEOFLEX D (2 INCH), all four out of the same table as PIPE."""
+        self.assertEqual(pressure.SECOND_PIPE["01"], (35000.0, 0.461))
+        self.assertEqual(pressure.SECOND_PIPE["07"], (8700.0, 0.255))
+        self.assertEqual(pressure.SECOND_PIPE["11"], (3100.0, 0.255))
+        self.assertEqual(pressure.SECOND_PIPE["13"], (11000.0, 0.163))
+
+    def test_an_unprogrammed_length_is_a_setup_data_warning(self):
+        """"IMPORTANT! The default line length must be changed to reflect
+        the actual line length or a Setup Data Warning will occur" --
+        576013-623 Rev AN p.10-2. The check read the pipe type and the tank
+        and not the length, so the one field the page raises a warning about
+        was the one the warning could not see."""
+        c = a_line(pipe="02")
+        c.values["S78501"] = "01" + "01"            # the line's tank
+        del c.values["S78901"]
+        self.assertIn("210101", c.setup_warnings())
+        c.values["S78901"] = "01" + struct.pack(">f", 120.0).hex().upper()
+        self.assertNotIn("210101", c.setup_warnings())
+
+    def test_a_volumetric_line_has_no_length_to_warn_about(self):
+        """The VLLD family has no line length code in this check, and `all`
+        over nothing is True -- so the first version of the length warning
+        raised one against every volumetric line on every site, for a field
+        that family does not have."""
+        c = a_line(pipe="02", kind="plld")
+        c.modules["vlld"] = 4
+        c.values["S75101"] = "011"
+        c.values["S75601"] = "01SELF TEST"
+        c.values["S75201"] = "01" + "VLLD LINE 1".ljust(20)
+        c.tick()
+        self.assertEqual([w for w in c.setup_warnings()
+                          if w.startswith("06")], [])
+
+    def test_a_shipped_preset_raises_no_length_warning(self):
+        """A floor under the two above: the sites this console ships with
+        are programmed, so none of them may gain a warning from this."""
+        from tls350sim import presets
+        for name in ("Two-tank retail site", "Truck stop, four tanks and BIR"):
+            c = Console()
+            presets.load(c, name)
+            c.in_setup = False
+            self.assertEqual(c.setup_warnings(), [], name)
+
+    def test_the_second_length_alone_satisfies_it(self):
+        """A 3 inch only fiberglass line stores 0 feet of 2 inch and 200 of
+        3 inch. Both were entered; only one is non-zero."""
+        c = a_line(pipe="01")
+        c.values["S78501"] = "01" + "01"
+        del c.values["S78901"]
+        c.values["S77F01"] = "01" + struct.pack(">f", 200.0).hex().upper()
+        self.assertNotIn("210101", c.setup_warnings())
+
+    def test_a_bore_gives_the_guides_own_volume_column(self):
+        """Every FLEXIBLE row of 577013-465 Rev AD's table is pi/4 d^2 on
+        the nominal size, to the precision it prints. The rigid rows are
+        not, which is why they are in PIPE and never reach this."""
+        for bore, published in ((1.5, 0.092), (1.75, 0.125), (2.0, 0.163),
+                                (2.5, 0.255), (3.0, 0.367), (1.0, 0.041)):
+            self.assertAlmostEqual(pressure.gallons_per_foot(bore),
+                                   published, places=3, msg=bore)
+
+
 class UserDefinedPipe(unittest.TestCase):
     """FIDELITY R8: the USER DEFINED pipe type exists so a site can enter its
     own bulk modulus, and `pipe()` read it out of `78B` -- which is Set
@@ -124,6 +277,37 @@ class UserDefinedPipe(unittest.TestCase):
         c.values["S77901"] = "01" + struct.pack(">f", 3200.0).hex().upper()
         c.values["S78B01"] = "0112609020600"
         self.assertEqual(c.lines.line("plld", 1).pipe()[0], 3200.0)
+
+    def test_the_diameter_comes_off_777(self):
+        """FIDELITY R22's half of this entry. p.10-4 gives User Defined
+        seven screens and two of them are `1ST LINE DIAMETER` and `2ND LINE
+        DIAMETER`; `pipe()` returned PP1501's 1.5 inch volume whatever the
+        technician had typed, so a 3 inch line was modelled at a third of
+        its size."""
+        c = a_line(pipe="18", length=100.0)
+        c.values["S77701"] = "01" + struct.pack(">f", 3.0).hex().upper()
+        ln = c.lines.line("plld", 1)
+        self.assertAlmostEqual(ln.pipe()[1], pressure.gallons_per_foot(3.0))
+        self.assertAlmostEqual(ln.volume(), 36.72, places=2)
+
+    def test_an_unprogrammed_diameter_is_still_the_default_pipes(self):
+        ln = a_line(pipe="18", length=100.0).lines.line("plld", 1)
+        self.assertEqual(ln.pipe()[1], pressure.PIPE[pressure.DEFAULT_PIPE][1])
+
+    def test_the_second_segment_wants_both_a_modulus_and_a_bore(self):
+        """"If the line consists of one pipe type, one diameter, ignore the
+        second line length entry" -- 576013-623 Rev AN p.10-4. Half a second
+        segment is not one."""
+        c = a_line(pipe="18", length=100.0)
+        c.values["S77F01"] = "01" + struct.pack(">f", 60.0).hex().upper()
+        self.assertIsNone(c.lines.line("plld", 1).second_pipe())
+        c.values["S77A01"] = "01" + struct.pack(">f", 9000.0).hex().upper()
+        self.assertIsNone(c.lines.line("plld", 1).second_pipe())
+        c.values["S77801"] = "01" + struct.pack(">f", 1.5).hex().upper()
+        ln = c.lines.line("plld", 1)
+        self.assertEqual(ln.second_pipe()[0], 9000.0)
+        self.assertAlmostEqual(ln.second_length(), 60.0)
+        self.assertAlmostEqual(ln.volume(), 9.2 + 5.508, places=2)
 
 
 class TheWaitTimesFollowThePipe(unittest.TestCase):

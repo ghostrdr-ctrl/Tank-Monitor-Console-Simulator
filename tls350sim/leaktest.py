@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Leak tests that actually run.
 
 A console does not decide a tank is leaking; it measures. So does this: a test
@@ -31,14 +34,35 @@ Method says brings it back.
 """
 import time
 
-from .clock import clock_date, clock_words
+from .clock import clock_date
 
 # The three rates a TLS-350 tests at, in gallons per hour.
 RATES = {"gross": 3.0, "periodic": 0.2, "annual": 0.1}
 
 # How long each one takes. The tank tests take what they are programmed to
-# take; these are the line tests, which the console times itself.
-LINE_HOURS = {"gross": 0.05, "periodic": 0.75, "annual": 8.0}
+# take; these are the volumetric line tests, which the console times itself.
+#
+# 576013-849 Rev B p.39, Table 5, "Test Type Reference Numbers and Times",
+# in a column headed `Test Length (Seconds)`: the 3.0 GPH Line Test is 13.5
+# seconds, the 0.2 GPH Line Test 326 and the 0.1 GPH Line Test 794 -- rows
+# 3, 7 and 11, which are the three reference numbers `wirelines.py` has read
+# out of the LEFT column of the same table all along. The page's own
+# sentence over it is "More precise tests take longer to run".
+#
+# These were 0.05, 0.75 and 8.0 HOURS, uncited, so every volumetric line
+# test ran 13 to 36 times too long and a 0.1 gph test was eight hours where
+# the page gives thirteen minutes. 576013-635's B51 and B52 sample
+# printouts reproduce twelve of Table 5's fourteen lengths exactly in their
+# own `LGTH` column, in both revisions, which is what raises this above one
+# reading of one table. FIDELITY H17.
+LINE_SECONDS = {"gross": 13.5, "periodic": 326.0, "annual": 794.0}
+
+# The SELF-tests beside them, rows 4, 8 and 12 of the same table, which the
+# console runs six of for an Air Purge. Table 5 gives each the same length
+# as its own line test and a shorter typical time -- 5-7 seconds against
+# 13.5, 104-156 against 326, 250-395 against 794 -- which is the one place
+# in the table the two columns disagree.
+SELFTEST_SECONDS = {"gross": 13.5, "periodic": 326.0, "annual": 794.0}
 
 PASSED, FAILED, INVALID = "PASSED", "FAILED", "INVALID"
 
@@ -77,7 +101,7 @@ FLAGS = (
 
 # "A periodic test requires at least 2 hours to complete (3 hours for an
 # annual test)", from the LEAK TEST TOO SHORT row of the same table, and
-# 576013-610 Rev AC Table 20-1 *Minimum In-Tank Leak Test Times* gives the
+# 576013-610 Rev AC Table 20-1 Minimum In-Tank Leak Test Times gives the
 # same pair against the probe:
 #
 #     0.2 gph    0.1 or 0.2 Magnetostrictive    2 hours
@@ -94,8 +118,8 @@ TWO_INCH_FLOAT = "1"        # S62F's own enum: 0=4.0, 1=2.0, 2=3.0, 3=1.0
 TWO_INCH_EXTRA_HOURS = 1.0
 
 # `S62C`, Periodic Test Type. 576013-623 Rev AN p.7-22: "You can choose
-# between Standard and Quick. **Choose Standard to run a 2-hour periodic leak
-# test. Choose Quick to perform a 0.2 gph (0.76 lph) test in one hour.**"
+# between Standard and Quick. Choose Standard to run a 2-hour periodic leak
+# test. Choose Quick to perform a 0.2 gph (0.76 lph) test in one hour."
 # The setting was stored and read by nothing, so a Quick site's one-hour test
 # was flagged LEAK TEST TOO SHORT against the Standard table. See FIDELITY H9.
 QUICK_PERIODIC = "1"
@@ -113,15 +137,15 @@ QUICK_HOURS = 1.0
 # in Table 29-4's own words -- so the feature is a gate in front of a test
 # rather than a new measurement. The second behaviour is the one it is named
 # for: "if you have Leak Test Early Stop enabled and the console determines
-# that an in-tank leak test **has passed after the first two hours** of the
+# that an in-tank leak test has passed after the first two hours of the
 # test, the test is completed, even though you had entered a Leak Test
 # Duration of more than 2 hours."
 EARLY_STOP_HOURS = 2.0
 
 # `S61B`, Gross Test Auto-Confirm. p.8-7: "If you are experiencing tank gross
 # test alarms that are proven to be false, enabling this feature may reduce
-# these false alarms. **When enabled, two test fails in a row will be
-# required before a Fail is posted.** However, when enabled this feature will
+# these false alarms. When enabled, two test fails in a row will be
+# required before a Fail is posted. However, when enabled this feature will
 # also increase the time needed to detect a gross leak by one 30-45 minute
 # idle period."
 AUTO_CONFIRM_FAILS = 2
@@ -186,7 +210,7 @@ PUMP_FAIL_ALARM = {"gross": ("06", "09"),      # Gross Pump Test Fail
 # counted as a line pass. 351 prints them in separate columns and they are
 # separate measurements.
 PUMP_KIND = "vlldpump"
-# **Not one table: three.** The three families number their shutdown rates
+# Not one table: three. The three families number their shutdown rates
 # differently and 576013-635 Rev AA says so on three consecutive pages --
 # 757 is `01=3.00 02=0.20 03=0.10`, 784 is `01=0.10 02=3.00 03=0.20 04=None`
 # and 7A4 is `01=0.20 02=3.00 03=0.10 04=None`. This was one flat copy of
@@ -226,7 +250,7 @@ MINIMUM_CODE = {"periodic": "636", "annual": "62A"}
 # prints them that way and this console used `sorted(results.items())`, which
 # is alphabetical and puts GROSS second. See FIDELITY H4.
 #
-# *Read from the PDF's word coordinates.* The plain extraction of that page
+# Read from the PDF's word coordinates. The plain extraction of that page
 # reports ANNUAL/GROSS/PERIODIC -- the console's own wrong order -- and the
 # page reports ANNUAL/PERIODIC/GROSS. A table read out of step would have
 # confirmed the defect as correct.
@@ -266,7 +290,7 @@ class Result:
         character stamp, not `clock_words` -- then the result at 35 and the
         rate, hours and volume held right against 49, 55 and 63.
 
-        **The GROSS row carries no HOURS.** The sample's other two print 12
+        The GROSS row carries no HOURS. The sample's other two print 12
         under that heading and its gross row leaves the column empty, which
         is the one thing on the page that says what a gross test IS: it is
         not measured over a period, it is a level read against a level.
@@ -369,7 +393,8 @@ class Engine:
             if refused:
                 return refused[0]
         if hours is None:
-            hours = LINE_HOURS[rate_key] if kind != "tank" else 2.0
+            hours = (LINE_SECONDS[rate_key] / 3600.0 if kind != "tank"
+                     else 2.0)
         volume = self.c.tank_level.get(device, {}).get("volume", 0.0) \
             if kind == "tank" else self._line_volume(device)
         run = Running(kind, device, rate_key, float(hours), volume,
@@ -442,7 +467,7 @@ class Engine:
         """Is this the test Leak Test Early Stop lets off the hook?
 
         "If you have Leak Test Early Stop enabled and the console determines
-        that an in-tank leak test **has passed after the first two hours** of
+        that an in-tank leak test has passed after the first two hours of
         the test, the test is completed, even though you had entered a Leak
         Test Duration of more than 2 hours."
 
@@ -529,7 +554,9 @@ class Engine:
         for kind, code in (("plld", "78C"), ("wplld", "7A3")):
             if not self.c.has(kind):
                 continue
-            for line in range(1, 5):
+            # every line the card carries, and not the first four: a PLLD
+            # has six. FIDELITY H16.
+            for line in range(1, self.c.capacity(kind) + 1):
                 raw = self.c.values.get(f"S{code}{line:02d}")
                 if not raw or not raw.strip().endswith("1"):
                     continue          # 1 = REPETITIVE, and only repetitive
@@ -556,7 +583,7 @@ class Engine:
     def _tank_schedule(self, tank):
         """(rate, hours, HHmm, is-it-due-today) from S611, or None.
 
-        **Five of the seven frequencies used to schedule nothing.** This
+        Five of the seven frequencies used to schedule nothing. This
         returned None for anything but DAILY, so ON DATE, ANNUALLY, MONTHLY
         and WEEKLY were stored, printed on the setup report and fired no
         test -- with their date fields fully modelled and the offsets
@@ -826,7 +853,14 @@ class Engine:
 
     def _judge(self, run, rate, hours, flags=()):
         threshold = RATES[run.rate_key]
-        if flags or hours < 0.01:
+        # A test that ran for no time measured nothing. The floor was a flat
+        # 0.01 hours -- 36 seconds -- which is a sensible guard for a tank
+        # test whose shortest legitimate length is hours, and invalidates a
+        # VOLUMETRIC LINE test that ran its own full programmed length:
+        # 576013-849 Rev B Table 5 gives the 3.0 GPH line test 13.5 seconds.
+        # So the floor is the test's own length where that is shorter, and a
+        # line test stopped part way is still invalid. FIDELITY H17.
+        if flags or hours < min(0.01, run.hours):
             return INVALID
         return FAILED if rate >= threshold else PASSED
 
@@ -866,13 +900,19 @@ class Engine:
 
         A service routine rather than a test: it runs, it records the six
         selftests, and it leaves the line as it found it.
+
+        Each one lasts what 576013-849 Rev B Table 5 gives row 4, the
+        3.0 GPH Line Self-Test: 13.5 seconds, the same length as the line
+        test beside it. This was a hardcoded 0.1 hours, against the same
+        table and for the same reason as `LINE_SECONDS`. FIDELITY H17.
         """
         now = time.mktime(self.c.now())
+        hours = SELFTEST_SECONDS["gross"] / 3600.0
         for _ in range(6):
             rate = self.measured_rate("vlld", device)
             self._record(Result("vlld", device, "gross",
                                 PASSED if rate < 3.0 else FAILED, rate,
-                                0.1, self.c.tank_level.get(device, {}).get(
+                                hours, self.c.tank_level.get(device, {}).get(
                                     "volume", 0.0), now))
         return "AIR PURGE DONE"
 
@@ -945,8 +985,8 @@ class Engine:
         says it twice, "Leak rate in gph (negative number = a loss, no sign
         = a gain)", and the flip happens where a report is built.
 
-        The clamp is gone. It was `max(0.0, ...)`, so **a gain could not be
-        represented at all**: product entering a tank read as zero, and
+        The clamp is gone. It was `max(0.0, ...)`, so a gain could not be
+        represented at all: product entering a tank read as zero, and
         `CSLD RATE INCR WARN` -- which exists for exactly that condition,
         "indicates fluid is entering the tank during the leak test" -- could
         never see the thing it is for. A negative `tank_leak` is a tank
@@ -1071,8 +1111,8 @@ class Engine:
             return f"{when}{said.rjust(24 - len(when))}"
         # 576013-610 Rev AC pp.9-1 and 9-2 draw `T #: (Product Name)` over
         # `GRS: (Date) (Results)`, three times, and p.9-2 says what the two
-        # halves are: "The system prints **the date the test ran and the
-        # results (PASS, FAIL, or INVALID)**". This printed a RATE and no
+        # halves are: "The system prints the date the test ran and the
+        # results (PASS, FAIL, or INVALID)". This printed a RATE and no
         # date -- `PER: PASSED  0.00 GAL/HR` -- where the LINE branch two
         # lines above had had the right shape and its own citation all
         # along. The word set is chapter 9's own, and it is shorter than the
@@ -1101,10 +1141,10 @@ class Engine:
             lost = run.volume - now
             if lost <= 0:
                 continue
-            sudden = self.c.limit(SUDDEN_LIMIT_CODE, device)
+            sudden = self.c.limit_or_default(SUDDEN_LIMIT_CODE, device)
             if sudden and lost >= sudden:
                 out.append(SUDDEN_LOSS[0] + SUDDEN_LOSS[1] + f"{device:02d}")
-            leak = self.c.limit(LEAK_LIMIT_CODE, device)
+            leak = self.c.limit_or_default(LEAK_LIMIT_CODE, device)
             # The limit is read on the loss itself. This used to scale it by
             # 0.998, the flat factor tc_volume once used, which was
             # meaningless twice over: a temperature correction applies to a

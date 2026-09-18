@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The ISD and PMC setup functions, section 7.7.2 of 576013-635.
 
 In-Station Diagnostics watches a site's vapour recovery: what the nozzles
@@ -133,9 +136,14 @@ SETUP = {
     "V4E": {"needs": ("isd",), "kind": "pair", "width": 2,
             "table": EVR_TYPE, "table2": VACUUM_TYPE, "default": "0101",
             "title": "ISD EVR TYPE", "line": None},
+    # "A/L RATIO: 1.00 - 1.20" is 576013-635 Rev AA p.653's own display
+    # sample, and it is the panel's pair as well: 577013-800 Rev P draws the
+    # walk as `MAX: +1.20` and `MIN: +1.00` before its worked example changes
+    # them. The default here was the RANGE -- "minimum Value=0.5", "maximum
+    # Value=1.5" -- and it printed as `0.500 TO 1.500`. See FIDELITY I5.
     "V4F": {"needs": ("isd",), "kind": "floats2", "range": (0.5, 1.5),
-            "default": (0.5, 1.5), "title": "NOZZLE A/L RANGE",
-            "line": None, "units": ""},
+            "default": (1.00, 1.20), "title": "NOZZLE A/L RANGE",
+            "line": "A/L RATIO:", "units": "", "pair": "{:.2f} - {:.2f}"},
     "V50": {"needs": ("isd", "pmc"), "kind": "clock", "width": 3,
             "range": (0, 720), "default": ("0200", 120), "title": None,
             "line": "CVLD MIN PRESSURE WINDOW:"},
@@ -148,6 +156,16 @@ SETUP = {
 # is not the console's own version number: ISD arrived at software 25 and
 # carries a version of its own.
 ISD_VERSION = "01.00"
+
+# "PMC VERSION: 01.03" is 576013-635 Rev AA's own V82 sample and the only
+# number any page prints: 577013-937 Rev J Figures 48 and 49 draw `XX.XX` on
+# the screen and on the PMC DIAGNOSTICS printout alike. The screen said 01.00
+# where V82 said 01.03, one console in two versions. FIDELITY I11.
+PMC_VERSION = "01.03"
+
+# V40's two polishers, whose PMC diagnostic menu and printout are Figure 49's
+# rather than the membrane's Figure 48.
+POLISHERS = ("05", "06")
 
 
 # ---------------------------------------------------------------------------
@@ -336,6 +354,26 @@ SETUP_ALARMS = {
     "vpinput": ("30", "17"),
 }
 
+# What MISSING RELAY SETUP asks of a control device, 577013-819 Rev F p.18:
+# "Tanks are configured with a control device (Relay, PLLD, WPLLD, or
+# VLLD). The control device does not have all the correct alarms assigned."
+# ISD GROSS PRESSURE FAIL, ISD DEGRD PRESSURE FAIL and ISD VAPOR LEAKAGE FAIL
+# always; ISD VP PRESSURE FAIL and ISD VP STATUS FAIL "When there is a Vapor
+# Processor installed"; and the HOSE alarms by EVR type -- FLOW COLLECT FAIL
+# on Balance, GROSS COLLECT FAIL and DEGRD COLLECT FAIL on Vacuum Assist.
+RELAY_REQUIRED = [("30", "03"), ("30", "05"), ("30", "07")]
+RELAY_REQUIRED_PROCESSOR = [("30", "09"), ("30", "11")]
+RELAY_REQUIRED_HOSE = {"balance": [("31", "06")],
+                       "assist": [("31", "02"), ("31", "04")]}
+
+
+def relay_required(site, processor):
+    """[(AA, NN)] every control device must carry on this site."""
+    out = list(RELAY_REQUIRED)
+    if processor:
+        out += RELAY_REQUIRED_PROCESSOR
+    return out + RELAY_REQUIRED_HOSE.get(site, [])
+
 # "S723nn - Smart sensor category": the two ISD cares about.
 AIR_FLOW_METER = "01"
 VAPOR_PRESSURE_SENSOR = "02"
@@ -374,7 +412,7 @@ REQUIRED_VACUUM = ("3102", "3104")
 # is measured against. 577013-819 Rev F pp.29-31 states all three outright.
 # ---------------------------------------------------------------------------
 #
-# **Over-pressure**, and it is per processor type: "A VST ECS Membrane
+# Over-pressure, and it is per processor type: "A VST ECS Membrane
 # Processor failure occurs when the 90th percentile of 1-day's ullage
 # pressure data (i.e. 10% of the pressure data) is equal to or exceeds 1" wc.
 # A Veeder-Root Polisher failure occurs when the 90th percentile of 1-day's
@@ -382,7 +420,7 @@ REQUIRED_VACUUM = ("3102", "3104")
 OVER_PRESSURE_WC = {"05": 2.3}       # VEEDER-ROOT POLISHER
 OVER_PRESSURE_DEFAULT_WC = 1.0       # the VST ECS membrane, and everything else
 
-# **Emissions.** "A failure occurs when the mass emission exceeds the defined
+# Emissions. "A failure occurs when the mass emission exceeds the defined
 # threshold". The number is not in the prose; it is printed in the console's
 # own PASS/FAIL THRESHOLDS block, which 577013-937 Rev J renders twice in two
 # different figures and both agree:
@@ -394,7 +432,7 @@ OVER_PRESSURE_DEFAULT_WC = 1.0       # the VST ECS membrane, and everything else
 # on one line, so the pairing is inside the line rather than across the page.
 MASS_EMISSION_LB_PER_1KG = 0.32
 
-# **Duty cycle.** "A failure occurs when the duty cycle exceeds 18 hours
+# Duty cycle. "A failure occurs when the duty cycle exceeds 18 hours
 # (75%)." The console reports the percentage, so that is the form used.
 DUTY_CYCLE_PERCENT = 75.0
 
@@ -447,6 +485,56 @@ CLEAR_MENU = {
     "05": "SETUP TEST",
     "06": "VAPOR COLLECTION TEST",
 }
+
+# The Shutdown & Misc. Event Log's words for a manual clear, keyed by V85's
+# test type. 576013-635 Rev AA p.606: "aa=03 Test Manually Cleared", then per
+# test "01=ISD SelfTest 02=Vapor Processor 03=Containment Gross & Degrd
+# 04=Containment Vapor Leakage 05=Collection Test HHhh grade 06=Sensor Out".
+# 577013-937 Rev J's own log prints the second as `VAPOR PROCESSOR` beside
+# `TEST MANUALLY CLEARED`; the other five are that legend in capitals, which
+# is UNKNOWNS A58. "All repair dates are saved in the Miscellaneous Event
+# Log", 577013-819 Rev F p.35. See FIDELITY I11.
+CLEAR_EVENT = {
+    "01": "CONTAINMENT GROSS & DEGRD",
+    "02": "CONTAINMENT VAPOR LEAKAGE",
+    "03": "VAPOR PROCESSOR",
+    "04": "SENSOR OUT",
+    "05": "ISD SELFTEST",
+    "06": "COLLECTION TEST",
+}
+CLEARED = "TEST MANUALLY CLEARED"
+
+# The same six as p.606 numbers them, which is not V85's order: "If aa=03:
+# 01=ISD SelfTest 02=Vapor Processor 03=Containment Gross & Degrd
+# 04=Containment Vapor Leakage 05=Collection Test HHhh grade 06=Sensor Out".
+CLEAR_EVENT_TYPE = {"01": "03", "02": "04", "03": "02", "04": "06",
+                    "05": "01", "06": "05"}
+
+# What each Shutdown & Misc. event packs as, 576013-635 Rev AA p.606: "aa -
+# primary misc event category" 01=System Event, 02=Pumps Re-enabled, 03=Test
+# Manually Cleared, 04=Disabled Dispensers, 05=Disabled FP, 06=EVR/ISD
+# Readiness Check, and "bb - primary misc event type" under each. V01, V02
+# and V03 packed every one of them as `01 01`, ISD Startup. An override puts
+# the pumps back on, and p.606 lists no types for 02. FIDELITY I11; the
+# readings are UNKNOWNS A62.
+MISC_EVENTS = {"ISD STARTUP": ("01", "01"), "ISD SHUTDOWN": ("01", "02"),
+               "ISD SHUTDOWN OVERRIDE": ("02", "00")}
+READINESS_TYPE = {"CHECK SETUP CONFIGURATION": "01",
+                  "ISD SENSORS READINESS PENDING": "02",
+                  "CHECK ISD SENSORS": "03"}
+
+
+def misc_event_code(what, value):
+    """(aa, bb) for one Shutdown & Misc. event line; ("00", "00") unknown."""
+    if what in MISC_EVENTS:
+        return MISC_EVENTS[what]
+    if value == CLEARED:
+        for test, words in CLEAR_EVENT.items():
+            if words == what:
+                return "03", CLEAR_EVENT_TYPE[test]
+    if what.startswith("READINESS"):
+        return "06", READINESS_TYPE.get(value, "00")
+    return "00", "00"
 
 CLEARS = {
     "01": ("gross", "degrade", "vp_pressure"),      # Containment Over Press
@@ -544,18 +632,22 @@ PROCESSOR_REPORTED = {"00": "0", "01": "1", "02": "2", "03": "3", "04": "4"}
 #
 # Two figures are deliberately NOT changed here. See FIDELITY I5.
 #
-#   The LEAK DETECTION number is uncertain and a constant is wrong whatever
-#   it is: 635 prints 13.5cfh, Rev J 12.5cfh and Rev P 8.50cfh, and
-#   577013-819 Rev F p.8 makes it a function of the site -- "for a typical
-#   12-hose site, that means it exceeds 8.5cfh (limit ranges over 8-10 cfh
-#   for <6 to >24 hoses)". Nothing on the shelf gives the rule per hose
-#   count, so 635's own figure stands.
+#   The LEAK DETECTION number is a function of the site, and the rule is
+#   CARB's own rather than Veeder-Root's -- see `leak_detection_cfh` below,
+#   which is why the three manuals print three different figures for it.
 #
 #   The STAGE I percentile is a manual-against-manual conflict: 635 says
 #   "75TH PERCENTILE" and both ISD manuals say "50th PERCENTILE" for the
 #   same row. That belongs in UNKNOWNS, not in a silent switch.
+#
+# The one requirement row is the site's own nozzle range, V4F, and not a
+# constant. 635's V00 sample prints 0.90 1.10 on a composite; 577013-800 Rev
+# P p.48 prints `0.95    1.15`, which are that manual's own worked V4F
+# entries -- "Enter +1.15 for the new maximum", "Enter +0.95 for the new
+# minimum" -- so a real console prints what the site programmed. Each row
+# names the setting it reports. See FIDELITY I5.
 CARB_REQUIREMENTS = [
-    ("VAPOR COLLECTION ASSIST SYSTEM A/L RANGE", 0.90, 1.10, "assist"),
+    ("VAPOR COLLECTION ASSIST SYSTEM A/L RANGE", "V4F", "assist"),
 ]
 CARB_THRESHOLDS = [
     ("VAPOR COLLECTION ASSIST SYSTEM A/L GROSS FAIL",
@@ -569,12 +661,97 @@ CARB_THRESHOLDS = [
     ("VAPOR CONTAINMENT DEGRADATION, 75TH PERCENTILE",
      "30dys", "----", "0.30", '"wcg', "any"),
     ('VAPOR CONTAINMENT LEAK DETECTION FAIL @2"WCG',
-     "7dys", "----", "13.5", "cfh", "any"),
+     "7dys", "----", None, "cfh", "any"),
     ("STAGE I VAPOR TRANSFER FAIL, 75TH PERCENTILE",
      "20min", "----", "2.50", '"wcg', "any"),
 ]
 CARB_FOOTER = ('CARB STANDARD REPORT FORMAT - CP201 APPENDIX '
                '"EVR-ISD MONTHLY STATUS REPORT"')
+
+# The leak detection row's own figure, which is not a constant and is not
+# Veeder-Root's. CARB CP-201 (amended July 12, 2021) section 4.2 sets the
+# static pressure standard as a five-branch step function of the NOZZLE
+# count, Equation 4-1 for a balance site and 4-2 for a vacuum assist one:
+#
+#     Pf = 2e^(-K/V)      Pf  the minimum allowable five-minute final
+#                             pressure, inches H2O, from an initial 2.0
+#                         V   the total ullage affected by the test, gallons
+#                         N   the number of affected nozzles
+#
+# and section 9.2.4(c) p.35 puts the console's alarm at twice it: ISD alarms
+# "when the vapor recovery system leaks at a rate which is at least 2 times
+# the rate allowed in Section 4.2".
+#
+# Both equations are IMAGES in the PDF and extract as nothing, which is why
+# three passes over this document found no table; the constants below were
+# read off a render of pp.14-15. See UNKNOWNS A59.
+#
+# K is a volume, so the ullage cancels and the allowed leak falls out of the
+# decay directly. Gauge pressure in a fixed ullage decays as P = P0.e^(-Ct/V)
+# with C the conductance, so C = K/5 gallons a minute at the five minute
+# mark, and the escaping volume at the 2" WC the test starts from is
+#
+#     2 x 60 / (5 x 406.8 x 7.4805) = 1/126.79 of K cubic feet an hour
+#
+# on 406.8 inches of water to the atmosphere and 7.4805 gallons to the cubic
+# foot -- doubled, by 9.2.4(c), to 1/63.4.
+#
+# The check that this is CARB's own arithmetic rather than a fit: it takes
+# the five balance constants to 6.00, 6.25, 6.50, 6.75 and 7.00 cfh exactly,
+# which are the round numbers the K's were plainly back-computed from.
+CP201_K = {
+    "balance": (760.490, 792.196, 824.023, 855.974, 888.047),
+    "assist": (500.887, 531.614, 562.455, 593.412, 624.483),
+}
+CP201_BANDS = (6, 12, 18, 24)          # 1-6, 7-12, 13-18, 19-24, >24
+CP201_CFH = 2.0 * 60.0 / (5.0 * 406.8 * 7.4805) * 2.0
+
+
+def leak_detection_cfh(site, hoses):
+    """The LEAK DETECTION row's `above` figure, in cfh, as a string.
+
+    Every figure the manuals print falls out of this and none of them agree,
+    which is the evidence that it is the site's and not the console's:
+
+        577013-819 Rev F p.14   assist, "a typical 12-hose site"   8.5
+        577013-800 Rev P p.48   assist                             8.50
+        577013-937 Rev J p.54   balance                           12.5
+        576013-635 Rev AA p.602 balance                           13.5
+
+    8.5 and 12.5 are the 7-12 band and 13.5 is balance at 19-24, so the four
+    land in three different cells of the same table. 819's own summary of the
+    range, "limit ranges over 8-10 cfh for <6 to >24 hoses", is the assist
+    column's two ends.
+
+    Two things here are still a reading. CP-201 counts NOZZLES and the
+    console counts hoses, which are the same number until a site has a hose
+    with two nozzles on it; and the balance column needs no rounding at all
+    while the assist one runs about 0.12 under each half, so rounding to the
+    nearest half is what makes 7.90 print as 8.0. See UNKNOWNS A59.
+    """
+    ks = CP201_K.get(site) or CP201_K["balance"]
+    which = len(CP201_BANDS)
+    for i, top in enumerate(CP201_BANDS):
+        if hoses <= top:
+            which = i
+            break
+    return f"{round(ks[which] * CP201_CFH * 2.0) / 2.0:.1f}"
+
+
+def carb_thresholds(site, hoses):
+    """CARB_THRESHOLDS for one site, with every row's figures resolved.
+
+    The table is static except for the one row, and three callers print it,
+    so the resolving happens once here rather than three times out there.
+    """
+    out = []
+    for label, per, lo, hi, unit, only in CARB_THRESHOLDS:
+        if only not in (site, "any"):
+            continue
+        if hi is None:
+            hi = leak_detection_cfh(site, hoses)
+        out.append((label, per, lo, hi, unit, only))
+    return out
 
 
 # V83 abbreviates the sensor type where V43 spells it out: its column reads

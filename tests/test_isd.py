@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """ISD and PMC setup, 576013-635 section 7.7.2."""
 import os
 import sys
@@ -92,8 +95,9 @@ class TheSetupValues(unittest.TestCase):
         """A console nobody has programmed still has an answer for each."""
         _c, h = a_console()
         for code in isd.SETUP:
-            self.assertNotIn("9999", self.send(h, f"I{code}00"), code)
-            self.assertNotIn("9999", self.send(h, f"i{code}00"), code)
+            # the refusal marker is 9999FF: 1.20 packs as 3F99999A
+            self.assertNotIn("9999FF", self.send(h, f"I{code}00"), code)
+            self.assertNotIn("9999FF", self.send(h, f"i{code}00"), code)
 
     def test_an_enum_takes_the_manuals_own_table(self):
         """V40's own display sample answers "VST ECS PROCESSOR" under
@@ -621,17 +625,51 @@ class TheStatusReports(unittest.TestCase):
         shown = self.send(h, "IV0000")
         self.assertIn("BALANCE SYS FLOW PERFORMANCE  1dys", shown)
 
-    def test_the_uncertain_carb_figures_are_left_as_they_were(self):
-        """Two rows are NOT resolved here. The leak detection limit is a
-        function of hose count -- 577013-819 Rev F p.8, "limit ranges over
-        8-10 cfh for <6 to >24 hoses" -- and the manuals print 13.5, 12.5
-        and 8.50 for it; the Stage I percentile is 75TH in 576013-635 and
-        50th in both ISD manuals. Both belong in UNKNOWNS, so both keep
-        635's figure until the rule is found."""
+    def test_the_stage_one_percentile_is_left_as_it_was(self):
+        """That row IS still unresolved: 576013-635 says 75TH and both ISD
+        manuals say 50th for the same line, which is a manual-against-manual
+        conflict and belongs in UNKNOWNS rather than in a silent switch."""
         _c, h = self.a_site(evr="01")
         shown = self.send(h, "IV0000")
-        self.assertIn("13.5cfh", shown)
         self.assertIn("STAGE I VAPOR TRANSFER FAIL, 75TH PERCENTILE", shown)
+
+    def test_the_leak_detection_limit_walks_cp201s_nozzle_bands(self):
+        """CARB CP-201 section 4.2 is a five-branch step function of the
+        nozzle count, and section 9.2.4(c) puts the alarm at twice it, so
+        the row is the site's own figure and not a constant. The bands are
+        1-6, 7-12, 13-18, 19-24 and >24. See UNKNOWNS A59."""
+        for site, want in (
+                ("balance", ["12.0", "12.5", "13.0", "13.5", "14.0"]),
+                ("assist", ["8.0", "8.5", "9.0", "9.5", "10.0"])):
+            got = [isd.leak_detection_cfh(site, n)
+                   for n in (6, 12, 18, 24, 25)]
+            self.assertEqual(got, want, site)
+            # a band is closed at the top and the next one opens above it
+            self.assertEqual(isd.leak_detection_cfh(site, 7), want[1], site)
+            self.assertEqual(isd.leak_detection_cfh(site, 19), want[3], site)
+
+    def test_every_leak_detection_figure_the_manuals_print_is_in_the_table(self):
+        """Four manuals print four different figures for this one row, and
+        all four are cells of CP-201's table rather than disagreements:
+
+            577013-819 Rev F p.14   assist, "a typical 12-hose site"   8.5
+            577013-800 Rev P p.48   assist                             8.50
+            577013-937 Rev J p.54   balance                           12.5
+            576013-635 Rev AA p.602 balance                           13.5
+        """
+        self.assertEqual(isd.leak_detection_cfh("assist", 12), "8.5")
+        self.assertEqual(isd.leak_detection_cfh("balance", 12), "12.5")
+        self.assertEqual(isd.leak_detection_cfh("balance", 20), "13.5")
+        # and 819's own summary of the range is the assist column's two ends
+        self.assertEqual(isd.leak_detection_cfh("assist", 1), "8.0")
+        self.assertEqual(isd.leak_detection_cfh("assist", 99), "10.0")
+
+    def test_the_leak_detection_row_reports_the_sites_own_hose_count(self):
+        """The fixture programs two hoses, so it is CP-201's first band."""
+        _c, h = self.a_site(evr="01")
+        self.assertIn("12.0cfh", self.send(h, "IV0000"))
+        _c, h = self.a_site(evr="02")
+        self.assertIn("8.0cfh", self.send(h, "IV0000"))
 
     def test_the_rows_every_site_has_are_on_both(self):
         for evr in ("01", "02"):
@@ -1358,6 +1396,9 @@ class TheSetupSelfTest(unittest.TestCase):
             c.values["S72301"] = "0101"          # ROTARY AIR FLOW METER
             c.values["S72302"] = "0202"          # VAPOR PRESSURE SENSOR
             c.values["S80B01"] = "0101"          # a relay controls tank 1
+            # and carries what Rev F p.18 asks of it on a Balance site
+            for aa, nn in isd.relay_required("balance", False):
+                c.assign_relay_alarm(1, aa, nn, "00")
             c.isd_add_hose()
         c.isd_setup_selftest()
         return c
@@ -1423,6 +1464,59 @@ class TheSetupSelfTest(unittest.TestCase):
         self.assertIn("vpinput", c.isd_setup_faults())
         c.values["S80C01"] = "0151"              # a VAPOR PROCESSOR input
         self.assertNotIn("vpinput", c.isd_setup_faults())
+
+    def test_a_control_device_wants_every_required_alarm(self):
+        """Rev F p.18: "The control device does not have all the correct
+        alarms assigned. The following ISD alarms must be assigned to the
+        relay: ISD GROSS PRESSURE FAIL, ISD DEGRD PRESSURE FAIL, ISD VAPOR
+        LEAKAGE FAIL"."""
+        c = self.a_site(configured=True)
+        for nn in ("03", "05", "07"):
+            c.assign_relay_alarm(1, "30", nn, "00", on=False)
+            self.assertIn("relay", c.isd_setup_faults(), nn)
+            c.assign_relay_alarm(1, "30", nn, "00")
+            self.assertNotIn("relay", c.isd_setup_faults(), nn)
+
+    def test_and_a_missing_one_posts_missing_relay_setup(self):
+        c = self.a_site(configured=True)
+        c.assign_relay_alarm(1, "30", "07", "00", on=False)
+        c.isd_setup_selftest()
+        self.assertIn("301200", self.alarms(c))
+
+    def test_a_vapor_processor_adds_its_two(self):
+        """"When there is a Vapor Processor installed the following ISD
+        alarms must be assigned: ISD VP PRESSURE FAIL, ISD VP STATUS FAIL"."""
+        c = self.a_site(configured=True)
+        c.values["SV4000"] = "01"
+        self.assertIn("relay", c.isd_setup_faults())
+        for nn in ("09", "11"):
+            c.assign_relay_alarm(1, "30", nn, "00")
+        self.assertNotIn("relay", c.isd_setup_faults())
+
+    def test_the_hose_alarms_follow_the_evr_type(self):
+        """Balance wants FLOW COLLECT FAIL; Vacuum Assist wants GROSS
+        COLLECT FAIL and DEGRD COLLECT FAIL."""
+        c = self.a_site(configured=True)
+        c.values["SV4E00"] = "0201"
+        self.assertIn("relay", c.isd_setup_faults())
+        for nn in ("02", "04"):
+            c.assign_relay_alarm(1, "31", nn, "00")
+        self.assertNotIn("relay", c.isd_setup_faults())
+
+    def test_every_device_with_a_tank_is_asked(self):
+        """The field note: a relay given a Tank ID that ISD does not shut a
+        pump down with "will cause a MISSING RELAY SETUP warning" -- and a
+        PLLD line is a control device the same way."""
+        c = self.a_site(configured=True)
+        c.values["S80B02"] = "0201"              # an overfill relay, tank 1
+        self.assertIn("relay", c.isd_setup_faults())
+        c.values["S80B02"] = "0200"              # no Tank ID: not asked
+        self.assertNotIn("relay", c.isd_setup_faults())
+        c.values["S78501"] = "0101"
+        self.assertIn("relay", c.isd_setup_faults())
+        for aa, nn in isd.relay_required("balance", False):
+            c.assign_line_disable_alarm("plld", 1, aa, nn, "00")
+        self.assertNotIn("relay", c.isd_setup_faults())
 
     def test_it_runs_at_power_up(self):
         """"Setup self-testing occurs following power-up"."""
@@ -1982,6 +2076,268 @@ class ClearTestAfterRepairClearsTheTest(unittest.TestCase):
         self.assertEqual(c.isd_setup_result, [])
         c.isd_setup_selftest()
         self.assertEqual(c.isd_setup_result, standing)
+
+
+class ARepairIsLoggedAndPrinted(unittest.TestCase):
+    """577013-819 Rev F p.35: "All repair dates are saved in the
+    Miscellaneous Event Log", and PRINT on the repair menu gives TEST FAIL
+    CLEAR DATES. FIDELITY I11."""
+
+    STAMP = r"^[0-9]{2}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$"
+
+    def send(self, h, text):
+        return h.handle((chr(1) + text + chr(13)).encode()).decode("latin-1")
+
+    def body(self, lines):
+        return lines[lines.index("TEST FAIL CLEAR DATES") + 1:]
+
+    def test_a_clear_is_a_test_manually_cleared_event(self):
+        """635 p.606's category 03, and 577013-937 Rev J's own log line,
+        `VAPOR PROCESSOR  TEST MANUALLY CLEARED`."""
+        c, h = a_console()
+        self.assertNotIn("9999FF", self.send(h, "SV8500149" + "030000"))
+        self.assertEqual(c.isd_events[0][1:],
+                         ("VAPOR PROCESSOR", "TEST MANUALLY CLEARED"))
+
+    def test_the_printout_is_the_pages_blocks(self):
+        from tls350sim import printer
+        c, h = a_console()
+        hose = c.isd_add_hose()
+        c.set_setting("evr_hose_label", "MIDGRADE", hose)
+        self.send(h, "SV8500149" + "06" + "01" + "%02d" % hose)
+        self.send(h, "SV8500149" + "010000")
+        body = self.body(printer.isd_clear_dates(c))
+        self.assertEqual(body[0], "CONTAINMENT OVER PRESS")
+        self.assertRegex(body[1], self.STAMP)
+        self.assertEqual(body[2:4], ["VAPOR COLLECTION TEST",
+                                     "FP: 1 h:   1 MIDGRADE"])
+        self.assertRegex(body[4], self.STAMP)
+        self.assertEqual(len(body), 5)
+
+    def test_nothing_cleared_prints_the_title_alone(self):
+        from tls350sim import printer
+        c, _h = a_console()
+        self.assertEqual(self.body(printer.isd_clear_dates(c)), [])
+
+    def test_an_all_hoses_clear_reaches_every_hose(self):
+        """V85: "FF=00, HH=00: All FP's and hoses are cleared"."""
+        from tls350sim import printer
+        c, _h = a_console()
+        for _ in range(2):
+            c.isd_add_hose()
+        c.clear_isd_test("06")
+        rows = [r for r in printer.isd_clear_dates(c) if r.startswith("FP: ")]
+        self.assertEqual(len(rows), 2)
+
+    def test_v85_still_reports_a_day(self):
+        """The time is the printout's; V85's own format is YYMMDD."""
+        c, h = a_console()
+        self.send(h, "SV8500149" + "040000")
+        self.assertRegex(c.values["SV8504"], r"^[0-9]{6}$")
+
+
+class TheMiscEventsCarryTheirOwnCodes(unittest.TestCase):
+    """576013-635 Rev AA p.606 enumerates the Shutdown & Misc. events, and
+    V01 packed every one as `01 01`, ISD Startup. FIDELITY I11."""
+
+    def records(self, h):
+        reply = h.handle((chr(1) + "iV0100" + chr(13)).encode()).decode()
+        body = reply.split("&&")[0][len(chr(1) + "iV0100") + 10:]
+        self.assertEqual(body[:6], "000000", "no warnings or failures")
+        count, rows = int(body[6:9]), body[9:]
+        return [rows[i * 20:(i + 1) * 20] for i in range(count)]
+
+    def test_a_repair_clear_is_category_three_under_its_own_type(self):
+        """V85's 03, Vapor Processor, is p.606's type 02."""
+        c, h = a_console()
+        h.handle((chr(1) + "SV8500149" + "030000" + chr(13)).encode())
+        self.assertEqual(self.records(h)[0][8:12], "0302")
+
+    def test_the_startup_is_a_system_event(self):
+        _c, h = a_console()
+        self.assertEqual(self.records(h)[-1][8:12], "0101")
+
+    def test_the_readiness_line_is_category_six(self):
+        _c, h = a_console()
+        self.assertEqual(self.records(h)[-2][8:10], "06")
+
+    def test_the_legend(self):
+        self.assertEqual(isd.misc_event_code("ISD SHUTDOWN", ""), ("01", "02"))
+        self.assertEqual(
+            isd.misc_event_code("SENSOR OUT", isd.CLEARED), ("03", "06"))
+        self.assertEqual(
+            isd.misc_event_code("READINESS ISD:FN EVR:NNN",
+                                "CHECK SETUP CONFIGURATION"), ("06", "01"))
+
+
+class ThePmcDiagnosticsPrintout(unittest.TestCase):
+    """577013-937 Rev J Figures 48 and 49: PRINT on PMC DIAGNOSTIC "Prints
+    out a copy of the PMC Diagnostic report", which has a membrane form and
+    a polisher form. FIDELITY I11."""
+
+    def body(self, c):
+        from tls350sim import printer
+        lines = printer.pmc_diagnostics(c)
+        return lines[lines.index("PMC DIAGNOSTICS"):]
+
+    def test_the_membrane_form(self):
+        c, _h = a_console()
+        c.values["SV4000"] = "01"
+        self.assertEqual(self.body(c), [
+            "PMC DIAGNOSTICS", "-" * 22, "PMC VERSION: 01.03", "",
+            "VAPOR PROCESSOR MODE", "AUTOMATIC", "",
+            "VAPOR PROCESSOR STATE", "VP STATE OFF"])
+
+    def test_the_polisher_form_in_the_figures_own_order(self):
+        c, _h = a_console()
+        c.values["SV4000"] = "05"
+        body = self.body(c)
+        self.assertEqual(body[4][:27], "VAPOR PRESSURE INCHES H20: ")
+        self.assertEqual(body[5:], [
+            "VEEDER-ROOT POLISHER LOAD:  24.9%", "VAPOR PROCESSOR MODE",
+            "EFFLUENT EMISSION: 0.05 LB/KGAL", "AUTOMATIC",
+            "VAPOR VALVE POSITION", "CURRENT   : CLOSED",
+            "REQUESTED : CLOSED", "", "TEMP:  75.05 DEG F"])
+
+    def test_the_mode_and_state_are_the_ports(self):
+        """VC0 and VC1 write them; the screens and the paper read them."""
+        c, _h = a_console()
+        c.values["SV4000"] = "01"
+        c.values["SVC000"] = "0"                   # manual
+        c.values["SVC100"] = "1"                   # on
+        self.assertEqual(self.body(c)[-4:], ["MANUAL", "",
+                                             "VAPOR PROCESSOR STATE",
+                                             "VP STATE ON"])
+        self.assertEqual(c.diag_reading("pmc_mode"), "MANUAL")
+        self.assertEqual(c.diag_reading("pmc_state"), "VP STATE:  ON")
+
+    def test_the_polishers_repair_branch_clears_the_processor_test(self):
+        """Rev J Figure 49: PROCESSOR STATUS TEST, then CLEAR TEST AFTER
+        REPAIR / ARE YOU SURE?. The same test ISD DIAGNOSTIC's Processor
+        Status selection clears, logged and dated the same way."""
+        c, _h = a_console()
+        c.values["SV4000"] = "05"
+        self.assertEqual(c.diag_action("pmc_clear", 1),
+                         "CLEAR TEST AFTER REPAIR")
+        self.assertEqual(c.isd_clears[0]["test"], "03")
+        self.assertEqual(c.isd_events[0][1:],
+                         ("VAPOR PROCESSOR", "TEST MANUALLY CLEARED"))
+        self.assertRegex(c.values["SV8503"], r"^[0-9]{6}$")
+
+    def test_the_screen_and_v82_carry_one_version(self):
+        from tls350sim.console import DIAG_MENU
+        c, _h = a_console()
+        pmc = [f for f in DIAG_MENU if f["function"] == "PMC DIAGNOSTIC"][0]
+        self.assertEqual(pmc["screens"][0]["l1"],
+                         f"PMC VERSION: {isd.PMC_VERSION}")
+        self.assertEqual(c.vapor_processor_status()["version"],
+                         isd.PMC_VERSION)
+
+
+class AnAirflowMeterTakesTwoFuelingPoints(unittest.TestCase):
+    """577013-937 Rev J Figure 11: `AFMx No Space for FP`, "You cannot map
+    more than 2 fueling points (and related hoses) to one AFM (only one AFM
+    is installed per dispenser)". FIDELITY I11."""
+
+    SERIAL = "03001401"
+
+    def a_site(self):
+        c, _h = a_console()
+        for _ in range(3):                         # FP 01, 02 and 03
+            hose = c.isd_add_hose()
+            c.set_setting("evr_afm_id", self.SERIAL, hose)
+        return c
+
+    def test_a_third_fueling_point_on_one_afm_has_no_space(self):
+        c = self.a_site()
+        c.isd_hose_map.update({1: 1, 2: 2})
+        self.assertIsNotNone(c.isd_afm_full(3))
+
+    def test_two_points_have_room(self):
+        c = self.a_site()
+        c.isd_hose_map[1] = 1
+        self.assertIsNone(c.isd_afm_full(3))
+
+    def test_a_second_hose_on_a_mapped_point_is_not_a_third_point(self):
+        c = self.a_site()
+        c.isd_hose_map.update({1: 1, 2: 2})
+        c.set_setting("evr_fuel_pos", "01", 3)
+        self.assertIsNone(c.isd_afm_full(3))
+
+    def test_a_hose_with_no_afm_is_not_asked(self):
+        c = self.a_site()
+        c.isd_hose_map.update({1: 1, 2: 2})
+        c.set_setting("evr_afm_id", "", 3)
+        self.assertIsNone(c.isd_afm_full(3))
+
+    def test_x_is_the_smart_sensor_carrying_that_serial(self):
+        from tls350sim import wiresensors
+        c = self.a_site()
+        c.modules["smart"] = 1
+        c.values["S72101"] = "0111"
+        c.values["S72302"] = "0201"                # sensor 2, an AFM
+        serial = wiresensors.isd_serial(c, 2)
+        self.assertTrue(serial)
+        for hose in (1, 2, 3):
+            c.set_setting("evr_afm_id", serial, hose)
+        c.isd_hose_map.update({1: 1, 2: 2})
+        self.assertEqual(c.isd_afm_full(3), 2)
+
+
+class TheNozzleRangeIsOneField(unittest.TestCase):
+    """V4F and the panel's NOZZLE A/L RANGE MAX and MIN screens.
+
+    Two stores for one pair until FIDELITY I5: the screens wrote settings
+    nothing read, and the wire kept the manual's RANGE as its default.
+    """
+
+    def ask(self, h, code):
+        return h.handle((chr(1) + code + chr(13)).encode()).decode("latin-1")
+
+    def test_an_unprogrammed_console_prints_the_pages_own_pair(self):
+        """635 p.653 prints `A/L RATIO: 1.00 - 1.20`, and Rev P's panel draws
+        `MAX: +1.20` and `MIN: +1.00` before its example changes them."""
+        c, h = a_console()
+        self.assertIn("A/L RATIO: 1.00 - 1.20", self.ask(h, "IV4F00"))
+        self.assertEqual(c.setting("evr_al_max"), "+1.20")
+        self.assertEqual(c.setting("evr_al_min"), "+1.00")
+
+    def test_the_panel_writes_what_the_port_reads(self):
+        """Rev P's worked example: "Enter +1.15 for the new maximum", then
+        "Enter +0.95 for the new minimum"."""
+        c, h = a_console()
+        c.set_setting("evr_al_max", "+1.15")
+        c.set_setting("evr_al_min", "+0.95")
+        self.assertIn("A/L RATIO: 0.95 - 1.15", self.ask(h, "IV4F00"))
+
+    def test_and_the_port_writes_what_the_panel_reads(self):
+        c, h = a_console()
+        self.assertNotIn("9999", self.ask(h, "SV4F00 0.90 1.10"))
+        self.assertEqual(c.setting("evr_al_min"), "+0.90")
+        self.assertEqual(c.setting("evr_al_max"), "+1.10")
+
+    def test_the_panel_keeps_the_pages_range_and_order(self):
+        """"minimum Value=0.5", "maximum Value=1.5", and a low below the
+        high, which is the rule the Set already applied."""
+        c, _h = a_console()
+        for key, bad in (("evr_al_max", "+1.60"), ("evr_al_min", "+0.40"),
+                         ("evr_al_min", "+1.30"), ("evr_al_max", "junk")):
+            c.set_setting(key, bad)
+            self.assertEqual(
+                (c.setting("evr_al_min"), c.setting("evr_al_max")),
+                ("+1.00", "+1.20"), (key, bad))
+
+    def test_the_carb_requirement_line_is_the_sites_range(self):
+        """577013-800 Rev P p.48 prints `0.95    1.15` on the assist
+        requirement row, which are that figure's own V4F entries."""
+        c, h = a_console()
+        c.values["SV4E00"] = "0201"
+        c.set_setting("evr_al_max", "+1.15")
+        c.set_setting("evr_al_min", "+0.95")
+        row = [line for line in self.ask(h, "IV0000").splitlines()
+               if "A/L RANGE" in line][0]
+        self.assertTrue(row.rstrip().endswith("0.95 1.15"), row)
+        self.assertIn(packed.hexfloats([0.95, 1.15]), self.ask(h, "iV0000"))
 
 
 if __name__ == "__main__":

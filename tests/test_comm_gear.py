@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The console's communications gear beyond the RS-232 card: auto-dial and
 its one documented failure, the remote display, and the DIMs that metered
 transactions arrive through."""
@@ -70,6 +73,14 @@ class Autodial(unittest.TestCase):
         self.assertIn("010900", c.conditions())
         screens = [a["screen"] for a in describe_alarms(c.conditions())]
         self.assertIn("AUTODIAL FAILURE", screens)
+
+    def test_an_unprogrammed_retry_delay_is_three_minutes(self):
+        """I52700 on a real console reads 3 for a receiver nobody has set,
+        and so does the site tape's `RETRY DELAY: 3`; the dialler waited
+        one minute and the report said nothing at all. FIDELITY S18."""
+        c = dialing_console()
+        c.values.pop("S52701")
+        self.assertEqual(c.autodial._retry_plan(1), (2, 3))
 
     def test_an_answered_call_clears_the_failure(self):
         c = dialing_console()
@@ -237,18 +248,23 @@ class Dims(unittest.TestCase):
         self.assertLess(c.tank_level[1]["volume"], 4901)
 
     def test_without_one_the_console_sees_nothing(self):
+        """SEES: the fuel still leaves on the handle alone, and what the
+        missing DIM costs is the booking. This asserted the tank stood
+        still, which was the model before the draw came out of BIR."""
         c = self.a_selling_site()
         del c.modules["edim"]
         c.clock_offset += 3600; c.tick()
-        self.assertEqual(c.tank_level[1]["volume"], 5000.0)
+        self.assertLess(c.tank_level[1]["volume"], 4901)
+        self.assertEqual(sum(c.bir.totals.values()), 0.0)
 
     def test_a_faulted_link_is_the_same_blindness_plus_the_alarm(self):
         c = self.a_selling_site()
         c.dim_fault = True
         c.clock_offset += 3600; c.tick()
-        self.assertEqual(c.tank_level[1]["volume"], 5000.0)
+        self.assertLess(c.tank_level[1]["volume"], 4901)
+        self.assertEqual(sum(c.bir.totals.values()), 0.0)
         screens = [a["screen"] for a in describe_alarms(c.conditions())]
-        self.assertIn("E 1:DIM COMMUNICATION ALARM", screens)
+        self.assertIn("E 1:COMMUNICATION ALARM", screens)
 
     def test_the_mdim_is_a_dim_too(self):
         c = self.a_selling_site()
@@ -402,7 +418,7 @@ class TheAutoDialMethodIsItsOwnScreen(unittest.TestCase):
         each screen by the selected receiver number (RCVR n)", drawn as
         `SINGLE RCVR: D1`."""
         c = self.a_console()
-        c.values["S52B01"] = "0150630"                # daily, 06:30
+        c.store("S52B01", "0150630")                  # daily, 06:30
         self.assertEqual(self.lines(c, "S52B01"), ["ALL RCVRS", "DAILY"])
         c.values["S52900"] = "1"
         self.assertEqual(self.lines(c, "S52B01"),
@@ -416,8 +432,25 @@ class TheAutoDialMethodIsItsOwnScreen(unittest.TestCase):
         drew the payload. `_dial_text` has produced the word for the wire's
         own report all along."""
         c = self.a_console()
-        c.values["S52B01"] = "01" + "2" + "06" + "1" + "5" + "0800"
+        c.store("S52B01", "01" + "2" + "06" + "1" + "5" + "0800")
         self.assertEqual(self.lines(c, "S52B01")[1], "ANNUALLY")
+
+    def test_the_screen_the_port_and_the_paper_read_one_value(self):
+        """The panel wrote `values["S52B01"]`, which only the panel read,
+        and the wire and the setup printout keep `receiver_dial`. So a daily
+        call set on the glass still answered ON DATE over the port, and a
+        weekly one set over the port drew nothing on the glass. FIDELITY
+        S25."""
+        from tls350sim.wire import Handler
+        c = self.a_console()
+        h = Handler(c, verbose=False)
+        c.store("S52B01", "01" + "50630")             # what ENTER encodes
+        self.assertNotIn("S52B01", c.values)
+        reply = h.handle((chr(1) + "I52B01" + chr(13)).encode())
+        self.assertIn(b"DAILY", reply)
+        h.handle((chr(1) + "S52B01" + "441726" + chr(13)).encode())
+        self.assertEqual(c.receiver_dial[1], "441726")
+        self.assertEqual(self.lines(c, "S52B01")[1], "WEEKLY")
 
     def test_the_wire_answers_the_manuals_own_one_line_sample(self):
         """576013-635 Rev AA p.192's Display sample is the stamp and

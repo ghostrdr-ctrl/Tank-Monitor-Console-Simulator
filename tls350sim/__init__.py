@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """A training simulator for TLS-350 compatible tank monitor consoles.
 
 Simulates the console face, the operating and setup screens, and the serial
@@ -28,4 +31,4 @@ DISCLAIMER = (
     "property of their respective owners."
 )
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

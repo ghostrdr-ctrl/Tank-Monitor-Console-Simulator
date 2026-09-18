@@ -56,7 +56,7 @@
     "live": "recon_open_date",
     "head": "prod",
     "text_by": {
-     "DAILY": "DAY OPEN",
+     "DAILY": "%D OPEN",
      "PERIODIC": "CUR PERI OPEN"
     },
     "print_scope": "device"
@@ -183,12 +183,12 @@
     "print_scope": "device"
    },
    {
-    "text": "DAY OPEN",
+    "text": "%D OPEN",
     "live": "recon_open_date",
     "head": "prod",
     "text_by": {
      "WEEKLY": "WEEK OPEN",
-     "PERIODIC": "PERIOD OPEN"
+     "PERIODIC": "CUR PERI OPEN"
     },
     "print_scope": "device"
    },
@@ -278,12 +278,12 @@
     "print_scope": "device"
    },
    {
-    "text": "DAY OPEN",
+    "text": "%D OPEN",
     "live": "recon_open_date",
     "head": "prod",
     "text_by": {
      "WEEKLY": "WEEK OPEN",
-     "PERIODIC": "PERIOD OPEN"
+     "PERIODIC": "CUR PERI OPEN"
     },
     "print_scope": "device"
    },
@@ -398,12 +398,12 @@
     "print_scope": "device"
    },
    {
-    "text": "DAY OPEN",
+    "text": "%D OPEN",
     "live": "recon_open_date",
     "head": "prod",
     "text_by": {
      "WEEKLY": "WEEK OPEN",
-     "PERIODIC": "PERIOD OPEN"
+     "PERIODIC": "CUR PERI OPEN"
     },
     "print_scope": "device"
    },
@@ -485,7 +485,8 @@
     ],
     "text_by": {
      "DAILY": "SELECT DAY"
-    }
+    },
+    "typed_day": true
    },
    {
     "text": "%s SHFT ADJ VOL",

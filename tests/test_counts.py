@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The numbers NOTES quotes, asserted so they cannot rot quietly.
 
 Four separate NOTES claims in this project were true when written and false
@@ -327,7 +330,42 @@ class TheDiagnosticScreens(unittest.TestCase):
         # reading ENABLED because the walk just changed it. A console cannot
         # be disabled and enabled at once, and asserting both was the defect.
         # FIDELITY D9.
-        self.assertEqual(sum(1 for _ in self.all_screens()), 283)
+        #
+        # 294 is SMART SENSOR DIAGNOSTIC gaining the ISD sensor branch it
+        # did not have: COMM DATA, CONSTANTS and CHANNELS with PRESS <PRINT>
+        # over each, and the calibration walk under a pressure sensor --
+        # CALIBRATE SMARTSENSOR, its two references, the two readings and
+        # CALB STATUS -- as 577013-800 Rev P p.20-44 and 577013-937 Rev J
+        # Figures 45 and 46 draw them. FIDELITY I11; the count was left at
+        # 283 by the pass that added them.
+        #
+        # 298 is PMC DIAGNOSTIC in 577013-937 Rev J Figure 49's order for a
+        # V-R Polisher: its own VAPOR PROCESSOR MODE after the load and the
+        # effluent, and the CLEAR TEST AFTER REPAIR branch down to PROCESSOR
+        # STATUS TEST and ARE YOU SURE?, which it did not have. FIDELITY I11.
+        #
+        # 297 is the first time since 284 it went down: CSLD DIAGNOSTICS'
+        # month is one screen that CHANGE turns, as Figure 6-11 and
+        # 576013-610 Rev AC p.27-3 both draw it, where this console had
+        # SELECT: CURRENT MONTH and SELECT: PREVIOUS MONTH as two STEP
+        # screens. FIDELITY D23.
+        #
+        # 299 is the Vac sensor's CONSTANTS and CHANNELS, which Figure 6-31
+        # draws between its COMM DATA and its install log and this console
+        # did not have. FIDELITY D26.
+        #
+        # 295 is COMMUNICATION DIAGNOSTIC losing the four screens that were
+        # key presses, which 275 above had added as screens: CHANGE's YES,
+        # both ENTER confirmations, and the first screen come round again.
+        # Figure 6-27 reaches its branch with C and E. FIDELITY D27.
+        #
+        # 297 is two things. SMART SENSOR DIAGNOSTIC gains three SELECT VAC
+        # SENSOR screens: Figures 6-29 and 6-30 draw one under each of the
+        # four actions, and this had one for all four, flat. And ARCHIVE
+        # DIAGNOSTIC loses the one it had, which was Figure 6-1's index row
+        # drawn as a screen under the function's own name. FIDELITY D28 and
+        # D29.
+        self.assertEqual(sum(1 for _ in self.all_screens()), 297)
 
     def test_every_x_template_is_filled_in_by_something(self):
         """102 screens carry an X. A screen is filled either by a `live`
@@ -362,7 +400,11 @@ class TheDiagnosticScreens(unittest.TestCase):
         # 106 with the Start-Event branch's own `FP: XX`, which is the
         # figure's line for a meter that has started and not finished.
         # FIDELITY D14.
-        self.assertEqual(n, 106)
+        #
+        # 111 with the calibration walk's five `PRESSURE: XX.XXX` lines, each
+        # filled by the sensor's own reading or the reference typed in.
+        # FIDELITY I11.
+        self.assertEqual(n, 111)
 
 
 class TheDocumentationQuotesThem(unittest.TestCase):

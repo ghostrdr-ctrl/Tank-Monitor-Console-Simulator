@@ -1,3 +1,16 @@
+# Tank Monitor Console Simulator -- a training simulator for TLS-350
+# compatible tank monitor consoles.
+# Copyright (C) 2026 Verbose Software
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The two things on the face that are drawn rather than borrowed from Tk.
 
 The display is a two-line character LCD of the reflective STN kind: a pale
@@ -133,7 +146,7 @@ _GLYPHS = {
 }
 _BLOCK = ["#####"] * 7          # what a module shows for a code it lacks
 
-# **The cursor is a solid block, not an underscore**, photographed on a real
+# The cursor is a solid block, not an underscore, photographed on a real
 # console mid-entry: `TIME: 07:0#  AM PM`, the block sitting over the digit
 # it is about to replace rather than under it. Every edit screen in this
 # simulator drew an underscore, which is what a terminal does and not what

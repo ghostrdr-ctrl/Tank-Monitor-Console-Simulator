@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The console's state: what is installed, what is programmed, what is wrong.
 
 Self-contained on purpose. This simulator is something you point a real tool
@@ -30,7 +33,9 @@ from .meterid import (DEFAULT_BUS, DEFAULT_SLOT, MeterDict, MeterId,
 
 from . import accuchart as _accuchart
 from . import alarmgroups
+from . import atomicfile
 from . import bir as _bir
+from . import exposed
 from . import csld as _csld
 from . import inputs as _inputs
 from . import relays as _relays
@@ -41,9 +46,11 @@ from . import autotx as _autotx
 from . import delivery as _delivery
 from . import isd
 from . import leaktest
+from . import sumptest
+from . import shifts as _shifts
+from . import pscal
 from . import masks
 from . import pressure as _pressure
-from .pressure import FLOOR as FLOOR_PSI
 from . import packed
 from . import readings
 from . import versions
@@ -96,9 +103,9 @@ SELF_CLEARING = {
     # leak test" -- and these two tell the reader what the console will do:
     #
     #   TANK SIPHON BREAK | Warning | Siphon break valve has shut down
-    #     manifold for tank test. | **Clears when tank test completes.**
+    #     manifold for tank test. | Clears when tank test completes.
     #   TANK TEST ACTIVE | Warning | In-tank leak test underway. | Do not
-    #     dispense fuel from this tank **until message disappears.**
+    #     dispense fuel from this tank until message disappears.
     #
     # The first is as explicit as the two above it. The second is an
     # implication and worth marking as one: an instruction to wait for a
@@ -167,7 +174,7 @@ with open(os.path.join(_HERE, "recondata.json"), encoding="utf-8") as _fh:
 # ---------------------------------------------------------------------------
 # Positions on one module, as each chapter's own SLOT # screen draws them:
 # "SLOT #: X X X X" is four probe positions, "SLOT # - X X" is two inputs.
-# Fuel Manager's week, in the console's own spelling. **THR, not THU**: the
+# Fuel Manager's week, in the console's own spelling. THR, not THU: the
 # operator's manual, the setup manual and Figure 6-7 all write Thursday with
 # an R, and a screen keyed THU against a reader keyed THR is a lookup that
 # misses silently and reads Wednesday's number. See FIDELITY O4.
@@ -241,7 +248,12 @@ MODULES = [
     # hold two cannot raise it. How many more than two a bay would take is
     # not stated anywhere and does not matter: the fault is one card too
     # many, and two is one too many.
-    ("vmc",     "VMCI Interface Module",                "",           "comm", 18,  2),
+    # 331001-004 is the module's own installation guide's number, 577013-951
+    # Rev A Figure 1, "VMCI Module, P/N 331001-004" -- the -004 of the LDIM
+    # board family, which is what the guide says it is: "used as a RS-485,
+    # 2-wire serial interface on the dispenser's VMC network". The kit is
+    # 847490-473 (576047-187 Rev A). See UNKNOWNS A22.
+    ("vmc",     "VMCI Interface Module",                "331001-004", "comm", 18,  2),
     # 577013-528 p.5: the dual-port slot-4 module whose RJ-45 half is the
     # Remote Display (27.4K ID); and the two DIM families of 576013-623
     # ch.17: EDIMs in the comm bay, MDIMs in the power bay, which is how
@@ -321,19 +333,56 @@ MODULES = [
 # datasheet's own Software Enhancement Modules, plus the line leak test keys
 # the setup manual mentions ("this message will not appear unless the 0.20
 # Repetitive PLLD software module key is installed in your system").
+# The part numbers are from 330160-000 Rev V, "GROUP - SEM / TLS-350", a
+# four-sheet D-size drawing on the shelf whose every page is vector outlines
+# with NO text layer -- so it extracts to nothing, no grep has ever reached
+# it, and nobody here had read it until 2026-09-17. Sheet 2 carries the
+# legend, "EXPLANATION OF VARIATIONS AND SEM GROUP PART NUMBER":
+#
+#     0XX without BIR, without VLD      XX2  CS     CSLD for manifold tanks
+#     1XX with BIR, without VLD         XX3  FL     Fuel Management Reorder
+#     2XX without BIR, with VLD         XX4  ISD    In-Station Diagnostics
+#     3XX with BIR, with VLD            X1X  P1C2C  PLLD .1 and .2 continuous
+#                                       X2X  TLC    Tanker Loading Control
+#                                       X5X  WP1D   WPLLD and PLLD .1 on-demand
+#                                       X6X  WP1D2C WPLLD and PLLD .1 on-demand
+#                                                   and .2 continuous
+#
+# **The number is POSITIONAL, not per-feature**: one SEM part number encodes
+# a whole feature SET, and the units digit carries a SUBSET (5 is CS FL, 9 is
+# CS FL ISD). So a column of one part number per feature is a category error
+# wherever the drawing has no standalone bundle for that feature, and three
+# of the numbers here were wrong in exactly that way:
+#
+# * `330160-010` is P1C2C, PLLD .1 and .2 CONTINUOUS -- it was labelled
+#   "0.10 On Demand", which is the opposite mode. On-demand is X5X.
+# * `330160-050` is WP1D, WPLLD and PLLD .1 ON-DEMAND -- it was labelled
+#   "0.20 Repetitive", and .2 continuous is the X1X/X6X bundles.
+# * `330160-005` is the units-digit subset CS FL, CSLD plus Fuel Management.
+#   **PMC does not appear anywhere in the drawing**, so it had another
+#   feature's number.
+#
+# The deeper mismatch is left alone deliberately. These KEYS are function
+# 102's decomposition of the feature space -- "PRECISION PLLD", "0.2 GPH
+# PLLD", "PRECISION PLLD ON DEMAND", which is what `licensed()` gates and
+# what the console reports -- and the drawing's is a different cut of the
+# same space, by SEM bundle. No SEM sells 0.1 gph PLLD by itself, so the two
+# PLLD rows and PMC get no part number rather than a plausible one. BIR does
+# have one, and now has it: sheet 2's first row is `330160-100 WITH BIR, NO
+# VLD`. See UNKNOWNS A77.
 SOFTWARE_MODULES = [
     ("csld",    "Continuous Statistical Leak Detection", "330160-002"),
     ("fuelman", "Fuel Manager",                          "330160-003"),
-    ("bir",     "Business Inventory Reconciliation",     ""),
-    ("plld020", "0.20 Repetitive PLLD/WPLLD",            "330160-050"),
-    ("plld010", "0.10 On Demand PLLD/WPLLD",             "330160-010"),
+    ("bir",     "Business Inventory Reconciliation",     "330160-100"),
+    ("plld020", "0.20 Repetitive PLLD/WPLLD",            ""),
+    ("plld010", "0.10 On Demand PLLD/WPLLD",             ""),
     ("isd",     "In-Station Diagnostics",                "330160-004"),
     # Pressure Management Control is its own feature and its own key, which
     # 576013-635 is careful about all through section 7.7: some ISD functions
     # say "PMC feature required", some say "ISD feature required", V47 says
     # "ISD or PMC" and V50 says "ISD and PMC". A console with one and not the
     # other answers a different set of codes, so they cannot be one flag.
-    ("pmc",     "Pressure Management Control",           "330160-005"),
+    ("pmc",     "Pressure Management Control",           ""),
 ]
 SOFTWARE_NAME = {k: name for k, name, _p in SOFTWARE_MODULES}
 SOFTWARE_PART = {k: part for k, _n, part in SOFTWARE_MODULES}
@@ -390,7 +439,7 @@ COMM_PORTS = {1: (1, None), 2: (2, None), 3: (3, 4), 4: (5, 6)}
 # board -- and its position prints UNUSED on those screens while still
 # reading its own ID resistance on SYSTEM CONFIGURATION. See FIDELITY T8.
 #
-# **Not six wide, every one of them.** This comment said so and three of the
+# Not six wide, every one of them. This comment said so and three of the
 # ten are not, and the satellite's is the one that matters: it is `S-SAT `
 # WITH a trailing space, which is a character of the name and not a field
 # being padded. 576013-635 Rev AA prints `COMM BOARD  : 1 (S-SAT )` twice
@@ -482,7 +531,67 @@ COMM_IDENTITIES = set(COMM_NAME) | {"rdu", "edim", "wplldcom"} | {
 # the sensor numbering is the card's positions, and a cage holding both at
 # once would number its sensors in two different arithmetics. See FIDELITY M2.
 SMART_PRESS = {"label": "Seven-Input Smart Sensor/Pressure Module",
-               "part": "332250-001", "wires": 7, "ohms": 499000}
+               "part": "332250-001", "wires": 7, "ohms": 499000,
+               # "2B=SmartSensor(7) Module" against the eight-input card's
+               # "28=SmartSensor(8) Module", in function 102's own "TT - Type
+               # of Module (Hex)" list. The variant reported 28, which is the
+               # other card.
+               "type": "2B",
+               # ...and no page draws either smart sensor card's slot line,
+               # so this one has no name of its own and falls back to the
+               # family's. Inventing `SMART/PRESS` would be drawing a screen
+               # the hardware may not have.
+               "short": None, "paper": None}
+
+# ...and the probe family is two cards for the same reason, and the two are
+# neighbours in that same list: "0A=Four Probe w/ Ground Temp Module"
+# against "01=Four Probe Module".
+#
+# 576013-879 Rev W p.60 is the card itself, Figure 58, headed `PROBE /
+# THERMISTOR INTERFACE MODULE - I.S. BAY` and drawn `PROBE 1 2 3 4` over
+# `THERMISTOR 1 2 3 4`. Its connection table gives the second row: "Ground
+# temperature thermistor - When using volumetric line leak detection (VLLD),
+# only one ground temperature thermistor is needed per site and the
+# thermistor must be wired to thermistor position number 1 (positions 2 - 4
+# are not used)."
+#
+# Table 6-1 gives it its own resistor, `4 Probe w/Temp Interface 160K`,
+# beside the plain card's `4 Probe 2K` -- and 160K is the nominal the
+# comment above uses as its example of "differ slightly", because the sample
+# it read that from is THIS card's slot: `1  4 PROBE / G.T.  164040
+# 166912`. The console quoted the card's numbers for years without having
+# the card. A real console says the same: the capture in `tests/
+# console_capture` prints `1  4 PROBE / G.T.  164313  164181`.
+#
+# A VARIANT rather than a second cage key, for M2's reason and one more of
+# its own: some forty serial codes and three setup functions gate on
+# `has("probe")`, and a console whose only probe card was a second key would
+# refuse every one of them. Both cards carry four probes, so the numbering
+# objection M2 had does not arise here -- what differs is the four
+# thermistor positions beside them, which are not probes.
+#
+# **The shelf names this card four ways and numbers it none**:
+# `Probe/Thermistor Interface Module` (576013-879), `4 Probe w/Temp
+# Interface` (Table 6-1), `Four Probe w/ Ground Temp Module` (635's type
+# list) and `Four-Input Probe/Thermistor Module` (818's version note). The
+# number is in none of them, and came from a tenth document fetched for it:
+# 576013-632 Rev C, the module's own ten-page installation guide, whose
+# Introduction opens "This manual contains instructions for installing the
+# Veeder-Root Probe/Thermistor Interface Module (P/N 847490-104) in
+# TLS-350/ProMax/EMC Consoles." The prefix is one this cage already uses --
+# the Pump Relay Monitor is 847490-504.
+#
+# *Veeder-Root's own catalogue disagrees with its own manual*, and UNKNOWNS
+# A74 records it rather than choosing: the end-of-sale list sells one
+# four-probe board, "0329356-002 - Module, Four-Input Probe Interface ...
+# Incl. terminal connect. for 1 ground temp thermistor for volumetric line
+# leak detector". Read that way the two type codes are two ID resistors on
+# one board rather than two boards, which is a thing the ID column can say
+# and the part number cannot.
+PROBE_GT = {"label": "Four-Input Probe/Thermistor Interface Module",
+            "part": "847490-104", "wires": 4, "ohms": 160000, "type": "0A",
+            # the glass and the paper spell it differently; see `slot_name`
+            "short": "4 PROBE/ G. T.", "paper": "4 PROBE / G.T."}
 
 MODULE_OHMS = {
     "probe": 2000,        # "4 Probe 2K"
@@ -540,21 +649,24 @@ MODULE_OHMS = {
     "edim": 100000,       # "Dispenser Interface Module 100K", and function
                           # 102's own sample row `ELEC DISP INT. 100725`
     # The VMCI Interface Module is real -- 576013-610 chapters 26 and 27,
-    # device code X, alarm category 35, its own history report -- and it is
-    # in no ID resistance table on this shelf. 82.5K is the row this console
-    # borrowed for it, and that row now has an owner: the RS-485 multiport
-    # above. Table 6-1 gives one resistance to more than one card in a dozen
-    # places, so a shared value is not itself a fault; this one is still a
-    # guess and is marked as one. See UNKNOWNS A22.
+    # device code X, alarm category 35, its own history report, and now its
+    # own installation guide, 577013-951 Rev A, which gives it a part number
+    # (331001-004) and no ID resistance: the only ohms in it are the data
+    # cable's. It is in no ID resistance table on this shelf either -- Table
+    # 6-1 has no VMCI row and no LDIM row for its family to borrow from.
+    # 82.5K is the row this console borrowed for it, and that row now has an
+    # owner: the RS-485 multiport above. Table 6-1 gives one resistance to
+    # more than one card in a dozen places, so a shared value is not itself
+    # a fault; this one is still a guess and is marked as one. UNKNOWNS A22.
     "vmc": 82500,
     "pumpmon": 33000,     # not in Table 6-1; the pump sense row is its family
 }
 
-# What an empty slot reads, from the same function 102 sample: "UNUSED
-# 10191362 10329900" in the intrinsically safe bay and "COMM 4-6 UNUSED
-# 15000000 15000000" in the communication bay. An open circuit, in other
-# words, and the I.S. bay measures it through its own barrier.
-EMPTY_OHMS = {"is": 10200000, "power": 15000000, "comm": 15000000}
+# What an empty slot reads: the same rail in every bay. `Console.
+# EMPTY_READING` carries the evidence and the history; this stays a table
+# because the three bays are three questions and the day one of them answers
+# differently is the day this needs to be one again.
+EMPTY_OHMS = {"is": 15000000, "power": 15000000, "comm": 15000000}
 
 # what a slot screen calls each card: "SLOT 1 4 PROBE/ G. T." is the
 # manual's own shorthand, and 24 characters is all there is
@@ -584,6 +696,61 @@ MODULE_SHORT = {
     "asat4": "S-SAT COMM", "ssat4": "S-SAT COMM", "mt4": "MT COMM",
 }
 
+# ...and what function 102's PAPER calls a card, which is a different
+# vocabulary and not a shortening of the same one.
+#
+# `MODULE_SHORT` above is Table 6-1's names cut to the glass's width, and
+# Table 6-1 is the ID RESISTANCE table -- it names cards for a technician
+# holding a meter. The report has its own list, and two sources agree on it
+# against this console: function 102's own sample printout in 576013-635
+# Rev AA p.49, and the captured console in `tests/console_capture`, which
+# are eleven years and one continent apart and print the same strings.
+#
+#     the sample        1  4 PROBE / G.T.     9  4 INPUT BOARD
+#                       COMM 1 FAXMODEM  BOARD     COMM 3 ELEC DISP INT.
+#                       COMM 2 RS232 SERIAL BD
+#     the capture       1  4 PROBE / G.T.     2  PLLD SENSOR BD
+#                       9  PLLD POWER BD      COMM 1 RS232 SERIAL BD
+#                       COMM 2 SERIAL SAT BD
+#
+# Note `BD` for a board and the two PLLD cards named by what they DO --
+# sensor and power -- where Table 6-1 names them by what they ARE.
+#
+# **Only attested names go in here.** Most of the cage appears in no sample
+# at all, and a card with no entry keeps the name the screen uses, because
+# the screen's is at least a name a manual draws. Guessing `8 LIQUID BD`
+# from the pattern would be inventing a line on the one report a technician
+# reads to find out what is in the console. FIDELITY M20, and the ones
+# still missing are named there.
+# Each of these is attested twice over: the STRING is printed in one of the
+# two samples, and the two ID resistances beside it reproduce, to within the
+# tolerance `module_id_resistance` already models, the Table 6-1 nominal of
+# the card this console maps that name to. A name and a resistance agreeing
+# is what identifies the card, because the resistance is the only field on
+# that report whose meaning does not depend on reading the name.
+#
+#     PLLD SENSOR BD    3878 against  "PLLD Sensor 3.9K"        1.0057
+#     PLLD POWER BD   100848 against  "PLLD Controller 100K"    0.9916
+#     RS232 SERIAL BD  15051 against  "RS232 Serial Interface"  0.9966
+#     SERIAL SAT BD   482940 against  "Serial Satellite 475K"   0.9836
+#     FAXMODEM  BOARD  47008 against  "SiteFax Modem (new) 47K" 0.9998
+#     ELEC DISP INT.  100725 against  "Dispenser Interface 100K" 0.9928
+#
+# The satellite is the SERIAL one and not the Amoco one, which the name
+# cannot tell you and the resistor can: 482940 is 1.017 of the Serial
+# Satellite's 475K and 1.45 of the Amoco board's 332K.
+#
+# Note `FAXMODEM  BOARD` carries TWO spaces, and `ELEC DISP INT.` a full
+# stop. They are transcribed rather than tidied: a report is what it prints.
+MODULE_PAPER = {
+    "plld": "PLLD SENSOR BD",        # the capture, I.S. slot 2
+    "plldctl": "PLLD POWER BD",      # the capture, power slot 9
+    "rs232": "RS232 SERIAL BD",      # the capture AND p.49's own sample
+    "ssat": "SERIAL SAT BD",         # the capture, comm 2
+    "modem": "FAXMODEM  BOARD",      # p.49's sample, comm 1
+    "edim": "ELEC DISP INT.",        # p.49's sample, comm 3
+}
+
 # A tank lying on its side is not a wedge, and the manuals' own examples say
 # so. 576013-610 Rev AC works two of them on a 10,000 gallon, 96 inch tank:
 # 9038 gallons stands 81.37 inches deep and 8518 stands 76.26. Straight-line
@@ -599,7 +766,7 @@ MODULE_SHORT = {
 # 40 F, 11880 at 70 F, 5820 at 100 F -- and warns that under 1000 means the
 # thermistor may be shorted and over 200000 that it may be open.
 #
-# **Three points want a three-point model.** This was a two-parameter beta
+# Three points want a three-point model. This was a two-parameter beta
 # fit pinned to the two ENDS, which reproduced the middle to within 0.6% --
 # 11812 against 11880, sixty-eight ohms out. The defence written here was
 # that 0.6% is "closer than the screen prints", and that is true and is not
@@ -840,7 +1007,7 @@ TYPE_B_STATES = {"1": ("fuel", "out", "short", "high", "warn"),
 # `SENSOR_STATE_NN` entire and in its order -- the point of the module being
 # that one card reads every kind of sensor the others read between them.
 #
-# *Which of the eight a GIVEN type senses is not on any page here.* 74D names
+# Which of the eight a GIVEN type senses is not on any page here. 74D names
 # seven types -- TRI-STATE, NORMALLY CLOSED, DUAL DIFFERENTIATING, ULTRA 2,
 # ULTRA 3, ULTRA/Z-1, ULTRA/Z-1 HV -- and no manual on this shelf prints a
 # band table for one of them, where the liquid and Type A families each have
@@ -1022,6 +1189,10 @@ class Console:
         # Smart Sensor/Press Module whose eighth channel is its own
         # atmospheric pressure sensor. See FIDELITY M2.
         self.smart_press = False
+        # ...and which of the probe family's two: the plain Four-Input Probe
+        # Module, or the Probe/Thermistor Interface Module that carries four
+        # thermistor positions beside its four probes. FIDELITY M4.
+        self.probe_gt = False
         # Which of the comm bay's four slots each card is in, {slot: key}.
         # Empty means nobody has arranged the bay by hand and `comm_layout`
         # will lay it out legally; an entry is somebody having put a card
@@ -1113,6 +1284,8 @@ class Console:
         self.vac_tests = {}       # sensor -> the last test's record
         self.vac_running = {}     # sensor -> when a manual test started
         self.vac_hold = set()     # sensors held open, EVAC HOLD
+        self.vac_high_since = {}  # sensor -> when its leak rate passed 22.4
+        self.vac_no_vac = set()   # sensors whose NO VACUUM ALARM is posted
         self.vmc_serials = {}     # VMC controller -> its serial number
         # 61F, Set Delivery Density: "(tank, delivery type)" -> the value
         # somebody entered, where the type is the manual's own "0=next,
@@ -1206,6 +1379,7 @@ class Console:
         self.isd_forced_at = {}
         self.isd_pending = ""     # which CLEAR TEST selection ENTER is on
         self.isd_events = []      # (at, line1, line2) for the misc event log
+        self.isd_clears = []      # what TEST FAIL CLEAR DATES prints, newest first
         # The daily assessment. "Each ISD monitoring test operates once each
         # day ... When a test first fails, a warning is posted ... If this
         # condition persists for seven more consecutive days, an alarm is
@@ -1229,6 +1403,7 @@ class Console:
         # DIM link the metered transactions arrive over
         self.rdu_fault = False
         self.dim_fault = False
+        self.dim_disabled = set() # DIM ports whose card the ECPU cannot reach
         # the grade-to-hose map the AUTO/MANUAL MAP flows build:
         # hose (device index) -> the meter that proved to dispense it
         self.isd_hose_map = {}
@@ -1297,6 +1472,8 @@ class Console:
         self.power_off = None
         self.power_off_state = {}
         self.leaks = leaktest.Engine(self)
+        self.sumps = sumptest.Sumps(self)
+        self.calibrations = pscal.Calibrations(self)
         self.lines = _pressure.Lines(self)
         self.deliveries = _delivery.Deliveries(self)
         self.loads = _delivery.Loads(self)
@@ -1307,6 +1484,7 @@ class Console:
         self.traffic = _traffic.Traffic(self)
         self.csld = _csld.CSLD(self)
         self.bir = _bir.BIR(self)
+        self.shifts = _shifts.Shifts(self)
         self.accuchart = _accuchart.AccuChart(self)
         self.autodial = _autodial.Autodial(self)
         self.autotx = _autotx.AutoTransmit(self)
@@ -1365,6 +1543,15 @@ class Console:
         self.chart_audit.clear()
         self.tank_profiles.clear()
         self.meters.clear()
+        # And the programming kept outside `values` and `settings`. Left
+        # behind, a preset loaded over a programmed console kept the old
+        # site's relay and receiver alarm lists, its line disables, its
+        # meter map and offsets -- and, `settings` being cleared, a relay
+        # whose screens said NO over a list still driving its coil.
+        self._clear_stores()
+        # Out of the box nobody's Maintenance Tracker key has been presented.
+        # `cold_boot` puts the keys back: they are FPROM, not RAM.
+        self.mt_keys, self.blocked_keys = [], []
         self.chart_code = self.chart_code_set = ""
         self.serial_number = self.wm_office = ""
         self.silenced = False
@@ -1377,6 +1564,7 @@ class Console:
         self.isd_forced_at = {}
         self.isd_pending = ""     # which CLEAR TEST selection ENTER is on
         self.isd_events = []
+        self.isd_clears = []
         self.isd_days = {}
         self.isd_assessed = None
         self.isd_setup_result = []
@@ -1384,6 +1572,7 @@ class Console:
         self.isd_override = False
         self.rdu_fault = False
         self.dim_fault = False
+        self.dim_disabled = set() # DIM ports whose card the ECPU cannot reach
         self.dim_faults = {}
         self.dim_down = set()
         self.isd_hose_map = {}
@@ -1393,6 +1582,10 @@ class Console:
         # Smart Sensor/Press Module whose eighth channel is its own
         # atmospheric pressure sensor. See FIDELITY M2.
         self.smart_press = False
+        # ...and which of the probe family's two: the plain Four-Input Probe
+        # Module, or the Probe/Thermistor Interface Module that carries four
+        # thermistor positions beside its four probes. FIDELITY M4.
+        self.probe_gt = False
         # Which of the comm bay's four slots each card is in, {slot: key}.
         # Empty means nobody has arranged the bay by hand and `comm_layout`
         # will lay it out legally; an entry is somebody having put a card
@@ -1417,6 +1610,8 @@ class Console:
         self.control_phase = {}
         self.software = {"csld": True}
         self.leaks = leaktest.Engine(self)
+        self.sumps = sumptest.Sumps(self)
+        self.calibrations = pscal.Calibrations(self)
         self.lines = _pressure.Lines(self)
         self.deliveries = _delivery.Deliveries(self)
         self.loads = _delivery.Loads(self)
@@ -1427,6 +1622,7 @@ class Console:
         self.traffic = _traffic.Traffic(self)
         self.csld = _csld.CSLD(self)
         self.bir = _bir.BIR(self)
+        self.shifts = _shifts.Shifts(self)
         self.accuchart = _accuchart.AccuChart(self)
         self.autodial = _autodial.Autodial(self)
         self.autotx = _autotx.AutoTransmit(self)
@@ -1460,6 +1656,8 @@ class Console:
                 "water_vol": self.water_volume(n),
                 "temp": self.product_temperature(n)}
             for n, st in self.tank_level.items()}
+        # "APM Shutdown at:", VA8's second system event. FIDELITY I8.
+        self.apm_log("01", "02", when=self.power_off)
         self.powered = False
         self.selftest_error = False    # the prescribed fix is a power cycle
         self._ram_held = self.battery_backup()
@@ -1498,9 +1696,11 @@ class Console:
         # intervals at the Daily Test Time", 577013-819 Rev F p.17.
         if self._ram_held:
             self.isd_setup_selftest()
+            self.apm_log("01", "01")          # "APM Startup at:"
             return "warm"
         self.cold_boot()
         self.isd_setup_selftest()
+        self.apm_log("01", "01")
         return "cold"
 
     def cold_boot(self):
@@ -1520,7 +1720,7 @@ class Console:
         # not the bay's arrangement.
         slots = dict(self.comm_slots)
         harness = (self.dual_harness, self.double_harness)
-        press = self.smart_press
+        variants = (self.smart_press, self.probe_gt)
         # The Maintenance Tracker's key lists are not RAM either: a log-in
         # record goes "to FPROM", 576013-610 ch.33, and the feature wants an
         # NVMEM203 to exist at all. The SESSION does not survive -- nobody is
@@ -1547,7 +1747,7 @@ class Console:
         self.modules = modules
         self.comm_slots = slots
         self.dual_harness, self.double_harness = harness
-        self.smart_press = press
+        self.smart_press, self.probe_gt = variants
         self.mt_keys, self.blocked_keys = keys
         self.board, self.software = board, software
         self.tank_level = tanks
@@ -1597,6 +1797,7 @@ class Console:
                                  for x in blob.get("blocked_keys", [])]
             self.dual_harness = bool(blob.get("dual_harness", True))
             self.smart_press = bool(blob.get("smart_press", False))
+            self.probe_gt = bool(blob.get("probe_gt", False))
             self.double_harness = bool(blob.get("double_harness", False))
             self.tank_level = {int(k): v for k, v in blob.get("tanks", {}).items()}
             self.sensor_state = {tuple(k.split("|")): v
@@ -1631,44 +1832,31 @@ class Console:
             self.blends = {meter_key(k): v
                            for k, v in blob.get("blends", {}).items()}
             self.traffic.restore(blob.get("traffic"))
-            self.meter_map = {legacy_map_key(k, v): _map_entry(v) for k, v
-                              in blob.get("meter_map", {}).items()}
-            self.meter_offsets = {legacy_offset_key(k, v): v for k, v
-                                  in blob.get("meter_offsets", {}).items()}
-            self.vmc_fuel_pos = {int(k): v for k, v
-                                 in blob.get("vmc_fuel_pos", {}).items()}
-            self.receiver_reports = {int(k): v for k, v
-                                     in blob.get("rcvr_reports", {}).items()}
-            self.receiver_dial = {int(k): v for k, v
-                                  in blob.get("rcvr_dial", {}).items()}
-            # tuples do not survive JSON, so the alarm keys come back as lists
-            self.receiver_alarms = {
-                int(k): [tuple(x) for x in v]
-                for k, v in blob.get("rcvr_alarms", {}).items()}
-            self.relay_alarms = {
-                int(k): [tuple(x) for x in v]
-                for k, v in blob.get("relay_alarms", {}).items()}
-            # and neither does a (kind, number) key, so it is stored as
-            # "plld.1" and split back
-            self.line_disable_alarms = {
-                (k.split(".")[0], int(k.split(".")[1])):
-                    [tuple(x) for x in v]
-                for k, v in blob.get("line_disable", {}).items()
-                if "." in k}
+            self.settings = self._settings_from(blob.get("settings"))
+            self._stores_load(blob)
         except Exception as e:
             print(f"[sim] could not load state: {e}")
 
     def save(self):
         if not self.state_path:
             return
+        # An exposed console does not write its programming down. Everything
+        # a network client sets still takes effect and still reads back --
+        # the emulation is unchanged from the wire's point of view -- but it
+        # lives only as long as the process, so a restart is always a clean
+        # restart and nothing a stranger sent can outlive one.
+        # See `exposed.writes_frozen`.
+        if exposed.refused("console state"):
+            return
         try:
-            with open(self.state_path, "w", encoding="utf-8") as fh:
+            with atomicfile.replacing(self.state_path) as fh:
                 json.dump({"values": self.values, "modules": self.modules,
                            "comm_slots": self.comm_slots,
                            "mt_keys": self.mt_keys,
                            "blocked_keys": self.blocked_keys,
                            "dual_harness": self.dual_harness,
                            "smart_press": self.smart_press,
+                           "probe_gt": self.probe_gt,
                            "double_harness": self.double_harness,
                            "tanks": self.tank_level,
                            "sensors": {"|".join(k): v
@@ -1690,23 +1878,88 @@ class Console:
                            "meters": self.meters.as_json(),
                            "blends": self.blends.as_json(),
                            "traffic": self.traffic.state(),
-                           "meter_map": self.meter_map.as_json(),
-                           "meter_offsets": {f"{fp}.{m}": v for (fp, m), v
-                                             in self.meter_offsets.items()},
-                           "vmc_fuel_pos": self.vmc_fuel_pos,
-                           "rcvr_reports": self.receiver_reports,
-                           "rcvr_dial": self.receiver_dial,
-                           "rcvr_alarms": {k: [list(x) for x in v] for k, v
-                                           in self.receiver_alarms.items()},
-                           "relay_alarms": {k: [list(x) for x in v] for k, v
-                                            in self.relay_alarms.items()},
-                           "line_disable": {
-                               f"{kind}.{n}": [list(x) for x in v]
-                               for (kind, n), v
-                               in self.line_disable_alarms.items()}},
+                           "settings": self._settings_json(),
+                           **self._stores_json()},
                           fh, indent=1)
         except Exception as e:
             print(f"[sim] could not save state: {e}")
+
+    # ---- the programming kept outside `values` -------------------------------
+    def _settings_json(self):
+        """`settings` with keys a JSON object can hold: `"tank_test_method|0"`.
+
+        The store is keyed (name, device), and a tuple is not a JSON key,
+        which is presumably why it was never written: 118 setup screens --
+        every relay and line-disable group's YES/NO, the test methods, the
+        inventory units -- forgot their value on every restart, and a
+        relay's group screen came back NO over an alarm list that still
+        drove its coil.
+        """
+        return {f"{key}|{device}": value
+                for (key, device), value in sorted(self.settings.items())}
+
+    @staticmethod
+    def _settings_from(stored):
+        """The other way: the device is after the LAST bar, and a number."""
+        out = {}
+        for text, value in (stored or {}).items():
+            key, _, device = str(text).rpartition("|")
+            if key and device.lstrip("-").isdigit():
+                out[(key, int(device))] = value
+        return out
+
+    # Programming that lives in a store of its own rather than in `values`,
+    # mostly because its key is one JSON cannot hold. It is RAM like the
+    # rest -- a reset clears it, a cold boot loses it, an archive carries it
+    # -- so one place says how each is written and read back, and the state
+    # file, the archive and `reset` cannot come to disagree about the list.
+    STORES = ("meter_map", "meter_offsets", "vmc_fuel_pos",
+              "receiver_reports", "receiver_dial", "receiver_alarms",
+              "relay_alarms", "line_disable_alarms")
+
+    def _stores_json(self):
+        return {"meter_map": self.meter_map.as_json(),
+                "meter_offsets": {f"{fp}.{m}": v for (fp, m), v
+                                  in self.meter_offsets.items()},
+                "vmc_fuel_pos": self.vmc_fuel_pos,
+                "rcvr_reports": self.receiver_reports,
+                "rcvr_dial": self.receiver_dial,
+                "rcvr_alarms": {k: [list(x) for x in v] for k, v
+                                in self.receiver_alarms.items()},
+                "relay_alarms": {k: [list(x) for x in v] for k, v
+                                 in self.relay_alarms.items()},
+                "line_disable": {
+                    f"{kind}.{n}": [list(x) for x in v]
+                    for (kind, n), v in self.line_disable_alarms.items()}}
+
+    def _stores_load(self, blob):
+        self.meter_map = {legacy_map_key(k, v): _map_entry(v) for k, v
+                          in blob.get("meter_map", {}).items()}
+        self.meter_offsets = {legacy_offset_key(k, v): v for k, v
+                              in blob.get("meter_offsets", {}).items()}
+        self.vmc_fuel_pos = {int(k): v for k, v
+                             in blob.get("vmc_fuel_pos", {}).items()}
+        self.receiver_reports = {int(k): v for k, v
+                                 in blob.get("rcvr_reports", {}).items()}
+        self.receiver_dial = {int(k): v for k, v
+                              in blob.get("rcvr_dial", {}).items()}
+        # tuples do not survive JSON, so the alarm keys come back as lists
+        self.receiver_alarms = {
+            int(k): [tuple(x) for x in v]
+            for k, v in blob.get("rcvr_alarms", {}).items()}
+        self.relay_alarms = {
+            int(k): [tuple(x) for x in v]
+            for k, v in blob.get("relay_alarms", {}).items()}
+        # and neither does a (kind, number) key, so it is stored as
+        # "plld.1" and split back
+        self.line_disable_alarms = {
+            (k.split(".")[0], int(k.split(".")[1])): [tuple(x) for x in v]
+            for k, v in blob.get("line_disable", {}).items()
+            if "." in k}
+
+    def _clear_stores(self):
+        for name in self.STORES:
+            setattr(self, name, {})
 
     def seed(self, path):
         n = 0
@@ -1845,13 +2098,76 @@ class Console:
             return SMART_PRESS["wires"]
         return MODULE_WIRES.get(module, 0)
 
+    def variant(self, module):
+        """The record for the card actually fitted, or None for the plain one.
+
+        Two of this cage's keys are families of two: `smart` is the eight-
+        input Smart Sensor module or the seven-input Smart Sensor/Press
+        module, and `probe` is the Four-Input Probe Module or the
+        Probe/Thermistor Interface Module. Everything that differs between
+        the two of a pair goes through here, so that a third variant is one
+        dict and one line rather than a branch in six methods. FIDELITY M2
+        and M4.
+        """
+        if module == "smart" and self.smart_press:
+            return SMART_PRESS
+        if module == "probe" and self.probe_gt:
+            return PROBE_GT
+        return None
+
     def card(self, module):
         """(label, part number, ohms) for the card actually in the cage."""
-        if module == "smart" and self.smart_press:
-            return (SMART_PRESS["label"], SMART_PRESS["part"],
-                    SMART_PRESS["ohms"])
+        fitted = self.variant(module)
+        if fitted is not None:
+            return (fitted["label"], fitted["part"], fitted["ohms"])
         return (MODULE_LABEL.get(module, module), MODULE_PART.get(module, ""),
                 MODULE_OHMS.get(module, 100000))
+
+    def module_type(self, module):
+        """"TT - Type of Module (Hex)", for the card actually in the cage.
+
+        Function 102's own list names both halves of both families --
+        `28=SmartSensor(8) Module` beside `2B=SmartSensor(7) Module`, and
+        `01=Four Probe Module` beside `0A=Four Probe w/ Ground Temp Module`
+        -- and this read the key's code, so a console with either variant in
+        it reported the OTHER card down the port. The one report whose job
+        is saying what is in the cage said the wrong thing about it, on the
+        one field a reader cannot check against anything else.
+        """
+        fitted = self.variant(module)
+        if fitted is not None and fitted.get("type"):
+            return fitted["type"]
+        return self.MODULE_TYPE.get(module, "00")
+
+    def slot_name(self, module, paper=False):
+        """What a slot line calls this card -- and they are not one name.
+
+        576013-818 Rev AB Figure 6-2 draws the SCREEN: `SLOT 1 4 PROBE/ G. T.`
+        over `POR=  XXXXXX   C=  XXXXXX`. 576013-635 Rev AA's function 102
+        sample draws the PAPER: `1   4 PROBE / G.T.` against its own POWER ON
+        RESET and CURRENT columns. No space before the slash and a space
+        after it on the glass; a space either side and none inside `G.T.` on
+        the printout. Two manuals, one card, two spellings, and the captured
+        console prints the paper's.
+
+        It is not one card's oddity. Function 102's sample and the captured
+        console agree on a whole vocabulary of PRINTED board names that this
+        console did not have, because `MODULE_SHORT` was read off Table 6-1
+        -- the ID resistance table, which names cards for a technician with a
+        meter and is not what the report prints. `MODULE_PAPER` holds the
+        printed names that are attested; a card with no entry falls back,
+        because most of the cage's cards appear in no sample and inventing a
+        printed name for them would be worse than using the one the screen
+        has. FIDELITY M4 and M20.
+        """
+        fitted = self.variant(module) or {}
+        if paper:
+            printed = fitted.get("paper") or MODULE_PAPER.get(module)
+            if printed:
+                return printed
+        if fitted.get("short"):
+            return fitted["short"]
+        return MODULE_SHORT.get(module, MODULE_LABEL.get(module, module))
 
     def positions(self, code):
         """How many positions that CONFIG screen draws.
@@ -2042,6 +2358,11 @@ class Console:
                 return False
         if cond.get("tanks") and not self.programmed_tanks():
             return False
+        if cond.get("mag_sensor") and not self.mag_sensors():
+            # "This menu displays only if the console detects a Mag Sump
+            # Sensor capable of leak detection", 576013-610 Rev AC p.23-1
+            # and p.24-3, over both Mag sump functions. FIDELITY U1b.
+            return False
         if cond.get("water_probe") and not self.probe_detects_water(device):
             # "This message does not appear for tanks in which high alcohol
             # probes are installed", 576013-623 p.7-14 and p.7-15, against
@@ -2051,6 +2372,12 @@ class Console:
             # says which circuit codes those are and PROBE_MODELS carries it.
             return False
         if cond.get("software") and not self.licensed(cond["software"]):
+            return False
+        if cond.get("shift_times") and not self.shifts.programmed():
+            # "At least one Shift Start Time must be entered to activate the
+            # 'Last Shift Inventory' feature", 576013-623 Rev AN p.5-4 --
+            # which is a condition on the SETTING, where this function was
+            # gated on the BIR key chapter 8 never mentions. FIDELITY O22.
             return False
         if cond.get("isd_hoses") and not self.isd_hoses():
             # "appears only after completing Fuel Hose Table Setup"
@@ -2214,7 +2541,7 @@ class Console:
                     _isd.FAILURE: "FAIL"}.get(state, "UNKNOWN")
             return f"STATUS: {word}"
         if token.startswith("shift_"):
-            # **No unit, and a six-wide field**, which is what 576013-610
+            # No unit, and a six-wide field, which is what 576013-610
             # Rev AC draws for all four of these screens:
             #
             #   p.8-1  `BEGIN INVENTORY: XXXXXX`   `END INVENTORY: XXXXXX`
@@ -2237,12 +2564,15 @@ class Console:
             # eight-wide field was doing nothing but making the line longer
             # before the unit was added to it. The manual's `XXXXXX` is a
             # placeholder for the digits, not a column to pad to.
-            row = self.bir.last(device) or self.bir.current(device)
-            what = token[6:]
-            if what == "gross":
-                change = row["physical"] - row["opening"]
-                return f"{change:.0f}"
-            return f"{row.get(what, 0.0):.0f}"
+            #
+            # And off Last-Shift Inventory's own shifts. This read BIR's
+            # shift row, so the screens showed BIR's period under a head
+            # that should name one of four programmed shifts, and GROSS
+            # CHANGE was end less beginning where p.8-2 defines it as
+            # beginning less end plus the ticketed deliveries. The panel
+            # asks `shifts` with the shift it is standing on; this is the
+            # running one. FIDELITY O22.
+            return self.shifts.shown(token[6:], None, device)
         if token.startswith("recon_"):
             return self.recon_reading(token[6:], device)
         if token == "csld_current":
@@ -2275,13 +2605,12 @@ class Console:
         if st is None:
             return ""
         full = self.full_volume(device)
-        diam = self.limit("607", device) or 96.0
-        vol, water = st.get("volume", 0.0), st.get("water", 0.0)
+        vol = st.get("volume", 0.0)
         # The programmed density if there is one, and this tank's own reading
         # if there is not. It used to fall back to a flat 6.0 while i215 was
         # answering product_density for the same tank, so the panel and the
         # wire disagreed about one tank.
-        dens = self.limit("61E", device) or self.product_density(device)
+        dens = self.product_density(device)
         if token == "volume":
             # and a whole-number quantity is TRUNCATED, not rounded:
             # 576013-610 says so twice, on two pages, about two
@@ -2376,11 +2705,11 @@ class Console:
             # the printer already did; the screen dropped the percentage. See
             # FIDELITY Q2.
             #
-            # *That page's parenthesis reads "difference between gauged
+            # That page's parenthesis reads "difference between gauged
             # volume and book inventory", which is the SIGN the samples
             # overrule -- both of them print 800 for a book of 9704 against a
             # gauge of 8904. The pairing is what this citation is for, not
-            # the direction. See G9.*
+            # the direction. See G9.
             return (f"{analysis['book_var']:.0f} GAL "
                     f"{analysis['book_pct']:.1f}%")
         if what == "book_pct":
@@ -2494,59 +2823,19 @@ class Console:
         return ""
 
     def sump_screen(self, what, sensor):
-        """The Mag Sump Leak Test screens, 576013-610 Rev AC p.82 and p.86-89.
+        """The Mag Sump Leak Test screens, 576013-610 Rev AC p.23-1 and p.24-3.
 
-        `ht_temp` is the sump as it stands, height on the left and
-        temperature on the right. `rates` is the pair the manual draws
-        together and gives four states for: UNKNOWN before a test, COMPUTING
-        for the first ten minutes of the measuring phase, a rate after that,
-        and TMP STABLE with a count of minutes once the temperature settles.
-        `status` is the outcome, or the phase while one is running.
-        `last_passed` is the results function's own screen.
+        `ht_temp` is the sump as it stands, `rates` the pair the manual gives
+        four states for, `status` the test's outcome or its phase, and
+        `last_passed` the results function's own screen. They are the test's
+        now (sumptest.py): these drew a height and a temperature fixed per
+        sensor, a leak rate nobody measured and the date of the moment you
+        looked. FIDELITY U1b.
         """
-        phase = self.control_phase_of("sump", sensor, "00")
-        label = self.text("722", sensor) or f"SUMP {sensor}"
-        height = readings.fixed(0.0, 24.0, "sumpht", sensor)
-        temp = readings.fixed(60.0, 80.0, "sumptemp", sensor)
-        if what == "ht_temp":
-            left = f"{height:7.3f} IN"
-            return f"{left}{f'{temp:.1f} F'.rjust(24 - len(left))}"
-        if what == "rates":
-            head = f"s {sensor}: "
-            if phase == "00":
-                return (head + "TEMP RATE: UNKNOWN" + chr(10)
-                        + "LEAK RATE: UNKNOWN")
-            if phase == "02":
-                return (head + "TEMP RATE: COMPUTING" + chr(10)
-                        + "LEAK RATE: COMPUTING")
-            rate = readings.fixed(0.0, 12.0, "sumptrate", sensor)
-            leak = readings.fixed(0.0, 0.05, "sumplrate", sensor)
-            return (head + f"TEMP RATE: {rate:.1f} F/HR" + chr(10)
-                    + f"LEAK RATE: {leak:.4f} IN./HR")
-        if what == "status":
-            word = {"00": "NO TEST DATA AVALIABLE", "01": "TEST ABORTED",
-                    "02": "STATUS: FILL SUMP",
-                    "03": "STATUS: MEASURING HEIGHT",
-                    "04": "TEST PASSED"}.get(phase, "NO TEST DATA AVALIABLE")
-            if phase == "00":
-                return f"s {sensor}: {label}" + chr(10) + word
-            return (f"s {sensor}: {self.sump_stamp(sensor)}" + chr(10) + word)
-        if what == "last_passed":
-            return (f"s {sensor}: {self.sump_stamp(sensor)}" + chr(10)
-                    + "LAST PASSED TEST")
-        return ""
-
-    def sump_stamp(self, sensor):
-        """"2-19-05      9:43AM": the date and time a sump test carries."""
-        t = self.now()
-        date = time.strftime("%m-%d-%y", t).lstrip("0")
-        clock = time.strftime("%I:%M%p", t).lstrip("0")
-        # "s 1: " takes five of the twenty four columns
-        return f"{date}{clock.rjust(19 - len(date))}"
+        return self.sumps.screen(what, sensor)
 
     def vmc_head(self, number, side=None):
         """"x 1: 005830 SIDE A": the device letter, its serial and the side."""
-        serial = self.vmc_serials.get(int(number), "")
         head = f"x {number}: {self.vmc_serial(number)}".rstrip()
         return f"{head} SIDE {side}" if side else head
 
@@ -2579,7 +2868,6 @@ class Console:
         with no way to ask, both of them were this reading twice. See
         FIDELITY G12.
         """
-        full = self.full_volume(tank) or 0.0
         diameter = self.limit("607", tank) or 96.0
         if volume is None:
             volume = self.tank_level.get(tank, {}).get("volume", 0.0)
@@ -2614,8 +2902,8 @@ class Console:
     def water_minimum(self, tank):
         """The Programmable Minimum Water Threshold, in inches.
 
-        **Two codes hold this, for two different floats, and the panel step
-        was writing the wrong one.** 576013-635 Rev AA p.17372 is `Set Probe
+        Two codes hold this, for two different floats, and the panel step
+        was writing the wrong one. 576013-635 Rev AA p.17372 is `Set Probe
         Water Minimum 648`, `<SOH>S648TTI.hhh`, and 576013-623 Rev AN p.7-16
         is its screen: "enter the required threshold within the range of 0.0
         to 1.0 inches ... WATER MINIMUM: 0.800", with the note "This message
@@ -2651,7 +2939,7 @@ class Console:
             return None
         try:
             return packed.unhexfloat(chunk)
-        except Exception:
+        except ValueError:
             return None
 
     def water_height(self, tank):
@@ -2882,6 +3170,22 @@ class Console:
     # I10's fix.
     DEVICE_SETTINGS = {"evr_afm", "evr_ps"}
 
+    # And V4F, whose two halves are the panel's NOZZLE A/L RANGE MAX and MIN
+    # screens. The screens wrote settings nothing read, while the wire kept
+    # a pair of its own with the manual's RANGE standing in for a default --
+    # so a site that set its range on the glass reported another one on the
+    # port and on the CARB requirements line. F9's shape once more. Each
+    # entry is (function, which half). See FIDELITY I5.
+    PAIR_SETTINGS = {"evr_al_min": ("V4F", 0), "evr_al_max": ("V4F", 1)}
+
+    def _isd_pair(self, tok):
+        """(low, high) off a two-float ISD setting, or the manual's default."""
+        from . import packed
+        held = self.values.get(f"S{tok}00") or ""
+        if len(held) >= 16:
+            return packed.unhexfloat(held[:8]), packed.unhexfloat(held[8:16])
+        return tuple(isd.SETUP[tok]["default"])
+
     def setting(self, key, device=0, default=""):
         """One of the console's own settings, or what it reads out of the box."""
         if key in self.VALUE_SETTINGS:
@@ -2895,6 +3199,9 @@ class Console:
             from . import wiresensors
             return ("ENABLED" if wiresensors.isd_in_use(self, device)
                     else "DISABLED")
+        if key in self.PAIR_SETTINGS:
+            tok, half = self.PAIR_SETTINGS[key]
+            return "%+.2f" % self._isd_pair(tok)[half]
         return self.settings.get((key, int(device)), default)
 
     def set_setting(self, key, value, device=0):
@@ -2917,9 +3224,24 @@ class Console:
             from . import wiresensors
             wiresensors.set_isd_in_use(self, device, value == "ENABLED")
             return value
+        if key in self.PAIR_SETTINGS:
+            from . import packed
+            tok, half = self.PAIR_SETTINGS[key]
+            pair = list(self._isd_pair(tok))
+            try:
+                pair[half] = float(str(value).strip())
+            except ValueError:
+                return self.setting(key, device)
+            # the page's range, and the Set's own "low < high"; anything
+            # else leaves the field as it stands, as V40's screen does
+            lo, hi = isd.SETUP[tok]["range"]
+            if lo <= pair[0] < pair[1] <= hi:
+                self.values[f"S{tok}00"] = (packed.hexfloat(pair[0])
+                                            + packed.hexfloat(pair[1]))
+            return self.setting(key, device)
         self.settings[(key, int(device))] = value
         if value == "NO":
-            # **NO means the list is empty, not that the screen says so.**
+            # NO means the list is empty, not that the screen says so.
             # 576013-623 Rev AN p.24-3: "you will first specify whether you
             # want to assign an available alarm type ... by choosing Yes or
             # No for that type of alarm or input". A relay whose IN-TANK
@@ -3330,8 +3652,49 @@ class Console:
         return out
 
     def apm_events(self):
-        """VA8: what the APM has done lately. Nothing, on a quiet bench."""
+        """VA8: what the APM has done, newest first."""
         return list(self.apm_event_log)
+
+    # VA8's events, 576013-635 Rev AA p.669: "aa - Primary Misc. Event
+    # Category" 01=System Event, 02=Pumps Re-enabled, 03=Test Manually
+    # Cleared, 04=Disabled Dispensers; "bb - Primary Misc. Event Type", which
+    # for a system event is 01 APM Startup, 02 APM Shutdown and 03 Time
+    # Change Detected, and for a manual clear 01 APM Setup Self Tests, 03 APM
+    # Tests and 06 APM Sensor Self Tests. p.668 prints each as a DESCRIPTION
+    # and an ACTION/NAME; None is an action that is a time rather than words.
+    # Categories 02 and 04 follow an APM test, which nothing here runs, so
+    # they have words on the page and no producer (FIDELITY I8).
+    APM_EVENT_WORDS = {
+        ("01", "01"): ("APM STARTUP", ""),
+        ("01", "02"): ("APM SHUTDOWN", ""),
+        ("01", "03"): ("TIME CHANGE DETECTED AT", None),
+        ("03", "01"): ("APM SETUP SELF TEST", "TEST MANUALLY CLEARED"),
+        ("03", "03"): ("APM TEST", "TEST MANUALLY CLEARED"),
+        ("03", "06"): ("APM SENSOR SELF TEST", "TEST MANUALLY CLEARED"),
+    }
+
+    def apm_monitoring(self):
+        """Is this console's vapour monitoring the APM?
+
+        54E, "Set Vapor Monitoring Type (0=CARB ISD, 1=APM)", on the key
+        its own note asks for: "An ISD/APM SEM is required".
+        """
+        return (self.licensed("isd")
+                and (self.values.get("S54E00") or "0")[:1] == "1")
+
+    def apm_log(self, aa, bb, when=None, data=None):
+        """Put one event on VA8's log, if the APM is what is monitoring.
+
+        `apm_event_log` was initialised, returned by VA8 and appended to by
+        nothing, while the moments VA8's own sample logs -- a startup, a
+        shutdown, a clock change, a manual clear -- all happen on this
+        console. `data` is the time an event's action column prints.
+        """
+        if not self.apm_monitoring():
+            return
+        at = time.mktime(self.now()) if when is None else when
+        self.apm_event_log.insert(0, {"at": at, "aa": aa, "bb": bb,
+                                      "data": data})
 
     def vmci_sub_alarms(self):
         """VA5: the sub-alarms behind each VMCI alarm.
@@ -3413,9 +3776,10 @@ class Console:
         """
         if self.dim_fault:
             return False
+        down = self.dim_down | self.dim_disabled
         if meter is None:
-            return not self.dim_down
-        return self.dim_port_of(meter) not in self.dim_down
+            return not down
+        return self.dim_port_of(meter) not in down
 
     def set_dim_port(self, port, down):
         """Take one DIM port's link down, or bring it back up.
@@ -3496,7 +3860,8 @@ class Console:
             VP_FLOAT_FIELDS[4]: readings.wander(self, 500.0, 5000.0, "vpthru"),
             VP_FLOAT_FIELDS[5]: readings.wander(self, 0.5, 3.0, "vphc"),
         }
-        return {"version": "01.03",
+        from . import isd as isdmod
+        return {"version": isdmod.PMC_VERSION,
                 "type": self.vapor_processor_type(),
                 "tested": time.mktime(self.now()),
                 "status": words, "codes": codes, "figures": figures}
@@ -3705,14 +4070,14 @@ class Console:
             try:
                 from tls350sim import packed
                 return packed.unhexfloat(raw[-8:])
-            except Exception:
+            except ValueError:
                 return 0.0
 
     # ---- blended grades, which are a DISPENSER and not a console ------------
     def blend_meters(self, meter):
         """[(component meter, fraction)] a blended nozzle actually runs.
 
-        **The TLS-350 has no proportional blend anywhere in it**, and this
+        The TLS-350 has no proportional blend anywhere in it, and this
         is deliberately built so that it never needs one. 576013-818 p.12-7:
         "A tank can be mapped to only one meter for a given Fuel Position
         (FP)", and the only blender support in the whole manual is a DIM
@@ -3901,7 +4266,7 @@ class Console:
         siphon is not carrying product at the moment, which matters to
         everybody reading the levels of a manifolded set.
 
-        *One choice, and it is the set rather than the tank.* The valve
+        One choice, and it is the set rather than the tank. The valve
         belongs to the SET and shuts across all of it, so every tank whose
         siphon is broken carries the warning, not only the one being
         tested. The manual names neither.
@@ -4079,17 +4444,55 @@ class Console:
         return True
 
     def sensor_reading(self, module, number):
-        """SENSOR STATUS for one sensor, in the console's own words."""
+        """SENSOR STATUS for one sensor, in the console's own words.
+
+        What the console is SAYING, not what the wire in the sump is doing.
+        576013-610 Rev AC p.15-1: SENSOR NORMAL shows "if the sensor is
+        functioning properly **and no alarm conditions exist**" -- so an
+        alarm that has been corrected and not acknowledged is still on the
+        screen and still in the report, which is the rule `wiresensors`
+        states for the same sensor on the wire.
+
+        This read `sensor_state`, the physical state alone, and fed both the
+        roll and the glass with it: a dried-out sensor with a latched FUEL
+        ALARM printed SENSOR NORMAL on paper and answered FUEL ALARM on the
+        wire, one console with two stories about one sensor. *The guard
+        below shows the sync was attempted in one direction only* -- it
+        suppressed a state the wire cannot say, and never added the ones the
+        wire does. FIDELITY O27.
+        """
         if not self.has(module):
             return ""
+        words = (SMART_STATE_WORDS if module == "smart"
+                 else SENSOR_STATE_WORDS)
         state = self.sensor_state.get((module, str(number)), "normal")
         if state != "normal" and not self.sensor_alarm_allowed(module, number,
                                                                state):
             # the wire cannot say that, so the console does not either
             state = "normal"
-        words = (SMART_STATE_WORDS if module == "smart"
-                 else SENSOR_STATE_WORDS)
+        if state == "normal":
+            state = self.standing_sensor_state(module, number) or "normal"
         return words.get(state, state.upper())
+
+    def standing_sensor_state(self, module, number):
+        """The sensor state the DISPLAY is holding, or None.
+
+        `compute_alarms` is every condition that is true plus anything
+        latched and unacknowledged, and its records are `AANNTT`; this reads
+        one back into the state word it was posted from.
+        """
+        aa = SENSOR_MODULE_CATEGORY.get(module)
+        if not aa:
+            return None
+        table = SMART_STATE_NN if module == "smart" else SENSOR_STATE_NN
+        by_nn = {nn: name for name, nn in table.items()}
+        tt = f"{int(number):02d}"
+        for record in self.compute_alarms():
+            if record[:2] == aa and record[4:6] == tt:
+                name = by_nn.get(record[2:4])
+                if name:
+                    return name
+        return None
 
     # ---- the console's own clock -------------------------------------------
     # A TLS-350 is not told the time by anything; you set it at the SET TIME
@@ -4144,7 +4547,15 @@ class Console:
         # read before anything in this interval moved the level, and every
         # engine gets its look even on the first tick, when no time passed
         self.sales.tick(hours)
+        # BIR opens its periods on the level BEFORE this interval's fuel
+        # leaves, then the fuel leaves -- key or no key, DIM or no DIM --
+        # and then BIR books what it can see of it. See `Sales.draw`.
+        self.bir.open_periods()
+        self.sales.draw(hours)
         self.bir.tick()
+        # Last-Shift Inventory's own shifts, on System Setup's start times
+        # rather than BIR's closing times. FIDELITY O22.
+        self.shifts.tick()
         for tank, st in self.tank_level.items():
             leak = self.tank_leak.get(tank)
             if leak and hours > 0:
@@ -4168,6 +4579,8 @@ class Console:
         # the generator's tanks go under test before the engine looks
         self.inputs.tick()
         self.leaks.tick()
+        # the Mag sumps' tests take their readings on the same clock
+        self.sumps.tick()
         self.csld.tick()
         self.accuchart.tick()
         self.autodial.tick()
@@ -4234,7 +4647,7 @@ class Console:
         2010 11:59 PM` -- the START time, at the same defaults 576013-635's
         setup group draws: `START TIME 11:59 PM` over `TIME DELAY MINUTES
         1`. The console printed the moment the results were POSTED, so at
-        those defaults it read `12:00 AM` and **the date rolled with it**,
+        those defaults it read `12:00 AM` and the date rolled with it,
         which is the half of the error the figure shows twice over: its own
         header is the following day and its assessment line is not.
         See FIDELITY I6.
@@ -4301,12 +4714,11 @@ class Console:
         them as the COMMON CAUSES of ISD SETUP WARN. So a failing criterion
         posts its own alarm and fails the setup test with it.
 
-        Five of the six are here. **MISSING RELAY SETUP cannot be decided
-        against this console's store** -- see FIDELITY I1a: `808` is "Set
-        Relay Alarm ASSIGNMENTS" and holds exactly one, so a relay cannot
-        carry the three-to-six alarm list Rev F p.18 requires, and a test
-        for "all of them assigned" would fail on every console including a
-        correct one.
+        All six are here. MISSING RELAY SETUP was the last, because it
+        waited on a store that held one assignment per relay where Rev F
+        p.18 wants three to eight; `relay_alarms` and `line_disable_alarms`
+        hold the list now, and the page's list is `isd.relay_required`. See
+        FIDELITY I1a.
         """
         if not self.licensed("isd"):
             return []
@@ -4318,14 +4730,30 @@ class Console:
         # gasoline pump has not been assigned to a control (shut down)
         # device in at least one tank." The control devices Rev F names are
         # RELAY, PLLD, WPLLD and VLLD, and each has its own tank-number code.
-        controlled = set()
-        for code in ("80B", "785", "7A5", "752"):
+        controlled, devices = set(), []
+        for code, kind in (("80B", None), ("785", "plld"), ("7A5", "wplld"),
+                           ("752", "vlld")):
             for device in range(1, 17):
                 raw = (self.text(code, device) or "").strip()
                 if raw.isdigit() and int(raw):
                     controlled.add(int(raw))
+                    devices.append((kind, device))
         if not (self.programmed_tanks() and controlled):
             bad.append("tank")
+        # "The control device does not have all the correct alarms
+        # assigned", Rev F p.18 -- and its field note is the same rule from
+        # the other side: a relay given a Tank ID that ISD does not shut a
+        # pump down with "will cause a MISSING RELAY SETUP warning". So
+        # every device with a tank is asked, whatever else it is for.
+        fitted = (self.values.get("SV4000") or "00").strip()[-2:] != "00"
+        want = isd.relay_required(self.evr_site(), fitted)
+        for kind, device in devices:
+            rows = (self.relay_alarms.get(device) if kind is None
+                    else self.line_disable_alarms.get((kind, device)))
+            have = {(row[0], row[1]) for row in rows or []}
+            if not all(pair in have for pair in want):
+                bad.insert(0, "relay")
+                break
         # "There is no Vapor Flow Meter setup or detected", and the same for
         # the pressure sensor. Both are smart sensor categories at S723.
         kinds = {(self.text("723", n) or "").strip()
@@ -4416,7 +4844,7 @@ class Console:
         days = self.isd_days.get(test, 0)
         return "fail" if days >= isd.ESCALATION.get(test, 8) else "warn"
 
-    def clear_isd_test(self, code):
+    def clear_isd_test(self, code, fp="00", hose="00"):
         """CLEAR TEST AFTER REPAIR, for one menu selection.
 
         577013-819 Rev F Table 2 maps each selection to the alarms it clears
@@ -4439,6 +4867,17 @@ class Console:
             if test == "setup":
                 self.isd_setup_result = []
             cleared.append(test)
+        # "All repair dates are saved in the Miscellaneous Event Log", Rev F
+        # p.35 -- as 635's "Test Manually Cleared" -- and the clear keeps a
+        # record of its own as well, because TEST FAIL CLEAR DATES prints a
+        # time and a hose where V85 stores a day. `fp` and `hose` are V85's
+        # "FF" and "HH", 00 for all of them. FIDELITY I11.
+        if code in isd.CLEAR_EVENT:
+            now = time.mktime(self.now())
+            self.isd_events.insert(0, (now, isd.CLEAR_EVENT[code],
+                                       isd.CLEARED))
+            self.isd_clears.insert(0, {"at": now, "test": code,
+                                       "fp": fp, "hose": hose})
         return cleared
 
     def isd_states(self):
@@ -4478,7 +4917,7 @@ class Console:
                 # "mm - In-Tank Leak Manifold Status: 00=Tank Not Manifolded
                 # During Leak Test, 01=Tank Manifolded", which was hardcoded
                 # `00` on a console that knows its siphon and line manifold
-                # sets. **During the test**, so it is what the tank was when
+                # sets. During the test, so it is what the tank was when
                 # the test ran and not what it is now -- the Result carries
                 # it. See FIDELITY H4.
                 out.append(leaktest.TYPE_CODE[key]
@@ -4550,11 +4989,13 @@ class Console:
 
     # ---- the vacuum sensor's interstitial space ----------------------------
     # 576013-818 Figures 6-29 and 6-30 annotate every reading on this sensor,
-    # which is what makes it modellable at all rather than a placeholder list:
+    # and 577013-873 Rev E, the Vacuum Sensor System Troubleshooting Guide,
+    # redraws the same figure on p.4-11 with the same captions and then
+    # gives the alarm a page of its own:
     #
     #   LEAK RATE       "Rate in gph at which air is entering the interstitial
-    #                    space. A Vac Warning Alarm will be posted if this
-    #                    rate is >22.4 gph."
+    #                    space. A Vac Warning may be posted if this rate is
+    #                    >22.4 gph."
     #   TIME TO NO VAC  "Predicted time (in hours : minutes) it would take for
     #                    the interstitial pressure to equal -1 psi. A Vac
     #                    Warning Alarm will be posted if this rate is <8
@@ -4563,36 +5004,57 @@ class Console:
     #                    abort. Pressure value (-4.1) is the pressure recorded
     #                    at the time this ratio was calculated."
     #
-    # And the third rule was already in this file, in the comment on
-    # SMART_CATEGORY_STATES: "No Vacuum Alarm above -1 psi".
+    # and p.4-4: "A Vacuum Warning will be posted under the following
+    # conditions: Leak Rate > 22.4 GPH for 40 minutes; Evacuation ratio of
+    # less than 1.0 during a manual evacuation when vacuum level has not
+    # reached -4.0." The figure's "may" is those forty minutes. The alarm
+    # page does not list the eight hours and the figure on p.4-11 of the
+    # same guide still does, so all three conditions stand: UNKNOWNS A27.
+    #
+    # NO VACUUM ALARM, p.4-6: "posted when compensated pressure is greater
+    # than -1.0 psi ... The alarm will clear when vacuum pressure is less
+    # than -1.1 psi" -- a tenth of a psi of hysteresis, and p.4-7 names the
+    # lower figure "the 'Vacuum OK' threshold, -1.1 psi".
     NO_VACUUM_PSI = -1.0
+    VACUUM_OK_PSI = -1.1
     VAC_RATE_WARN_GPH = 22.4
+    VAC_RATE_WARN_SECONDS = 40 * 60.0
     VAC_TIME_WARN_HOURS = 8.0
     VAC_EVAC_MIN_RATIO = 1.0
+    VAC_EVAC_WARN_PSI = -4.0
     # A held vacuum, which is Figure 6-30's own sample screen: `s 1: VACUUM
-    # OK` over `-7.14 PSI VCV: CLOSED`.
+    # OK` over `-7.14 PSI VCV: CLOSED`. 577013-873 p.2-2 gives the rule it
+    # sits under: the console pumps until "the vacuum reaches either 1 psi
+    # above the entered relief valve pressure (relief valve installed), or
+    # -8 psi (no relief valve installed)".
     VAC_HELD_PSI = -7.14
 
-    # The interstitial space, in gallons, and it is DERIVED rather than
-    # invented. Air at atmosphere entering a fixed volume V at R gallons an
-    # hour raises the pressure in it by 14.7 * R * t / V, so the manual's own
-    # definition of TIME TO NO VAC is
-    #
-    #       t = (-1 - P) * V / (14.7 * R)
-    #
-    # and Figure 6-29 gives a worked pair for it -- 0.123 GPH and 150:20 --
-    # with Figure 6-30 giving the pressure a held sensor sits at, -7.14 PSI.
-    # Those three numbers fix V at 44.27 gallons, which is a plausible
-    # annular space for a double-walled tank rather than a number chosen to
-    # be plausible. It is still the simulator's, not the manual's: see
-    # UNKNOWNS A27.
-    INTERSTITIAL_GALLONS = 44.27
+    # The interstitial space is not a constant of the sensor. It is the ZONE
+    # volume the installer works out from the Secondary Containment Volumes
+    # index and types in at VOLUME, S72A: "enter the volume in gallons of the
+    # interstitial space being monitored by this Vac Sensor. The permitted
+    # range is 0.1 to 500 gallons ... Default is 501" (577013-836 Rev N
+    # p.4-4), and the console's leak rate is worked out against it -- "if
+    # the volume is programmed significantly larger than the actual volume,
+    # a small leak will be calculated as being much larger by the TLS"
+    # (577013-873 Rev E p.4-5). Air at atmosphere entering a fixed volume V
+    # at R gallons an hour raises the pressure in it by 14.7 * R * t / V, so
+    # the manual's definition of TIME TO NO VAC is t = (-1 - P) * V / (14.7
+    # * R). This used to be a class constant of 44.27 gallons, derived from
+    # a figure's `150:20` that the sensor's own guide prints as `100:00`:
+    # see UNKNOWNS A27. An unprogrammed sensor holds the 501 the manual
+    # names, which is also the state its Setup Data Warning is posted in.
+    VAC_VOLUME_DEFAULT = 501.0
 
     # What the evacuation pump can pull against the leak, which is the one
-    # number here with no derivation behind it at all -- nothing on this
-    # shelf says what an Evac Ratio is a ratio OF. Chosen so that Figure
-    # 6-29's own sample reads back: 5.2 at the same figure's 0.123 gph.
-    # UNKNOWNS A27 again.
+    # number here with no derivation behind it at all. 577013-873 p.4-4 says
+    # what the ratio MEASURES -- an evacuation that is "not 'making headway'
+    # (the vacuum level is not increasing or it is increasing very slowly as
+    # indicated by an 'Evac Ratio' less than 1.0)" -- and no page says what
+    # its numerator is. Chosen so that Figure 6-29's own sample reads back,
+    # 5.2 at 0.123 gph; the same guide's p.2-2 puts the floor below which
+    # the console gives up evacuating at 0.1 gpm, ten times this, so the
+    # figure is illustrative and the number stays INVENTED. UNKNOWNS A27.
     VAC_EVAC_GPH = 0.6396
 
     def vac_sensors(self):
@@ -4604,6 +5066,18 @@ class Console:
         """
         return [n for n in range(1, max(self.capacity("smart"), 0) + 1)
                 if self.sensor_type("smart", n) == "04"]
+
+    def mag_sensors(self):
+        """Every smart sensor programmed as a Mag sensor, category 03.
+
+        What the two Mag sump functions are gated on -- "This menu displays
+        only if the console detects a Mag Sump Sensor capable of leak
+        detection" -- and what a sump report for all sensors reports.
+        """
+        if not self.has("smart"):
+            return []
+        return [n for n in range(1, max(self.capacity("smart"), 0) + 1)
+                if self.sensor_type("smart", n) == "03"]
 
     def vac_leak_rate(self, number):
         """Gallons an hour of air getting into the interstitial space."""
@@ -4627,7 +5101,19 @@ class Console:
         gap = self.NO_VACUUM_PSI - self.vac_psi(number)
         if gap <= 0.0:
             return 0.0
-        return gap * self.INTERSTITIAL_GALLONS / (14.7 * rate)
+        return gap * self.vac_volume(number) / (14.7 * rate)
+
+    def vac_volume(self, number):
+        """The zone volume programmed at S72A, in gallons, or the default.
+
+        "Use the Containment Volume index to calculate a zone's interstice
+        volume in gallons ... you would enter 21.9 (round to nearest tenth of
+        a gallon) as the calculated zone volume", 577013-836 Rev N p.4-2.
+        """
+        volume = self.limit("72A", int(number))
+        if volume is None or volume <= 0.0:
+            return self.VAC_VOLUME_DEFAULT
+        return float(volume)
 
     def vac_evac_ratio(self, number):
         """How much faster the pump pulls than the leak fills.
@@ -4654,22 +5140,47 @@ class Console:
             if rate <= 0.0:
                 continue
             psi = self.vac_psi(number)
-            psi += 14.7 * rate * hours / self.INTERSTITIAL_GALLONS
+            psi += 14.7 * rate * hours / self.vac_volume(number)
             self.vac_pressure[int(number)] = min(psi, 0.0)
 
     def vac_conditions(self):
-        """The two alarms Figures 6-29 and 6-30 give thresholds for."""
+        """The two alarms, on the figures' captions and 577013-873's page.
+
+        NO VACUUM ALARM posts above -1.0 psi and clears below -1.1, so a
+        sensor sitting between the two keeps whichever it had. VACUUM
+        WARNING has three ways in: a leak rate over 22.4 gph that has held
+        for forty minutes; under eight hours of vacuum left; and a manual
+        evacuation that recorded an Evac Ratio under 1.0 before the space
+        had reached -4.0 psi, which stands until a later test reads better.
+        """
+        now = time.mktime(self.now())
         out = []
         for number in self.vac_sensors():
-            tt = f"{int(number):02d}"
-            if self.vac_psi(number) > self.NO_VACUUM_PSI:
-                # "No Vacuum Alarm above -1 psi"
+            n = int(number)
+            tt = f"{n:02d}"
+            psi = self.vac_psi(number)
+            if psi > self.NO_VACUUM_PSI:
+                self.vac_no_vac.add(n)
+            elif psi < self.VACUUM_OK_PSI:
+                self.vac_no_vac.discard(n)
+            if n in self.vac_no_vac:
                 out.append("2817" + tt)
                 continue
+            if self.vac_leak_rate(number) > self.VAC_RATE_WARN_GPH:
+                since = self.vac_high_since.setdefault(n, now)
+                high = now - since >= self.VAC_RATE_WARN_SECONDS
+            else:
+                self.vac_high_since.pop(n, None)
+                high = False
             hours = self.vac_time_to_no_vac(number)
-            if (self.vac_leak_rate(number) > self.VAC_RATE_WARN_GPH
+            test = self.vac_result(number) or {}
+            ratio = test.get("ratio")
+            if (high
                     or (hours is not None
-                        and hours < self.VAC_TIME_WARN_HOURS)):
+                        and hours < self.VAC_TIME_WARN_HOURS)
+                    or (ratio is not None
+                        and ratio < self.VAC_EVAC_MIN_RATIO
+                        and test.get("psi", psi) > self.VAC_EVAC_WARN_PSI)):
                 out.append("2816" + tt)
         return out
 
@@ -4715,6 +5226,31 @@ class Console:
     def vac_valve_open(self, number):
         """VCV, the vacuum control valve. EVAC HOLD is what holds it open."""
         return int(number) in self.vac_hold
+
+    def evacuation_state(self, number):
+        """B38's `e`, and the one place this console decides it.
+
+        "e - Evacuation State (Hex) 0=Vacuum Ok, 1=Evacuation Pending,
+        2=Evacuation Active, 3=Evacuation Pending Manual, 4=Evacuation Active
+        Manual, 5=No Vacuum, 6=Evacuation Hold", 576013-635 Rev AA p.531, and
+        `controls.EVACUATION_STATE` is the same list under 097 and 098.
+
+        Three of the seven are reachable here, because three are the states
+        this bench can put a sensor into: a held-open valve, a space that has
+        lost its vacuum, and neither. Nothing here runs a scheduled
+        evacuation, so 1 to 4 are not invented -- UNKNOWNS A73 is what a
+        console shows while it is in one of them.
+
+        The hold wins over No Vacuum, because the hold is the phase a
+        technician has PUT the sensor into and No Vacuum is a reading about
+        it -- and the reading goes out anyway, as the 2817 alarm and as the
+        pressure on the same screen.
+        """
+        if self.vac_valve_open(number):
+            return "06"
+        if self.vac_psi(number) > self.NO_VACUUM_PSI:
+            return "05"
+        return "00"
 
     def start_evac_hold(self, number):
         self.vac_hold.add(int(number))
@@ -4829,8 +5365,14 @@ class Console:
             want = time.mktime((year, mm, dd, hh, mi, 0, 0, 1, -1))
         except (ValueError, OverflowError):
             return False
+        before = time.mktime(self.now())
         self.clock_offset = want - time.time()
         self.clock_set = True
+        # "Time Change Detected at:", stamped on the clock it came to with
+        # the one it left in the action column: p.668's row is dated
+        # 10-04-02 among April's events and prints 10-06-01 beside it, and
+        # every event after it is April's. FIDELITY I8, UNKNOWNS A57.
+        self.apm_log("01", "03", data=before)
         return True
 
     def clock_text(self):
@@ -4962,8 +5504,10 @@ class Console:
         yours. Point them at the device the panel is on, and give them the
         label that device was programmed with.
         """
-        if len(text) > 3 and text[1] == " " and text[3] == ":"                 and (text[2].isdigit() or text[2] == "X"):
-            # "T 1:" and "T X:" are both the manual drawing a device number
+        if len(text) > 3 and text[1] == " " and text[3] == ":"                 and (text[2].isdigit() or text[2] in "X#"):
+            # "T 1:" and "T X:" are both the manual drawing a device number,
+            # and so is "T #:" -- Figure 6-11's two CSLD MONTHLY screens, which
+            # reached the glass as `T #: REGULAR UNLEADED`. FIDELITY D23.
             text = f"{text[0]} {device}:{text[4:]}"
         code = DEVICE_LABEL_CODE.get(text[0]) if text[1:2] == " " else None
         if code is None and text.startswith("("):
@@ -5030,14 +5574,26 @@ class Console:
         left = self.RESTORE_HOLD_SECONDS - (time.time() - self.reboot_at)
         return left if left > 0.0 else 0.0
 
-    def archive_save(self):
+    def archive_save(self, path=None):
         """SAVE SETUP DATA, everything programmed, to the E2 chip.
 
         Written in the same format --seed reads, so an archive taken here can
         be poured into another console.
+
+        `path` writes the same bytes somewhere a person chose instead of to
+        the chip. The console's own SAVE SETUP DATA never passes it -- the
+        chip is a fixed place and that is the point of it -- but the bench's
+        "Save programming to file" does, so a site worked up here can be
+        carried to another machine and seeded into it.
+
+        SAVE SETUP DATA is reachable from the front panel, and the front
+        panel is reachable over the tunnel, so this is a network-reachable
+        write like the others and the freeze covers it too.
         """
+        if exposed.refused("setup data archive"):
+            return
         try:
-            with open(self.archive_path(), "w", encoding="utf-8") as fh:
+            with atomicfile.replacing(path or self.archive_path()) as fh:
                 fh.write("# TLS-350 archived setup data\n")
                 fh.write(f"#WHEN\t{time.strftime('%y%m%d%H%M', self.now())}\n")
                 for key in self.ARCHIVE_EXTRA:
@@ -5050,6 +5606,10 @@ class Console:
                 # the meter's full identity, `MeterId.__str__`
                 for meter, tank in sorted(self.meters.items()):
                     fh.write(f"#MTR\t{meter}\t{tank}\n")
+                # the alarm lists, line disables, 7B1 and 7B4: without them a
+                # restore put a relay group's YES back and not the list the
+                # YES stands for. One comment line, so `seed` skips it.
+                fh.write(f"#PRG\t{json.dumps(self._stores_json())}\n")
                 for code, data in sorted(self.values.items()):
                     blob = data.encode("ascii", "replace").hex().upper()
                     fh.write(f"{code}\t{blob}\n")
@@ -5103,13 +5663,27 @@ class Console:
                 lines = fh.read().splitlines()
         except OSError:
             return -1
+        # Everything the archive carries is cleared first, or a restore merges:
+        # the capacities and the meter map were not, so a tank capacity
+        # entered after the save survived the restore of a chip without it.
         self.values.clear()
         self.settings.clear()
+        self.tank_capacity.clear()
+        self.meters.clear()
+        self._clear_stores()
         for line in lines:
             if line.startswith("#SET\t"):
-                _tag, key, _, value = (line.split("\t") + ["", "", ""])[:4]
+                # `#SET key value` is three fields. This unpacked four, so
+                # the value went to a throwaway and the chart security code,
+                # the serial number and the W&M office all came back blank.
+                _tag, key, value = (line.split("\t", 2) + ["", ""])[:3]
                 if key in self.ARCHIVE_EXTRA:
                     setattr(self, key, value)
+            elif line.startswith("#PRG\t"):
+                try:
+                    self._stores_load(json.loads(line[len("#PRG\t"):]))
+                except (ValueError, AttributeError):
+                    pass
             elif line.startswith("#CFG\t"):
                 parts = line.split("\t")
                 if len(parts) >= 4:
@@ -5135,7 +5709,17 @@ class Console:
         the ARCHIVE away and leaves the site running on what it is programmed
         with. Clearing the console itself is a cold start with the battery
         switch off, which is what the bench's Reset button is.
+
+        Frozen, this does nothing and says so. `archive_save` was guarded
+        and this, its sibling, was not -- and it is the more dangerous of
+        the two, because it DELETES. `S853` reaches it straight off the
+        tunnel with no authentication on a default card, so an exposed
+        console would answer one four-byte frame by removing the operator's
+        archive from disk. The freeze's promise is that nothing the network
+        says reaches the disk; deleting is reaching the disk.
         """
+        if exposed.refused("clear setup data archive"):
+            return -1
         path = self.archive_path()
         if not os.path.exists(path):
             return 0
@@ -5232,15 +5816,18 @@ class Console:
             return f"POR= {por:6d} C= {now:6d}"
         return f"POR={por:8d} C={now:8d}"
 
-    def port_reading(self, port):
+    def port_reading(self, port, paper=False):
         """(slot-line name, at the last reset, now) for a comm position.
 
         An empty position reads the open circuit function 102's own sample
         prints, `COMM 4 UNUSED 15000000 15000000`; a fitted one reads the ID
         resistor on that HALF of the card, which for a dual-port module is
         not the same resistor at both of its positions.
+
+        `paper` picks the printout's name over the screen's -- see
+        `slot_name`. `UNUSED` is `UNUSED` on both.
         """
-        half = self.comm_half(port)
+        half = self.comm_half(port, paper)
         if half is None:
             empty = EMPTY_OHMS["comm"]
             return "UNUSED", empty, empty
@@ -5276,49 +5863,49 @@ class Console:
                    "pump": "14", "plld": "1B", "wplld": "22", "smart": "28",
                    "mt": "2D", "pumpmon": "2E", "vmc": "2F"}
 
-    # What an empty slot reads, in the manual's own sample -- and only the
-    # power and communication bays read it. **15,000,000 is a rail, not a
-    # measurement**: function 102's sample prints it to the digit on every
-    # empty power-bay and COMM row, both columns, which no measured
-    # resistance ever does. The intrinsically safe bay is the other thing,
-    # because it reads its open circuit through the barrier:
+    # What an empty slot reads, on every console anyone here can check.
     #
-    #      2   UNUSED    10191362   10329900
-    #      3   UNUSED    10122894   10209602
-    #      4   UNUSED    10107912   10186864
+    # 15,000,000 is a firmware constant and not a measurement, and the
+    # PACKED form is what proves it: a 2015 capture sends `4B64E1C0` for
+    # both columns of all nineteen of its empty slots, which is exactly
+    # 15,000,000.0 and is bit-identical row to row. A measured open circuit
+    # does not land on a round decimal twice, let alone nineteen times, and
+    # nothing in any capture or sample ever reads ABOVE it. The type code
+    # beside it is `00`, "Not used", so the console is asserting emptiness
+    # rather than reporting a card it cannot identify.
     #
-    # seven rows, no two alike, and CURRENT above POR on every one. So an
-    # empty I.S. slot is a reading like any other card's and the other two
-    # bays are a sentinel. See FIDELITY X5.
+    # **This used to give the intrinsically safe bay a band of its own**,
+    # near 10.2 million and drifting, off the seven empty I.S. rows of
+    # function 102's sample -- on the argument that the I.S. bay reads its
+    # open circuit through its barrier, so an empty slot there is a reading
+    # like any other and only the other two bays are a sentinel. Every real
+    # console contradicts it: the captured tape of 2006 and the 2015 capture
+    # both print the rail in all sixteen slots and all six comm positions.
+    # See FIDELITY X5 for the original reasoning, M22 for what broke it, and
+    # UNKNOWNS A75 for the sample's own rows, which are real measurements of
+    # something and are not explained by a barrier.
     EMPTY_READING = 15000000.0
 
-    # The seven empty I.S. rows of that sample, as ratios: every POR falls
-    # between 0.9900 and 0.9992 of the 10,200,000 the bay reads nominally,
-    # and every CURRENT is ABOVE its own POR, by 0.4% to 1.4%. The bands
-    # here are those, rather than `module_id_resistance`'s -- an ID resistor
-    # and an open circuit through a barrier are not the same measurement and
-    # do not have the same tolerance.
-    EMPTY_IS_POR = (0.9900, 0.9992)
-    EMPTY_IS_NOW = (1.0040, 1.0140)
-
     def empty_slot_reading(self, bay, slot):
-        """(power-on reset, current) for a slot with nothing in it."""
-        nominal = EMPTY_OHMS.get(bay, self.EMPTY_READING)
-        if bay != "is":
-            return int(nominal), int(nominal)
-        por = int(readings.fixed(nominal * self.EMPTY_IS_POR[0],
-                                 nominal * self.EMPTY_IS_POR[1],
-                                 "idpor", "unused", slot))
-        now = int(readings.wander(self, por * self.EMPTY_IS_NOW[0],
-                                  por * self.EMPTY_IS_NOW[1],
-                                  "idnow", "unused", slot,
-                                  swing=0.5, period=900.0))
-        return por, now
+        """(power-on reset, current) for a slot with nothing in it.
 
-    def cage_slots(self):
+        The same rail in every bay, in both columns, because that is what
+        the hardware sends. `bay` and `slot` are kept because the caller has
+        them and because the question "does this bay differ" is one this
+        console has now answered twice.
+        """
+        nominal = int(EMPTY_OHMS.get(bay, self.EMPTY_READING))
+        return nominal, nominal
+
+    def cage_slots(self, paper=False):
         """[(slot, bay, key, name)] for all sixteen slots, in slot order.
 
-        **The two bays are fixed RANGES, not a running count.** The I.S. bay
+        `paper` picks the printout's spelling of a card over the screen's,
+        where a card has two -- see `slot_name`. The two readers below are
+        the two surfaces: `slot_report` is the glass and `slot_readings`
+        feeds function 102's paper.
+
+        The two bays are fixed RANGES, not a running count. The I.S. bay
         is slots 1 to 8 and the power bay 9 to 16 whatever is in them, which
         is what function 102's sample shows: one 4-probe at slot 1, UNUSED
         at 2 through 8, and the power bay's `4 INPUT BOARD` at slot 9.
@@ -5342,7 +5929,7 @@ class Console:
                     if slot >= last:
                         break            # a bay cannot hold more than it has
                     slot += 1
-                    out.append((slot, bay, key, MODULE_SHORT.get(key, name)))
+                    out.append((slot, bay, key, self.slot_name(key, paper)))
             out += [(n, bay, None, "UNUSED") for n in range(slot + 1, last + 1)]
             base = last
         return out
@@ -5363,8 +5950,11 @@ class Console:
         # which looks plausible and means nothing, and which made POR and
         # CURRENT identical so no card could ever be seen to drift.
         # module_id_resistance already did it properly and nothing called it.
+        #
+        # ...and the PAPER's spelling of each card, because this is what
+        # function 102 prints and `slot_report` above is the glass.
         out = []
-        for slot, bay, key, name in self.cage_slots():
+        for slot, bay, key, name in self.cage_slots(paper=True):
             por, now = (self.empty_slot_reading(bay, slot) if key is None
                         else self.module_id_resistance(key, slot))
             out.append((slot, key, name, float(por), float(now)))
@@ -5375,7 +5965,7 @@ class Console:
         # reads as two boards here. See FIDELITY M7.
         for port in range(1, BAY_SLOTS["comm"] + 1):
             seat = self.comm_positions().get(port)
-            name, por, now = self.port_reading(port)
+            name, por, now = self.port_reading(port, paper=True)
             out.append((-port, seat[1] if seat else None, name,
                         float(por), float(now)))
         return out
@@ -5401,7 +5991,7 @@ class Console:
         out = f"{len(rows):02X}"
         for slot, key, _name, por, current in rows:
             number = slot if slot > 0 else 16 - slot
-            out += f"{number:02X}{self.MODULE_TYPE.get(key, '00')}"
+            out += f"{number:02X}{self.module_type(key)}"
             out += packed.hexfloat(por)
             out += packed.hexfloat(current)
         return out
@@ -5525,9 +6115,17 @@ class Console:
         # Both footers go UNDER the rows, which is what chapter 11's figure
         # shows; the serial manual's extraction scrambles their order.
         out.append(f"MOVING AVERAGE: {self.csld.moving_volume(tank):9.2f}")
-        # "* following ACTIVE = Pump sense available", chapter 11's own key.
-        star = " *" if self.pump_tank_has_sense(tank) else ""
-        out.append(f"DISPENSE STATE: {self.csld.moving_state(tank)}{star}")
+        # "* following ACTIVE = Pump sense available", chapter 11's own key,
+        # and the key means what it says: the mark follows ACTIVE and only
+        # ACTIVE. Every sample of this footer on the shelf is one of three
+        # shapes -- `ACTIVE *`, `ACTIVE` and `IDLE` -- across 576013-818 Rev
+        # AA and AB, 577013-918 Rev D and both revisions of the serial
+        # manual, and `IDLE *` is in none of them. This appended the mark to
+        # whichever word came out, so a site with a pump sense on a quiet
+        # tank drew a line no manual draws. See FIDELITY K5.
+        state = self.csld.moving_state(tank)
+        sensed = state == "ACTIVE" and self.pump_tank_has_sense(tank)
+        out.append(f"DISPENSE STATE: {state}" + (" *" if sensed else ""))
         return out
 
     def csld_table_records(self, token, tank):
@@ -5606,11 +6204,69 @@ class Console:
             out += "".join(packed.hexfloat(v) for v in values)
         return out
 
+    # The modem type a SiteLink port is programmed to, and the one value of
+    # it that has a signal to report. 576013-635 Rev AA p.473 enumerates all
+    # four for both of 88D's bytes, `MM - Modem Type` and `DD - Modem Auto
+    # Detected`; `S885` is the setter for the first.
+    GSM_MODEM = "03"
+    DEFAULT_MODEM = "00"
+
+    def modem_type(self, port):
+        """`S885`'s two digits for this comm port.
+
+        576013-623 Rev AN p.6-4 is the keypad side of it: "Press ENTER to
+        accept the modem option or press CHANGE and then ENTER to choose US
+        ROBOTICS (UK), VR TLS ANALOG MOD, or VR TLS GSM MODEM" -- four
+        options with NETCOMM SMART M7F as the one displayed, and Table 6-1
+        on p.6-1 lists the same four with their port settings. See
+        FIDELITY D10.
+        """
+        raw = (self.values.get(f"S885{port:02d}") or "").strip()
+        return raw[-2:] if len(raw) >= 2 else self.DEFAULT_MODEM
+
+    def comm_signal(self, port):
+        """(RSSI, BER) for a SiteLink port, in 88D's own units.
+
+        The manual encodes both, so neither is this simulator's: "rr - RSSI
+        received signal strength indication (Decimal) ... 31: -51 dBm or
+        greater, 02...30: -109 to -53 dBm, 01: -111 dBm, 00: -113 dBm or
+        less, 99: not known or not detectable" and "ee - BER channel bit
+        error (Decimal) ... 00...7: as RXQUAL values in the table GSM
+        05.08, 99: not known or not detectable".
+
+        **99 is the manual's own word for no reading**, which is what a port
+        with anything but a GSM modem on it has: both of 88D's notes say the
+        field is "only valid if Modem Type is" GSM. The wire answered a flat
+        `9999` for every port, which was accidentally right for the three
+        types that have no signal and wrong for the one that does -- so the
+        one modem the field exists for was the one that could not report.
+        """
+        if self.modem_type(port) != self.GSM_MODEM:
+            return 99, 99
+        return (round(readings.wander(self, 12, 31, "rssi", port, swing=0.4)),
+                round(readings.wander(self, 0, 4, "ber", port, swing=0.9)))
+
     def pump_tank(self, pump):
         """Which tank a pump sense input is assigned to, from S772."""
         raw = (self.values.get(f"S772{pump:02d}") or "").strip()
         body = raw[2:] if len(raw) > 2 else raw
         return int(body) if body.isdigit() else 0
+
+    def pump_running(self, tank):
+        """Is a pump sense input assigned to this tank saying so?
+
+        The two mechanisms answer as one. `S772` maps a Pump Sense MODULE
+        input to a tank and `pump_state` says whether that pump runs; the
+        External Input Type of the same name is `inputs.pump_on`. Figure
+        11-2's second clause -- "Idle is determined by ... 2) checking the
+        pump sense module (if available)" -- does not care which of the two
+        the site wired. See FIDELITY K5.
+        """
+        if self.inputs.pump_on(tank):
+            return True
+        return any(self.pump_tank(pump) == int(tank)
+                   and self.pump_state(pump) == "ON"
+                   for pump in range(1, 17))
 
     def pump_tank_has_sense(self, tank):
         """Is a pump sense input assigned to this tank?
@@ -5685,6 +6341,33 @@ class Console:
             self.settings.pop((key, int(device)), None)
         self.isd_hose_map.pop(int(device), None)
 
+    def isd_afm_full(self, device):
+        """The AFM that mapping this hose would overfill, or None.
+
+        577013-937 Rev J Figure 11's third auto-map error, `AFMx No Space
+        for FP`: "You cannot map more than 2 fueling points (and related
+        hoses) to one AFM (only one AFM is installed per dispenser)". A
+        hose's AFM is the serial its ASSIGN AF METER ID screen holds, so the
+        fueling points already on that AFM are the ones the MAPPED hoses
+        with the same serial sit on; a hose on one of those points is not a
+        third. -> the smart sensor number whose serial it is, which is the
+        screen's x, or "" when no programmed sensor carries that serial.
+        """
+        def text(key, hose):
+            return str(self.setting(key, hose, "")).strip()
+
+        serial = text("evr_afm_id", device)
+        if not serial:
+            return None
+        taken = {text("evr_fuel_pos", hose) for hose in self.isd_hose_map
+                 if hose != int(device)
+                 and text("evr_afm_id", hose) == serial}
+        if text("evr_fuel_pos", device) in taken or len(taken) < 2:
+            return None
+        from . import wiresensors
+        return next((n for n in range(1, 17)
+                     if wiresensors.isd_serial(self, n) == serial), "")
+
     def isd_force(self, test, state):
         """The bench sets an ISD test's outcome: "warn", "fail", or None.
 
@@ -5750,8 +6433,24 @@ class Console:
             pipe = (self.values.get(f"S{pipe_code}{line:02d}") or "").strip()
             index = int(pipe[-2:]) if pipe[-2:].isdigit() else 0
             rows.append(f"PIPE TYPE:   {pipes[index % len(pipes)]}")
-            on = self.licensed("plld010")
-            rows.append("0.10 GPH TEST: " + ("ENABLED" if on else "DISABLED"))
+            if kind == "wplld":
+                # I7A0 is not I780 with a W. 576013-635 Rev AA p.419,
+                # read off its own grid, puts `LINE LENGTH: 200 FEET` after
+                # PIPE TYPE and prints the `0.20 GPH TEST:` option where
+                # p.384's I780 prints `0.10 GPH TEST:`. This built both from
+                # I780's list. A fiberglass line keeps a 2.0 inch and a 3.0
+                # inch length and "the unused size's length must be set to
+                # zero", 576013-623 Rev AN p.11-3, so its one length is the
+                # two added. FIDELITY S26, UNKNOWNS A71.
+                feet = self.limit("7A9", line) or 0.0
+                if index == 1:
+                    feet += self.limit("7AD", line) or 0.0
+                rows.append(f"LINE LENGTH: {feet:.0f} FEET")
+                on = self.licensed("plld020")
+                rows.append("0.20 GPH TEST: " + ("ENABLED" if on else "DISABLED"))
+            else:
+                on = self.licensed("plld010")
+                rows.append("0.10 GPH TEST: " + ("ENABLED" if on else "DISABLED"))
             shut = (self.values.get(f"S{shut_code}{line:02d}") or "").strip()
             rate = {"01": "0.1 GPH", "02": "0.2 GPH"}.get(shut[-2:], "3.0 GPH")
             rows.append(f"SHUTDOWN RATE:  {rate}")
@@ -5781,12 +6480,17 @@ class Console:
                     out.append((bay, slot, key, label, part))
                 continue
             slot = 0
-            for key, name, part, mbay, _wires, _most in MODULES:
+            for key, _name, _part, mbay, _wires, _most in MODULES:
                 if mbay != bay:
                     continue
+                # ...off `card()` rather than off the table, so a bay listing
+                # names the card that is IN it. The comm branch above already
+                # did; these two read the MODULES row, so a console fitted
+                # with either variant listed the card it had not got. M2, M4.
+                label, part, _ohms = self.card(key)
                 for _ in range(self.fitted(key)):
                     slot += 1
-                    out.append((bay, slot, key, name, part))
+                    out.append((bay, slot, key, label, part))
         return out
 
     # The line leak diagnostics are the one place a technician watches a
@@ -5816,6 +6520,23 @@ class Console:
         A token may answer with TWO lines separated by a newline, for the
         screens whose top line is a reading as well: the panel splits them.
         """
+        if token.startswith("ps_"):
+            # CALIBRATE SMARTSENSOR's live screens, 577013-937 Rev J
+            # Figure 46. FIDELITY I11.
+            return self.calibrations.reading(token, device)
+        if token == "pump_sense":
+            # Figure 6-15: `S 1: TANK # NONE` over `PUMP OFF`, annotated
+            # "NONE = No tank assigned, or (TANK LABEL) = Tank assigned". The
+            # screen was the figure's caption drawn verbatim, the same for
+            # every input on every site, while B71 on the wire read the
+            # input's tank and its pump all along. The figure draws only the
+            # unassigned case and replaces only NONE, so the `#` stays as
+            # drawn. See FIDELITY D25.
+            tank = self.pump_tank(device)
+            label = ((self.text("602", tank) or f"TANK {tank}") if tank
+                     else "NONE")
+            return (f"S {device}: TANK # {label}" + chr(10)
+                    + f"PUMP {self.pump_state(device)}")
         if token in self.LINE_DIAG:
             return self.line_diag(token, device, kind or "plld")
         s = self.software_info()
@@ -5969,10 +6690,7 @@ class Console:
             # typed, which is Figure 6-4's own two screens.
             return f"ID: {self.mt_pending}".rstrip()
         if token == "comm_rssi":
-            # a modem's signal strength and bit error rate, both of which
-            # move about on a real line
-            rssi = readings.wander(self, 12, 31, "rssi", dev, swing=0.4)
-            ber = readings.wander(self, 0, 4, "ber", dev, swing=0.9)
+            rssi, ber = self.comm_signal(dev)
             return f"RSSI: {rssi:.0f} BER: {ber:.0f}"
 
         if token == "tank_leak_rate":
@@ -6054,7 +6772,12 @@ class Console:
                       or self.leaks.result("tank", dev, "annual")
                       or self.leaks.result("tank", dev, "gross"))
             if result is None:
-                return "NO TEST DATA"
+                # The full phrase. 576013-818 Figure 6-9 draws this screen's
+                # second line as a stamp and no empty state at all, so the
+                # package's own vocabulary is the evidence: 576013-610 p85
+                # lists `NO TEST DATA AVAILABLE`, and every other site here
+                # spells it whole. 22 characters into 24. FIDELITY D31.
+                return "NO TEST DATA AVAILABLE"
             return (clock_date(result.started, sep=",")
                     + time.strftime(" %I:%M:%S %p",
                                     time.localtime(result.started)).upper())
@@ -6149,14 +6872,23 @@ class Console:
             return f"INCHES H2O:      {self.vapor_pressure(dev):.3f}"
         if token == "pmc_hc":
             return f"HC SENSOR      {self.hydrocarbon(dev):.3f}%"
+        if token == "pmc_mode":
+            # VC0's own store. `VAPOR PROCESSOR MODE / AUTOMATIC` and
+            # `VP STATE:  OFF` were captions, whatever the port had set.
+            # FIDELITY I11.
+            from . import isd as isdmod
+            return isdmod.VP_CONTROL[self.vp_control()]
+        if token == "pmc_state":
+            from . import isd as isdmod
+            return "VP STATE:  " + isdmod.VP_RUNNING[self.vp_running()]
         if token == "pmc_load":
             # the polisher's canister load, from the vapor valve dump the
             # wire already exposes (IB6100); with no reading it is 0
-            return f"LOAD:       {self._pmc_reading('load', 24.9):.1f}%"
+            return f"LOAD:       {self.pmc_figures(dev)['load']:.1f}%"
         if token == "pmc_effluent":
-            return f"{self._pmc_reading('effluent', 0.05):.2f} LB/KGAL"
+            return f"{self.pmc_figures(dev)['effluent']:.2f} LB/KGAL"
         if token == "pmc_temp":
-            return f"{self._pmc_reading('temp', 75.05):.2f} DEG F"
+            return f"{self.pmc_figures(dev)['temp']:.2f} DEG F"
         if token == "pmc_valve_req":
             return f"REQUESTED: {self._pmc_valve('req')}"
         if token == "pmc_valve_cur":
@@ -6219,13 +6951,62 @@ class Console:
     }
 
     def control_device(self, what, number):
-        """Put one device into the phase the command names, and say so."""
+        """Put one device into the phase the command names, and say so.
+
+        The Mag sump is the exception, and the reason is that it is a test:
+        099 starts one, which can abort the moment it starts; 09A cannot
+        start a Measuring Height Phase on a test that is not in its Test
+        Phase; and what 09B leaves behind depends on how long it ran. So the
+        sump commands go to `sumps` and answer with what it says.
+        """
         family, state = self.CONTROL_STATES[what]
+        if family == "sump":
+            return {"sump_start": self.sumps.start,
+                    "sump_height": self.sumps.measure,
+                    "sump_stop": self.sumps.stop}[what](number)
         self.control_phase[(family, number)] = state
+        # ...and the two vacuum families have a model behind them, which the
+        # panel's own EVAC HOLD and MANUAL TEST already drove. 097 wrote a
+        # phase here and nothing else, so an evacuation hold started over the
+        # port left the valve shut on B38 and on the glass, and a manual test
+        # started over the port recorded no result for either to read. Two
+        # stores for one fact, which is FIDELITY F9's shape and what L18
+        # found on the vacuum sensor. The phase above stays as the status
+        # these commands echo back; what it MEANS is the model.
+        if family == "evac":
+            (self.start_evac_hold if what == "evac_hold"
+             else self.stop_evac_hold)(number)
+        elif family == "vactest":
+            (self.start_vac_test if what == "vac_start"
+             else self.stop_vac_test)(number)
         return state
 
     def control_phase_of(self, family, number, default="00"):
+        if family == "sump":
+            return self.sumps.status(number)
         return self.control_phase.get((family, number), default)
+
+    def vp_control(self):
+        """VC0's mode: "1" automatic, which it is out of the box, "0" manual."""
+        from . import isd as isdmod
+        return self.values.get("SVC000") or isdmod.VP_AUTOMATIC
+
+    def vp_running(self):
+        """VC1's state: "1" on, "0" off."""
+        return self.values.get("SVC100") or "0"
+
+    def pmc_figures(self, dev=1):
+        """The PMC diagnostic's readings, which the screens and the PMC
+        DIAGNOSTICS printout both show. Nothing measures a real canister, so
+        the polisher's are the manual's own example values unless the bench
+        has set one."""
+        return {"vapor": self.vapor_pressure(dev),
+                "hc": self.hydrocarbon(dev),
+                "load": self._pmc_reading("load", 24.9),
+                "effluent": self._pmc_reading("effluent", 0.05),
+                "temp": self._pmc_reading("temp", 75.05),
+                "valve_req": self._pmc_valve("req"),
+                "valve_cur": self._pmc_valve("cur")}
 
     def vapor_processor_on(self, running):
         """Note the processor starting or stopping, for V80's buffer.
@@ -6299,16 +7080,15 @@ class Console:
     # re-does it. Nothing here re-calibrates one, so each has the one record
     # it was commissioned with -- and it is the same record every time.
     def calibration_history(self, module, number, most=1):
-        """[(when, slope, offset, passed)] for one sensor, newest first."""
-        when = (self._commissioned or time.mktime(self.now()))
-        out = []
-        for n in range(most):
-            at = when - n * 30 * 86400
-            out.append((at,
-                        readings.fixed(0.9, 5.2, "calslope", module, number, n),
-                        readings.fixed(0.0, 5.1, "caloffset", module, number, n),
-                        True))
-        return out
+        """[(when, slope, offset, passed)] for one sensor, newest first.
+
+        The calibrations CALIBRATE SMARTSENSOR has actually run, and the
+        factory one under them. This generated a slope of 0.9 to 5.2 and
+        an offset of 0.0 to 5.1 per call, always passed, a month apart.
+        FIDELITY I11.
+        """
+        del module
+        return self.calibrations.history(number, most)
 
     def record_accuchart_update(self, tank, when):
         """When a calibration was applied, so the printer can say so.
@@ -6446,8 +7226,15 @@ class Console:
         if connect is not None:
             self.comm_connect[port] = connect
 
-    def comm_half(self, port):
-        """(screen name, slot line, ohms, reads as) for that position."""
+    def comm_half(self, port, paper=False):
+        """(screen name, slot line, ohms, reads as) for that position.
+
+        The first field is 888's vocabulary and the second is the slot
+        line's, which are already two different names for one card -- `COMM
+        BOARD  : 1 (RS-232)` against `COMM 1 RS-232`. `paper` asks for the
+        third: what function 102's printout calls it. A dual-port module's
+        halves have no attested printed name, so they keep the one they had.
+        """
         seat = self.comm_positions().get(port)
         if not seat:
             return None
@@ -6455,7 +7242,7 @@ class Console:
         if half:
             rj45, db9 = COMM_DUAL[key]
             return rj45 if half == "rj45" else db9
-        return (COMM_NAME.get(key), MODULE_SHORT.get(key, key),
+        return (COMM_NAME.get(key), self.slot_name(key, paper),
                 MODULE_OHMS.get(key, 100000), key)
 
     def comm_count(self, module):
@@ -6665,7 +7452,7 @@ class Console:
     def product_temperature(self, tank, at=None):
         """What the probe's RTDs make of the product.
 
-        Table 29-4: "average temperature of all **submerged** thermistors".
+        Table 29-4: "average temperature of all submerged thermistors".
         The channels are the source and the set of them changes as the level
         falls -- which is why this is the average of a ladder rather than a
         number the ladder is drawn from. A full tank reads exactly what it
@@ -6820,7 +7607,7 @@ class Console:
         "0.10", "0.20" or "none", off `PROBE_MODELS` -- the fifth field of
         the row, which nothing consulted. 576013-623 p.8-2 hangs a whole
         feature off it: "The CSLD option appears only when the tank is
-        equipped with a **0.1 gph (0.38 lph) Mag probe**, and the system has
+        equipped with a 0.1 gph (0.38 lph) Mag probe, and the system has
         the CSLD software module key installed." See FIDELITY K6.
 
         A tank with nothing fitted answers the capable rating, the same way
@@ -6883,6 +7670,20 @@ class Console:
         the table is about; the programmed percent-volume minimum is a
         different rule with a different consequence (a leak test that does
         not count, rather than a level the console cannot read).
+
+        **And the minimum rises with the water.** 577013-940 Rev F p.43, on
+        the Invalid Fuel field: "The invalid fuel level assumes no water is
+        present. **If water is present, the invalid fuel level is increased
+        by the water level reading.**" So the test is a SEPARATION between
+        the two floats rather than a depth, which is what every cause line
+        this alarm has ever had describes -- 576013-939 p.14's "Fuel and
+        water level floats on the probe are too close together due to a lack
+        of fuel in the tank". A tank with four inches of water needs four
+        more inches of product before its floats are far enough apart.
+
+        The figure is stated on the TLS-450's page for a field set the
+        TLS-350 shares, and it is the only statement of the rule anywhere.
+        See UNKNOWNS A36.
         """
         minimum = self.probe_minimums(tank)[0]
         if not minimum or tank in self.probe_out:
@@ -6890,7 +7691,8 @@ class Console:
         volume = self.tank_level.get(tank, {}).get("volume")
         if volume is None:
             return False
-        return self.height_at(tank, volume) < minimum
+        return (self.height_at(tank, volume)
+                < minimum + self.water_height(tank))
 
     def has_ecpu(self):
         """Is the fitted board an enhanced CPU rather than a plain one?
@@ -7140,7 +7942,7 @@ class Console:
         bench clock fast runs the counter fast, the same as everything else
         here.
 
-        **It lives here because two readers need the same one.** The wire
+        It lives here because two readers need the same one. The wire
         counted and the panel did not: `IB01` moved with the clock while
         the LIQUID DIAGNOSTIC screen printed a hardcoded `CNTR = 1` and the
         2-WIRE one `CNTR = 5`, taken from the manual's figures -- where the
@@ -7239,7 +8041,13 @@ class Console:
         if token == "vac_ratio":
             ratio = result["ratio"]
             if ratio is None:
-                return head + chr(10) + f"EVAC RATIO: --- @{result['psi']:5.1f}PSI"
+                # The dashes go where the FIGURE's number goes and nowhere
+                # else. This spaced them out -- `EVAC RATIO: --- @ -7.1PSI`
+                # -- which is a line shape no page draws, and the citation
+                # audit would have filed it as a stray the day a walk
+                # reached it. The walk never runs a manual test, so it
+                # never did. FIDELITY L18.
+                return head + chr(10) + f"EVAC RATIO:--- @{result['psi']:.1f}PSI"
             # Figure 6-29's own compact form, which is the one that fits:
             # `EVAC RATIO:5.2 @-4.1PSI` is twenty-three characters where
             # 6-30 draws the same reading spaced out to twenty-nine.
@@ -7271,7 +8079,7 @@ class Console:
             return ("ATM PRESSURE: "
                     + f"{readings.wander(self, *ATM_BAND, 'atm', number, period=7200.0):.3f}"
                     + " PSI")
-        # **The total is the sum**, which is what the manual's own sample
+        # The total is the sum, which is what the manual's own sample
         # says: `TOTAL HT 15.0` over `FUEL HT 5.0` and `WATER HT 10.0`. All
         # three used to be generated independently, so a sensor reported a
         # total of 38.8 inches standing over a fuel of 0.6 and a water of
@@ -7284,8 +8092,10 @@ class Console:
         # adding the column up is adding the printed figures.
         fuel = round(readings.wander(self, 0.0, 1.2, "ssfuel", number,
                                      swing=0.5), 1)
-        water = round(readings.wander(self, 0.0, 2.4, "sswater", number,
-                                      swing=0.4), 1)
+        # The water is the sump's, the same water the leak test measures:
+        # it wandered on its own and a sump with twelve inches poured into
+        # it read two. FIDELITY U1b.
+        water = round(self.sumps.height(number), 1)
         total = fuel + water
         if token == "ss_total_ht":
             return f"TOTAL HT      {total:.1f} IN."
@@ -7300,10 +8110,12 @@ class Console:
             pos = readings.fixed(3.0, 9.0, "ssinst", number) if bad else 0.0
             return f"INSTALL POS   {pos:.1f} IN."
         if token == "ss_fluid_temp":
-            return f"FLUID TEMP  {self.product_temperature(number):.1f} DEG F"
+            # the sump's water, which was the temperature of the TANK with
+            # the sensor's number
+            return f"FLUID TEMP  {self.sumps.temperature(number):.1f} DEG F"
         if token == "ss_board_temp":
             # a board runs warmer than what it is standing in
-            return f"BOARD TEMP  {self.product_temperature(number) + readings.fixed(8.0, 16.0, 'ssboard', number):.1f} DEG F"
+            return f"BOARD TEMP  {self.sumps.temperature(number) + readings.fixed(8.0, 16.0, 'ssboard', number):.1f} DEG F"
         return ""
 
     def fuel_products(self):
@@ -7311,8 +8123,8 @@ class Console:
 
         576013-610 Rev AC p.7-1, and 576013-623 Rev AN p.9-1 word for word:
         "The system assumes tanks with the same product code contain the
-        same product. **All information displayed is for products, not
-        tanks.** The product name is the product label of the lowest tank
+        same product. All information displayed is for products, not
+        tanks. The product name is the product label of the lowest tank
         number containing the product."
 
         A tank with no product code programmed is its own product, because
@@ -7436,6 +8248,17 @@ class Console:
         inert before.
         """
         dev = int(device)
+        if name == "modem_config":
+            # Figure 6-27: CHANGE to `AUTO CONFIG MODEM: YES`, "Select Yes to
+            # run manually run Auto Detect again", and ENTER confirms it over
+            # PRESS <STEP> TO CONTINUE. The question after it is its own
+            # screen. FIDELITY D27.
+            return "AUTO CONFIG MODEM: YES"
+        if name == "modem_config_sure":
+            # `AUTO CONFIG MODEM: YES / ARE YOU SURE? : YES`, ENTER, and the
+            # figure's `ARE YOU SURE? : YES / PRESS <STEP> TO CONTINUE`. What
+            # an auto-detect finds is the modem this console already reports.
+            return "ARE YOU SURE? : YES"
         if name == "mt_select":
             # Figure 6-4 blocks J DOE by pressing CHANGE on J DOE's own row
             # and then ENTER, so the row IS the selection: this is what puts
@@ -7466,6 +8289,18 @@ class Console:
             # "test complete" screen anywhere in either figure, so a test
             # stopped by hand writes nothing and a test left alone takes its
             # reading on the next look. See FIDELITY D1.
+            if ident == "single":
+                # "TO SELECT INDIVIDUAL VAC SENSORS", the second column of
+                # both figures: CHANGE on SELECT VAC SENSOR names one sensor,
+                # ENTER acts on it alone, and the acknowledgement is
+                # `sX: MANUAL TEST STARTED`. Only ALL was reachable. FIDELITY
+                # D28.
+                if dev not in self.vac_sensors():
+                    return "NO VAC SENSORS"
+                return {"vac_test_start": self.start_vac_test,
+                        "vac_test_stop": self.stop_vac_test,
+                        "vac_hold_start": self.start_evac_hold,
+                        "vac_hold_stop": self.stop_evac_hold}[name](dev)
             sensors = self.vac_sensors()
             if not sensors:
                 return "NO VAC SENSORS"
@@ -7499,16 +8334,36 @@ class Console:
             # already and took back out. See FIDELITY U5.
             self.bir.clear_map()
             return "CLEAR TANK MAPS: YES"
+        if name == "pmc_clear":
+            # 577013-937 Rev J Figure 49's own branch on a polisher's PMC
+            # DIAGNOSTIC: PROCESSOR STATUS TEST, then CLEAR TEST AFTER
+            # REPAIR / ARE YOU SURE? with CHANGE walking NO to YES. It is ISD
+            # DIAGNOSTIC's Processor Status selection by another road, so it
+            # clears, logs and dates the same test. FIDELITY I11.
+            self.clear_isd_test("03")
+            self.values["SV8503"] = time.strftime("%y%m%d", self.now())
+            self.save()
+            return "CLEAR TEST AFTER REPAIR"
         if name == "accu_reset":
             return self.accuchart.restart(dev)
         if name == "csld_delete":
-            return f"{self.csld.delete_table(dev)} RECORD(S) DELETED"
+            # Figure 6-11 draws DELETE CSLD RECORDS: NO, CHANGE to YES, and
+            # no acknowledgement. `N RECORD(S) DELETED` was this console's
+            # own sentence, and it disagreed with what the same console says
+            # for the same action over the port -- S054's `T 1:REGULAR
+            # UNLEADED CSLD RECORDS DELETED`. The answer is the line the
+            # screen was already showing, which is what `recon_clear_map`
+            # does with the same shape. See FIDELITY D22.
+            self.csld.delete_table(dev)
+            return "DELETE CSLD RECORDS: YES"
         if name == "reinit_comm":
             # a comm board re-initialise drops the port back to its defaults
             for code in ("881", "886"):
                 self.values.pop(f"S{code}{dev:02d}", None)
             self.save()
-            return f"COMM {dev} RE-INITIALIZED"
+            # Figure 6-2 draws REINIT COMM BD: NO and its YES and nothing
+            # after them; `COMM n RE-INITIALIZED` was on no page. D22.
+            return "REINIT COMM BD: YES"
         if name == "mt_block":
             # The panel and the port cannot disagree: this used to invent a
             # six-digit number and block nothing, so a key blocked on the
@@ -7572,26 +8427,44 @@ class Console:
     def probe_ratios(self, tank):
         """A06, Probe Segment Sensitivity Ratios.
 
-        How much each segment answers being wetted, against how much the
-        segments answer on average: that is what makes it a SENSITIVITY, and
-        it is why the numbers sit around 1.000 for a probe whose segments all
-        behave the same. The two reference positions are not segments, so
-        they fall where they fall.
+        Each position's wet constant as it stands now, against the wet
+        constant the factory measured for that same position. A position
+        answering being wetted the way it always did reads 1.000; one whose
+        constant has moved reads how far it has moved, which is the whole use
+        of the screen -- CAP0's example is a probe with ONE bad position,
+        `0.000 1.023 0.279 0.971 1.010 1.003 1.010 0.988`, and 0.279 is a
+        segment answering at a quarter of what it was built to.
 
-        The manual prints the ratios but never says what they are normalised
-        against, and every one of its examples starts at 0.000. The 0.000 is
-        followed; the normalisation is this simulator's own. See UNKNOWNS.
+        US 4,349,882, Veeder Industries' own predecessor system, is what says
+        the quantity is a ratio of WET CONSTANTS rather than of wet-minus-dry
+        spans: the microcomputer "calculates and stores 'wet' constant
+        ratios", and uses them so that "a 'wet' constant of a lower capacitor
+        segment updated with the new dielectric constant is employed to
+        update the 'wet' constant of the active or interface segment using
+        the appropriate previously calculated 'wet' constant ratio". A stored
+        ratio that tracks a wet constant as it moves.
+
+        **This used to divide each position's wet-minus-dry span by the mean
+        of the segments' spans**, which produced the right SHAPE -- one value
+        far from 1.000, the rest near it -- for the wrong reason. The two
+        reference positions are physically smaller than a segment: their
+        spans are 35 and 155 counts against a segment's 558, so the second
+        one came out near 0.26 on EVERY probe, for ever. The manual's
+        outlier is a broken segment and this console's was arithmetic, and
+        the one screen whose job is to make an anomaly stand out carried a
+        permanent false one. See CLOSED X12 and UNKNOWNS A13c.
+
+        The leading 0.000 is followed rather than derived: every example in
+        the manual starts with it, on probes whose other positions are fine,
+        so the first position's ratio is not a reading. What it means is not
+        stated anywhere.
         """
         if self.probe_type(tank) == "MAG PROBE":
             return []
-        dry = self.probe_calibration(tank, wet=False, updated=True)
-        wet = self.probe_calibration(tank, wet=True, updated=True)
-        spans = [w - d for w, d in zip(wet, dry)]
-        segments = spans[2:]
-        mean = (sum(segments) / len(segments)) if segments else 0.0
-        if not mean:
-            return [0.0] * len(spans)
-        return [0.0] + [span / mean for span in spans[1:]]
+        factory = self.probe_calibration(tank, wet=True, updated=False)
+        now = self.probe_calibration(tank, wet=True, updated=True)
+        return [0.0] + [(n / f if f else 0.0)
+                        for n, f in zip(now[1:], factory[1:])]
 
     # A10 to A13 are the same channels read through four windows. A Mag has
     # the nineteen `probe_channel` already models; a CAP has its own count,
@@ -7761,7 +8634,7 @@ class Console:
     def probe_sample_health(self, tank):
         """A15's (samples read, samples used, last error number, error time).
 
-        **They are running counts, not the size of the average.** "rrrrrrrr -
+        They are running counts, not the size of the average. "rrrrrrrr -
         Samples Read (Hex)" and "uuuuuuuu - Samples Used (Hex)" are eight hex
         characters each, and the manual's own example is a probe that read 2
         and used 2 -- a console two seconds old, not a twenty sample window.
@@ -7866,7 +8739,7 @@ class Console:
         and the serial manual's `VOL 9324 ... ULLG 188` against
         `VOL 6829 ... ULLG 320`.
 
-        *The MAGNITUDE is unverified*: neither sample says what tank it is,
+        The MAGNITUDE is unverified: neither sample says what tank it is,
         so there is nothing to check the scale against -- only the shape.
         See FIDELITY K1a.
         """
@@ -7991,9 +8864,13 @@ class Console:
             return (f"{letter} {device}: SNS CNTS {counts:8.1f}" + chr(10)
                     + f"LO {lo:8.2f} HI {hi:8.2f}")
         if token == "line_switches":
-            # "W 1: P0 H0  S: PENDING" over the two pressures
-            return (f"{letter} {device}: P{int(ln.pressure > FLOOR_PSI)} "
-                    f"H{int(ln.handle)}  S: {ln.status()[:9]}" + chr(10)
+            # "W 1: P0 H0  S: PENDING" over the two pressures, and p.29
+            # says what each is: "P0 = pump off, P1 = pump on, H0 = handle
+            # off, H1 = handle on, S = WPLLD Comm Module status message".
+            # P was whether the line stood above 12 psi and S was the TEST
+            # status. FIDELITY U14.
+            return (f"{letter} {device}: P{int(ln.pump)} "
+                    f"H{int(ln.handle)}  S: {ln.comm_status()[:9]}" + chr(10)
                     + ln.pressures())
         which = {"line_leg_gross": "gross", "line_leg_periodic": "periodic",
                  "line_leg_mid": "mid"}[token]
@@ -8072,9 +8949,9 @@ class Console:
         real console's dump, "The only way to determine that the profile is
         set to linear is to run the 60A command."
 
-        **`S60A` used to be read as LINEAR and it is not.** 60A is Set Tank
+        `S60A` used to be read as LINEAR and it is not. 60A is Set Tank
         Linear Calculated Full Volume, and its payload is byte for byte 604's;
-        the manual's own `I60A` sample on p.253 answers for a **1 PT** tank,
+        the manual's own `I60A` sample on p.253 answers for a 1 PT tank,
         and the TSG's dump has `I604` and `I60A` returning the same three
         volumes for the same three LINEAR tanks. Neither code's presence says
         anything about the profile, and half the fixtures in this repository
@@ -8324,12 +9201,37 @@ class Console:
             return None
         body = raw[2:] if self.is_prefixed(tok) and len(raw) > 2 else raw
         try:
-            return packed.unhexfloat(body[-8:])
-        except Exception:
+            value = packed.unhexfloat(body[-8:])
+        except ValueError:
             try:
-                return float(body)
+                value = float(body)
             except ValueError:
                 return None
+        # A stored value that is not a finite number is not a limit. The
+        # fallback above is what turned the text "nan" into `float('nan')`,
+        # and from there into an `int()` that raises inside a report -- so
+        # the guard belongs here, at the one door every caller comes
+        # through, as well as at the Set that should never have stored it.
+        # Unset is the honest answer: the field holds nothing usable.
+        return value if math.isfinite(value) else None
+
+    def limit_or_default(self, tok, dev):
+        """`limit`, or the field's own default where nothing is programmed.
+
+        A default reaches the glass, the paper and the wire through the
+        field, and `limit` reads only what was stored -- so a tank nobody
+        had given a Leak Alarm Limit reported `99` on I626 and enforced
+        nothing during a test. A console out of the box has the limit it
+        reports. See FIDELITY S18.
+        """
+        value = self.limit(tok, dev)
+        if value is not None:
+            return value
+        default = (FIELDS.get(f"S{tok}01") or {}).get("default")
+        try:
+            return float(default) if default else None
+        except ValueError:
+            return None
 
     # The five in-tank limits 576013-623 Rev AN says to enter as a
     # PERCENT: "Press CHANGE. Enter the percent limit." Their panel screens
@@ -8385,6 +9287,38 @@ class Console:
         See FIDELITY Y3.
         """
         return max(self.delivery_delay(tank), self.SETTLING_MINUTES)
+
+    def stored(self, code):
+        """What a setup code holds, from wherever this console keeps it.
+
+        Nearly every code lives in `values`. 52B does not: a receiver's auto
+        dial type and start time is `receiver_dial`, which the wire's Set
+        writes and the wire's reports and the setup printout read -- while
+        the panel's AUTO-DIAL FREQUENCY screen wrote `values["S52B01"]`,
+        which nothing but that screen read. A frequency set on the glass
+        never reached the port or the paper, and one set over the port left
+        the screen blank. F9's split store, on the one list field with a
+        store of its own. See FIDELITY S25.
+        """
+        code = (code or "").upper()
+        if code.startswith("S52B") and code[4:6].isdigit():
+            body = self.receiver_dial.get(int(code[4:6]))
+            return None if body is None else code[4:6] + body
+        return self.values.get(code)
+
+    def store(self, code, data):
+        """Put what the panel encoded where `stored` will read it back.
+
+        The panel encodes a device-prefixed code with its device in front,
+        `01` then 52B's own `50630`; `receiver_dial` holds the body alone,
+        which is what the wire's Set puts there.
+        """
+        code = (code or "").upper()
+        if code.startswith("S52B") and code[4:6].isdigit():
+            rr = code[4:6]
+            self.receiver_dial[int(rr)] = data[2:] if data[:2] == rr else data
+            return
+        self.values[code] = data
 
     def text(self, tok, dev):
         """A stored label, with the device prefix off it if it is there.
@@ -8553,6 +9487,43 @@ class Console:
                 out.append((kind, n, label or f"LINE {n}"))
         return out
 
+    # the setup code that schedules each precision rate, and the key it is
+    # offered under
+    LINE_RATE_GATE = {("plld", "periodic"): ("78C", "plld020"),
+                      ("plld", "annual"): ("783", "plld010"),
+                      ("wplld", "periodic"): ("7A3", "plld020"),
+                      ("wplld", "annual"): ("7AC", "plld010")}
+
+    def line_rate_allowed(self, kind, number, rate_key):
+        """May a technician start this rate on this line by hand?
+
+        576013-610 Rev AC p.11-3 and p.12-3, the Manual Test Notes: "If your
+        system does not have 0.2 or 0.1 gph test options, you will not see
+        these selections", and "If the 0.2 or 0.1 gph line test option is
+        available, but it was Disabled in PLLD 0.2 or 0.1 gph Test Schedule
+        setups, then you can not start those test types manually."
+
+        576013-623 Rev AN says the same from the setup side, for each rate
+        and each card: the schedule screen "will not appear unless the 0.20
+        Repetitive PLLD software module key is installed" (p.10-4), "Disabled
+        - No manual or automatic 0.2 gph testing is allowed", and "Disabled is
+        the default setting". REPETITIVE, MONTHLY, AUTO and MANUAL all say
+        they enable manual testing. So a schedule nobody has programmed is a
+        DISABLED one, and allows no hand-started test. The 0.1 gph pages are
+        p.10-5, and WPLLD's are p.11-3 and p.11-4.
+
+        The 3.0 gph test and every VLLD rate are on no such gate.
+        """
+        gate = self.LINE_RATE_GATE.get((kind, rate_key))
+        if gate is None:
+            return True
+        code, option = gate
+        if not self.licensed(option):
+            return False
+        raw = (self.values.get(f"S{code}{number:02d}") or "").strip()
+        body = raw[2:] if len(raw) > 2 else raw
+        return body[-1:] not in ("", "0")
+
     def conditions(self):
         """[AANNTT] for every condition that is TRUE right now.
 
@@ -8662,22 +9633,51 @@ class Console:
         if getattr(self, "_mt_seen", False) and not self.has("mt"):
             # the Maintenance Tracker comm module was here and is gone
             out.append("012000")
+        if self.apm_monitoring() and not self.apm_setup_ok():
+            # 37/08 APM SETUP WARN, and its cause is stated: "A sensor used
+            # by APM is missing or not configured", posted Immediate --
+            # 577014-009 Rev B Table 2 p.16, "TLS-350 (APM) Alarm
+            # Troubleshooting Summary", which is the only page anywhere
+            # that gives category 37 a condition. It is the same rule VA4
+            # already answers FAIL on, so the alarm and the verification
+            # test agree by construction. See UNKNOWNS A60.
+            out.append("370800")
         out.extend(self.bir.conditions())
         out.extend(self.autodial.conditions())
         if self.rdu_fault and self.has("rdu"):
             # system alarm 08: the remote display "not communicating
             # properly" (576013-818)
             out.append("010800")
-        # category 19 type 03: the EDIM lost its link to the POS or
-        # dispenser controller for about a minute (576013-818 ch.10). The
-        # whole link down is port 1; the bench can also take ports down one
-        # at a time, and each is its own alarm on its own device
+        # Two DIM alarms, and 576013-610 Rev AC Table 29-19 is the whole
+        # difference: COMMUNICATION ALARM is "No communication between DIM
+        # board and an external device", DISABLED DIM ALARM is "No
+        # communication between ECPU board and DIM board". The category is
+        # which SIDE the DIM sits on -- Table 5-1's block is headed "Power
+        # Side DIM (MDIM) (18) or Communication Side DIM (EDIM/BDIM) (19)"
+        # -- and the type is which alarm, 02 disabled and 03 communication.
+        # See UNKNOWNS A45.
+        #
+        # type 03: the EDIM lost its link to the POS or dispenser controller
+        # for about a minute (576013-818 ch.10). The whole link down is port
+        # 1; the bench can also take ports down one at a time, and each is
+        # its own alarm on its own device
         ports = sorted(self.dim_down) or ([1] if self.dim_fault else [])
         for port in ports:
             if self.has("edim"):
                 out.append(f"1903{port:02d}")
             elif self.has("mdim"):
                 out.append(f"1803{port:02d}")
+        # type 02: the card itself has stopped answering the console --
+        # "the DIM module has stopped communicating with central processing
+        # unit of the console", 576013-818 Table 10-7 -- which is upstream
+        # of type 03 and can stand beside it: the communication charts'
+        # step 2 asks "Is there a DISABLED DIM ALARM also posted for this
+        # DIM?"
+        for port in sorted(self.dim_disabled):
+            if self.has("edim"):
+                out.append(f"1902{port:02d}")
+            elif self.has("mdim"):
+                out.append(f"1802{port:02d}")
         # category 19 type 04: a Block DIM that reported and then did not,
         # for the BDIM TRANS ALARM DELAY (576013-623 p.5-17)
         out.extend(self.sales.conditions())
@@ -8727,6 +9727,9 @@ class Console:
             # The vacuum sensor's two, both of which the figures give a
             # threshold for. See FIDELITY D1.
             out.extend(self.vac_conditions())
+            # the water standing in a Mag sump, against the two heights
+            # Mag Sensor Setup programs. FIDELITY U1b.
+            out.extend(self.sumps.conditions())
         if self.has("vmc"):
             # Category 36, the four rows of Table 29-23. `M12` put the
             # category in the status table and nothing produced it.
@@ -8753,6 +9756,13 @@ class Console:
             if not (nn and aa and self.has(mod)):
                 continue
             if not self.sensor_alarm_allowed(mod, num, state):
+                continue
+            if (mod == "smart" and state in ("water", "waterwarn")
+                    and self.sumps.suppressed(num)):
+                # "During the Test Phase water alarms/warnings are
+                # suppressed so that the user can fill the sump with water.
+                # Fuel alarms/warnings are not suppressed." 576013-610 Rev
+                # AC p.24-1, and for 24 hours after. FIDELITY U1b.
                 continue
             out.append(aa + nn + f"{int(num):02d}")
         return out
@@ -8864,7 +9874,7 @@ class Console:
         the warning indicators will remain active until the cause has been
         corrected."
 
-        **It is a condition here and it still latches**, and this sentence
+        It is a condition here and it still latches, and this sentence
         used to say the opposite of what the code does -- "so it is a
         condition, not a latch: fill the gap in and it goes" -- which is
         the drift `FIDELITY.md`'s own header warns about. What this method
@@ -8895,14 +9905,14 @@ class Console:
                         and (self.limit("60A", n) or self.limit("604", n))):
                     out.append("0201" + f"{n:02d}")
                     continue
-                # **Mass/Density has a warning of its own**, and the NOTE
+                # Mass/Density has a warning of its own, and the NOTE
                 # that gives it is on the page that documents the field:
                 # "A Setup Data Warning is posted from the time the
                 # Mass/Density feature is enabled until a density or
                 # thermal coefficient value is entered for that tank,
                 # clearing the alarm" (576013-623 Rev AN p.7-5).
                 #
-                # *Two NOTEs say it and they do not quite agree.* The one
+                # Two NOTEs say it and they do not quite agree. The one
                 # beside the Mass/Density switch itself reads "until a
                 # product density value is entered for that tank" --
                 # density alone, where p.7-5 takes either. p.7-5 is the
@@ -8910,7 +9920,7 @@ class Console:
                 # only shows on a tank given a thermal coefficient and no
                 # density, which the other reading would still warn about.
                 #
-                # **Entered, not non-zero.** The page says "entered", and a
+                # Entered, not non-zero. The page says "entered", and a
                 # tank that has never been programmed has no stored value
                 # at all where one programmed to zero has one -- which is
                 # the distinction `limit` erases by answering 0.0 to both.
@@ -8935,14 +9945,38 @@ class Console:
             # goes when that card comes out. See FIDELITY M12.
             for n in range(2, self.count("vmc") + 1):
                 out.append("3501" + f"{n:02d}")
+        # The line length is the third thing each of the two pressure
+        # families needs, and 576013-623 Rev AN p.10-2 says so in its own
+        # voice: "IMPORTANT! The default line length must be changed to
+        # reflect the actual line length or a Setup Data Warning will
+        # occur." This checked the pipe type and the tank and not the
+        # length, so the one field the page raises a warning about was the
+        # one the warning could not see.
+        #
+        # EITHER length counts, because five of the nineteen pipe types are
+        # two diameters and the unused one of the pair is programmed to zero
+        # -- p.10-3, and see FIDELITY R22. A line with 0 feet of 2 inch and
+        # 200 of 3 inch has been programmed; a line with neither stored has
+        # not. Stored rather than non-zero, the same reading as the probe
+        # block above: the page says CHANGED, and a value nobody entered is
+        # the case it is about.
+        lengths = {"plld": ("789", "77F"), "wplld": ("7A9", "7AD")}
         for module, aa, config, needs in (("plld", "21", "781", ("788", "785")),
                                           ("wplld", "26", "7A1", ("7A8", "7A5")),
                                           ("vlld", "06", "751", ("756", "752"))):
             if not self.has(module):
                 continue
             for n in range(1, self.capacity(module) + 1):
-                if self._configured(config, n) and not all(
-                        self.text(code, n) for code in needs):
+                if not self._configured(config, n):
+                    continue
+                feet = lengths.get(module) or ()
+                if not all(self.text(code, n) for code in needs):
+                    out.append(aa + "01" + f"{n:02d}")
+                elif feet and all(self.limit(c, n) is None for c in feet):
+                    # `feet and`, not `all(...)` alone: a volumetric line has
+                    # no length code here, and `all` over nothing is True --
+                    # which would have warned about every VLLD line on every
+                    # site, for a field that family does not have.
                     out.append(aa + "01" + f"{n:02d}")
         return out
 
@@ -8960,6 +9994,12 @@ class Console:
             "The permitted range is 1 to 500 gallons. Default is 501. A
              Setup Data Warning alarm will activate if a volume between 1
              and 500 is not entered."
+
+        The sensor's own two manuals put the bottom of that range a decade
+        lower -- "The permitted range is 0.1 to 500 gallons (0.378 to
+        1892.7 litres)", 577013-836 Rev N p.4-4, and 577013-873 Rev E
+        p.4-2 again -- and 836's worked example is a 2.88 gallon zone, so
+        the tenth is the bound enforced here. See UNKNOWNS B25.
             "A Setup Data Warning will be posted for all Vac Sensors if an
              ATMP sensor is not present and configured."
 
@@ -8967,11 +10007,11 @@ class Console:
         a Vac sensor with no pump, no volume and no atmospheric sensor
         anywhere on the site counted as fully programmed. See FIDELITY M3.
 
-        *One clause of the first is not modelled and is worth naming: "If the
+        One clause of the first is not modelled and is worth naming: "If the
         selected pump output relay is not assigned to a pump sense device, a
         Setup Data Warning for this Vac Sensor will be posted." That is a
         relay's assignment to a pump SENSE device, which this console does
-        not hold.*
+        not hold.
         """
         if not self.has("smart"):
             return []
@@ -8985,7 +10025,7 @@ class Console:
             pump = self.text("729", n)
             volume = self.limit("72A", n)
             if (not pump or pump[:2] == "00"
-                    or volume is None or not 1.0 <= volume <= 500.0
+                    or volume is None or not 0.1 <= volume <= 500.0
                     or not atmp):
                 out.append("2801" + f"{n:02d}")
         return out
@@ -9455,6 +10495,11 @@ class Console:
     # press Enter, or the system will timeout", 576013-610 ch.33.
     KEY_PROMPT_SECONDS = 60.0
 
+    # How many tracker keys are remembered. A real console's list is
+    # finite because somebody has to cut the keys; this one is reachable
+    # from the serial port, so it needs a number of its own.
+    KEYS_KEPT = 200
+
     def present_tracker_key(self, ident, label="", expired=False):
         """Plug a Contractor's ID key into the MT Comm card.
 
@@ -9489,6 +10534,7 @@ class Console:
         label = (label or "").strip()[:self.KEY_LABEL_WIDTH]
         if not any(k == ident for k, _n in self.mt_keys):
             self.mt_keys.append((ident, label or f"KEY {ident}"))
+            del self.mt_keys[:-self.KEYS_KEPT]
         self.mt_session = (ident, time.mktime(self.now()))
         self.save()
         return f"LOGGED IN {ident}"
@@ -9519,6 +10565,14 @@ class Console:
             return ident
         self.blocked_keys.append((ident, label or named
                                   or f"KEY {ident}"))
+        # Capped, like every other list the console keeps: `alarm_log` at
+        # 200, `bir.events` at 40, `accuchart_log` at 40, `vp_cycles` at 20.
+        # This one had no ceiling, and `S8A4` reaches it from the serial
+        # port with no authentication and -- unlike the inquire side --
+        # with no `has("mt")` guard either, so a console with no
+        # Maintenance Tracker card fitted still grew the list. The key
+        # space is 36^6, and every append saves to disk.
+        del self.blocked_keys[:-self.KEYS_KEPT]
         self.mt_keys = [(k, name) for k, name in self.mt_keys if k != ident]
         if self.mt_session and self.mt_session[0] == ident:
             # a blocked key is not a session any more
@@ -9571,14 +10625,47 @@ class Console:
 
     def fuel_management_predicted(self, tank):
         """And its "PREDICTED SALES" row, which is what the average and the
-        last week together say the next one will do."""
+        last week together say the next one will do.
+
+        **The blend is measured off the manual's own page rather than
+        chosen, and no fixed blend reproduces it.** 576013-610 Rev AC p.27-7
+        prints AVG, LAST and PRED for all seven days, and each row implies a
+        weight on LAST of `(pred - avg) / (last - avg)`:
+
+            SUN 0.403   MON 0.655   TUE 0.438   WED 0.452
+            THR 0.526   FRI 0.583   SAT 0.553
+
+        They do not agree, so the console is doing something these three
+        columns do not fully determine -- but they bracket it. This was
+        `(2a + b) / 3`, a weight of 0.333, which is **below every one of the
+        seven**: on the manual's own figures the real console leans harder on
+        last week than that, on every day of it. The least-squares best
+        fixed weight over the seven is 0.5062, which is a half to within a
+        rounding of the printed integers, and a half's summed error against
+        the page is 23.0 gallons where the optimum's is 23.02 and the old
+        formula's was 49.0.
+
+        So this is the best fixed blend the page admits and not a formula
+        the page states. See FIDELITY X9.
+        """
         average = self.fuel_management(tank)[3:10]
         last = self.fuel_management_last(tank)
-        return [(a * 2.0 + b) / 3.0 for a, b in zip(average, last)]
+        return [(a + b) / 2.0 for a, b in zip(average, last)]
 
     def product_density(self, tank):
-        """Pounds per gallon, this tank's own and steady between looks."""
-        return readings.fixed(*self.DENSITY_BAND, "density", tank)
+        """Pounds per gallon: the PROGRAMMED density, or this tank's own.
+
+        `61E` first, and the tank's own steady reading only where nothing is
+        programmed -- "A value of 0 indicates that the density for the
+        product in this tank has not been entered". `live_reading` has read
+        it that way since Y10 and this did not, so a tank programmed to
+        7.2500 showed 7.2500 LBS/GAL on the glass and 6.8045 on the roll and
+        the wire, and its MASS was 6.5% out at the same instant. Two closed
+        entries already assert this fix -- Y10 and O13a's residue in
+        UNKNOWNS -- and both were true of `live_reading` alone. FIDELITY O27.
+        """
+        return (self.limit("61E", tank)
+                or readings.fixed(*self.DENSITY_BAND, "density", tank))
 
     def product_mass(self, tank):
         """"MASS 20357" against "VOLUME 5329" and "DENSITY 5.9987"."""
@@ -9605,8 +10692,8 @@ class Console:
         specific gravity, or API number", and the console "converts the
         entered value to the actual density (but the user entered value is
         displayed)". The wire agrees -- 61F reports "Entered Density,
-        relative, actual or API". **Which of the three a number is, and the
-        conversion, is on no page here**: see UNKNOWNS A23.
+        relative, actual or API". Which of the three a number is, and the
+        conversion, is on no page here: see UNKNOWNS A23.
         """
         self.delivery_density[(int(tank), str(which))] = float(value)
         self.save()
@@ -9731,7 +10818,10 @@ class Console:
         """The four twenty character blocks the packed reports lead with."""
         out = ""
         for n in range(1, 5):
-            out += f"{self.text('501', n) or '':<20.20s}"
+            # 503, the station header the display form, the printer and
+            # every preset use. This read 501, which nothing writes, and
+            # sent eighty spaces. FIDELITY S23.
+            out += f"{self.text('503', n) or '':<20.20s}"
         return out
 
     def service_log(self, most=20):
@@ -9859,12 +10949,12 @@ class Console:
                     + record.get("state", "02") + record["at"])
         return out
 
-    # **Which alarms a Contractor's key is needed to acknowledge, and this
-    # is empty on purpose.** 576013-610 Rev AC ch.33 p.33-2 introduces the
+    # Which alarms a Contractor's key is needed to acknowledge, and this
+    # is empty on purpose. 576013-610 Rev AC ch.33 p.33-2 introduces the
     # requirement and scopes it to a subset in one word -- step 3 of the
-    # work session is "Acknowledge any **protected** alarms" -- and p.32-1
+    # work session is "Acknowledge any protected alarms" -- and p.32-1
     # speaks of "protected maintenance alarms" as one kind among several.
-    # **No page on this shelf lists which they are**; `grep -i "protected
+    # No page on this shelf lists which they are; `grep -i "protected
     # alarm"` across all twenty-six manuals returns those two sentences and
     # nothing else.
     #
@@ -9941,8 +11031,8 @@ def describe_alarms(records):
         # from Table 29-1, its number, and the message in capitals,
         # "T 3:LOW PRODUCT ALARM".
         #
-        # **No space after the colon, and a real console settled it against
-        # both manuals.** 576013-610 Rev AC p.29-2 prints `T3: LOW PRODUCT
+        # No space after the colon, and a real console settled it against
+        # both manuals. 576013-610 Rev AC p.29-2 prints `T3: LOW PRODUCT
         # ALARM` and 576013-939's Quick Help draws fifty-five more device
         # lines that all carry the space, so a panel audit called this a
         # defect and it was changed. The tape from a real site prints, in

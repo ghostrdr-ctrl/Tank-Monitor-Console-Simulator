@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The bench beside the console, and the console's own device lists.
 
 These are the things that were wrong when somebody sat down and used the
@@ -670,12 +673,15 @@ class TheTrafficViewSaysWhyNothingIsHappening(PanelWindow):
     def test_it_says_running_and_nothing_is_being_sold(self):
         said = self.bare()
         self.assertTrue(any("NOTHING IS BEING SOLD" in w for w in said), said)
-        self.assertTrue(any("DIM" in w for w in said), said)
+        self.assertTrue(any("meter" in w for w in said), said)
 
     def test_each_reason_offers_the_view_that_fixes_it(self):
-        self.app._switch.select("Site")
+        # the one blocker left is the meter map, which lives on Site; the
+        # key and the DIM stopped being blockers when the fuel stopped
+        # needing them to move
+        self.app._switch.select("Traffic")
         said = self.bare()
-        self.assertIn("MODULES \u2192", said)
+        self.assertIn("SITE \u2192", said)
 
     def test_it_does_not_offer_a_link_to_the_view_you_are_on(self):
         """The blend reason is fixed on this view, and a link to the view
@@ -1372,3 +1378,127 @@ class TheBenchAndTheConsoleAgree(PanelWindow):
             self.assertAlmostEqual(self.c.height_at(card.n, volume), depth,
                                    places=4)
         card.dragging = None
+
+
+class ABenchSyncThatFailsSaysSoOnce(PanelWindow):
+    """`_poll` runs every bench face through `_run_syncs`, and one of them
+    failing must neither stop the console's heartbeat nor pass unremarked.
+
+    A widget going out from under a poll is the exception this expects and
+    says nothing about; anything else is a defect and is named.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.ran = []
+        self.app._site_sync = []
+        self.app._traffic_sync = []
+        self.app._sync_failed = None       # a clean slate for each test
+
+    def healthy(self, name):
+        def sync():
+            self.ran.append(name)
+        return sync
+
+    def raiser(self, exc, name="raiser"):
+        def sync():
+            self.ran.append(name)
+            raise exc
+        return sync
+
+    def failures(self, before):
+        said = self.app.logbox.get("1.0", "end")[len(before):]
+        return [l for l in said.splitlines() if "bench sync failed" in l]
+
+    def test_a_failing_face_is_named_once_and_the_others_still_run(self):
+        self.app._site_sync = [self.healthy("A"),
+                               self.raiser(RuntimeError("tile is confused")),
+                               self.healthy("B")]
+        before = self.app.logbox.get("1.0", "end")
+
+        self.app._run_syncs()
+        self.assertEqual(self.ran, ["A", "raiser", "B"])
+        said = self.failures(before)
+        self.assertEqual(len(said), 1, said)
+        self.assertIn("RuntimeError", said[0])
+        self.assertIn("tile is confused", said[0])
+
+        # it goes on failing, and the log does not go on saying so
+        self.ran.clear()
+        self.app._run_syncs()
+        self.assertEqual(self.ran, ["A", "raiser", "B"])
+        self.assertEqual(len(self.failures(before)), 1)
+
+    def test_the_heartbeat_survives_a_failing_face(self):
+        self.app._site_sync = [self.raiser(RuntimeError("tile is confused")),
+                               self.healthy("B")]
+        self.c.powered = True
+        self.app._poll()                   # the real path, not just the helper
+        self.assertIn("B", self.ran)
+        self.assertIsNotNone(getattr(self.app, "_poll_id", None))
+        self.app.after_cancel(self.app._poll_id)
+        self.app._poll_id = None
+
+    def test_a_face_that_recovers_can_report_again(self):
+        state = {"fail": True}
+
+        def sync():
+            self.ran.append("flip")
+            if state["fail"]:
+                raise ValueError("still bad")
+
+        self.app._site_sync = [sync]
+        before = self.app.logbox.get("1.0", "end")
+
+        self.app._run_syncs()
+        self.assertEqual(len(self.failures(before)), 1)
+
+        state["fail"] = False              # it comes back
+        self.app._run_syncs()
+        self.assertEqual(len(self.failures(before)), 1)
+
+        state["fail"] = True               # and falls over again
+        self.app._run_syncs()
+        self.assertEqual(len(self.failures(before)), 2)
+
+    def test_a_widget_going_away_is_not_an_error(self):
+        import tkinter as tk
+
+        self.app._site_sync = [
+            self.healthy("A"),
+            self.raiser(tk.TclError('invalid command name ".!frame.!canvas"')),
+            self.healthy("B")]
+        before = self.app.logbox.get("1.0", "end")
+
+        self.app._run_syncs()
+        self.assertEqual(self.ran, ["A", "raiser", "B"])
+        self.assertEqual(self.failures(before), [])
+
+    def test_a_rebuilt_face_does_not_inherit_the_silence(self):
+        import gc
+        import weakref
+
+        class Tile:
+            def __init__(self, ran):
+                self.ran = ran
+
+            def sync(self):
+                self.ran.append("tile")
+                raise RuntimeError("tile is confused")
+
+        first = Tile(self.ran)
+        went = weakref.ref(first)
+        self.app._site_sync = [first.sync]
+        before = self.app.logbox.get("1.0", "end")
+        self.app._run_syncs()
+        self.app._run_syncs()
+        self.assertEqual(len(self.failures(before)), 1)
+
+        # what a refresh does: the tile goes and a new one takes its place
+        self.app._site_sync = [Tile(self.ran).sync]
+        del first
+        gc.collect()
+        self.assertIsNone(went(),
+                          "the reporting state held a tile that had gone")
+        self.app._run_syncs()
+        self.assertEqual(len(self.failures(before)), 2)

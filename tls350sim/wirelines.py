@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The LINE LEAK function codes: volumetric, pressure and wireless pressure.
 
 Section 7.2.4 of the Serial Interface Manual is the reports a site asks for,
@@ -188,6 +191,15 @@ USER_DEFINED = "18"
 # rate: Line Test, Line Selftest, Pump Test, Pump Selftest. So the first of
 # each quartet is the line test, which is the one this simulator runs.
 VLLD_LINE_TEST = {"gross": 3, "periodic": 7, "annual": 11}
+
+# And the RIGHT column of the same table, which nobody had turned the page
+# for. Table 5 gives every reference number a `Test Length (Seconds)`, and
+# for rows 3, 7 and 11 -- the line tests -- the `Typical Test Times` column
+# repeats it: 13.5, 326 and 794 in both. So `LGTH` is not a band a report
+# draws from, it is a property of the test type, and B51 and B52's samples
+# print exactly these three against those three TYPs. See `leaktest.LINE_SECONDS`
+# for the other half of the same fix. FIDELITY H17.
+VLLD_TEST_LENGTH = {"gross": 13.5, "periodic": 326.0, "annual": 794.0}
 
 # "RR - Test result (00=fail, 01=pass)" in 351, which is NOT the console's
 # usual RESULT_CODE and is not shared with any other report here.
@@ -700,18 +712,54 @@ def _vlld_timings(console, number, result):
     reading for the tank this line is programmed to, and the ground sits a
     little above it, which is the relation both samples show (46.9 over 45.9,
     45.3 over 45.4).
+
+    **And zero is a reading here, not a missing one.** 576013-849 Rev B p.40
+    defines both columns with the same parenthesis: "GRND = Temperature via
+    ground temperature thermistor at last dispense (if 0.0, no thermistor is
+    present)" and "TANK = Temperature via in-tank probe of corresponding tank
+    contents (if 0.0, no probe is present)". So the report says whether the
+    hardware is there, and this printed a plausible temperature either way --
+    a console with no probe card in it reported the fuel's temperature, and
+    one with no thermistor reported the ground's.
+
+    The thermistor is only answerable since M4: it lives on the
+    Probe/Thermistor Interface Module and nowhere else, so a site has one
+    when that card is in the cage. See FIDELITY M21.
     """
     tank = _vlld_tank(console, number)
-    tank_temp = console.product_temperature(tank or number)
-    ground = tank_temp + readings.fixed(-1.0, 1.6, "grnd", number)
+    if not console.has("probe"):
+        tank_temp = 0.0
+    else:
+        tank_temp = console.product_temperature(tank or number)
+    if not console.probe_gt or not console.has("probe"):
+        ground = 0.0
+    else:
+        ground = tank_temp + readings.fixed(-1.0, 1.6, "grnd", number)
     key = ("vlld", number, result.started)
-    allowed = readings.fixed(10.0, 794.0, "lgth", *key)
-    actual = readings.fixed(5.3, 326.0, "final", *key)
-    if result.result == leaktest.PASSED:
-        actual = min(actual, allowed)
+    # `LGTH` is the test TYPE's length, not a band: 13.5, 326.0 or 794.0.
+    # This drew `readings.fixed(10.0, 794.0, ...)`, whose ends are TYP 5's
+    # length and TYP 11's -- the envelope of all fourteen rows of Table 5,
+    # redrawn per test, so a 0.2 gph line test could print `LGTH 412.7`
+    # where both documents print `326.0`.
+    allowed = VLLD_TEST_LENGTH[result.rate_key]
+    # `TEST` is what the test actually took, and for these three rows Table
+    # 5's `Typical Test Times` column repeats the length. B51 and B52 print
+    # 13.5, 326.0 and 794.1 against lengths of 13.5, 326.0 and 794.0, so the
+    # spread is a tenth of a second at the top end and nothing at the other.
+    # This drew from 5.3 to 326.0 -- TYP 4's typical time and TYP 7's --
+    # which is the same mistake as the line above it.
+    actual = allowed + readings.fixed(0.0, 0.1, "final", *key)
+    # And no clamp. `min(actual, allowed)` on a pass made `LGTH 794.0 /
+    # TEST 794.1 / PASSED` unreachable, and that is a row 576013-635 prints
+    # in both revisions: the actual exceeds the allowance by a tenth and the
+    # test passes anyway.
     return (ground, tank_temp,
             readings.integer(0, 81, "dely", *key), allowed,
-            readings.fixed(0.0, 4.9, "reset", *key), actual)
+            # RSET is 0.0 on every one of the three LINE rows in both
+            # samples; 4.9 was TYP 9's, a pumpside test this console does
+            # not run, and is the third reading in this tuple drawn from the
+            # envelope of the whole table.
+            0.0, actual)
 
 
 def _vlld_diag_history(handler, code, kind, lines, tok):
@@ -738,9 +786,20 @@ def _vlld_diag_history(handler, code, kind, lines, tok):
             typ = VLLD_LINE_TEST[r.rate_key]
             grnd, tank, dely, allowed, reset, actual = _vlld_timings(
                 c, number, r)
-            rows.append(f"{clock_words(r.started):<22s}{typ:3d}{grnd:7.1f}"
-                        f"{tank:7.1f}{dely:6d}{allowed:8.1f}{reset:7.1f}"
-                        f"{actual:8.1f}  {r.result}")
+            # In the heading's own columns. The heading was measured off
+            # the page and the row under it was not, so five of its eight
+            # fields ended one or two columns away from the words naming
+            # them: the row began at 0 where the block is indented two, and
+            # then bought the indent back a column at a time. Measured off
+            # p.542's sample row, whose fields end at 27, 33, 39, 45, 52,
+            # 59 and 66 with RSLT at 68 -- exactly where the heading's do.
+            # The column ratchet cannot see this: it compares a manual line
+            # to ours by its WORDS first, and a sample row carrying the
+            # sample site's date and readings matches no line this console
+            # draws. FIDELITY H17.
+            rows.append(f"  {clock_words(r.started):<22s}{typ:3d}{grnd:6.1f}"
+                        f"{tank:6.1f}{dely:6d}{allowed:7.1f}{reset:7.1f}"
+                        f"{actual:7.1f}  {r.result}")
             # the wire's timings are a 16-bit count of tenths of a second
             # where the printout carries a decimal place, so they round
             block += (_stamp(r.started) + f"{typ:02X}" + _float(grnd)
@@ -770,6 +829,18 @@ def _diameter(gallons_per_foot):
     """
     area = 231.0 * gallons_per_foot / 12.0
     return math.sqrt(4.0 * area / math.pi)
+
+
+def _second_diameter(line):
+    """Inches of the line's second size, or 0.0 where it has one size.
+
+    The 1ST LINE DIAM row falls back to the bore of the programmed pipe type
+    when `777` is unset, and the 2ND row fell back to zero -- so a
+    2.0/3.0 fiberglass line nobody had programmed `778` on reported no second
+    diameter while its own type name says it has one. See FIDELITY R22.
+    """
+    second = line.second_pipe()
+    return _diameter(second[1]) if second else 0.0
 
 
 def _pipe_key(console, kind, number):
@@ -808,7 +879,7 @@ def _profile_line_test(handler, code, kind, lines, tok):
                   c.limit("789", number) or ln.length(),
                   c.limit("777", number) or _diameter(ln.pipe()[1]),
                   c.limit("77F", number) or 0.0,
-                  c.limit("778", number) or 0.0]
+                  c.limit("778", number) or _second_diameter(ln)]
         rows += [_head(c, kind, number),
                  "LAST PROFILE LINE TEST: "
                  + (clock_words(when) if when else "NONE"),

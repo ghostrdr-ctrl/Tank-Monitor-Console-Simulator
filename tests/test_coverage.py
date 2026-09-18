@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """How much of the Serial Interface Manual this console actually answers.
 
 `functiondata.json` is every function code section 7 of 576013-635 Rev U
@@ -215,12 +218,25 @@ class Coverage(unittest.TestCase):
     # character, while 120 and 122 come back `9999FF1B`. See FIDELITY S17.
     OFF_THE_HARDWARE = {"121"}
 
+    # Codes a DIFFERENT Veeder-Root manual documents. `wire.DOCUMENTED` is a
+    # parse of section 7 of 576013-635 and of nothing else, so a code the
+    # function-code manual never indexed is missing from it however well
+    # documented it is elsewhere.
+    #
+    # `VAB` and `VAC` are in no revision of 576013-635 -- N, U, Y or AA --
+    # and are in 577014-009 Rev B Table 3 p.18, "Serial Commands for APM
+    # Reports", with a worked sample of each printout in its Figures 15 and
+    # 16. That is a document and a page, which is the bar. See UNKNOWNS C4.
+    OFF_ANOTHER_MANUAL = {"VAB", "VAC"}
+
     def test_the_console_invents_no_function_codes(self):
-        """Anything this console answers has to be in the manual, or in the
-        capture -- and the capture is the narrower door of the two."""
+        """Anything this console answers has to be in a manual, or in the
+        capture -- and the capture is the narrowest door of the three."""
         invented = sorted(c for c in wire.KNOWN if c not in wire.DOCUMENTED)
-        self.assertEqual(invented, sorted(self.OFF_THE_HARDWARE),
-                         f"not in the manual: {invented}")
+        self.assertEqual(
+            invented,
+            sorted(self.OFF_THE_HARDWARE | self.OFF_ANOTHER_MANUAL),
+            f"not in the manual: {invented}")
 
     def test_a_code_it_does_not_have_says_9999_rather_than_nothing(self):
         """FIDELITY V1. This looped over `DOCUMENTED - KNOWN` and asserted

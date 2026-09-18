@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Every screen this console can ever draw, gated ones included.
 
 The panel only shows a screen whose condition holds -- "this message appears
@@ -53,6 +56,17 @@ _MONTH = re.compile(r"\b(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)"
 _WHEN = re.compile(r"\b(?:DD|YYYY|YY|HH:MM:SS|HH:MM|MM:SS|HH|MM|XM|AM|PM)\b")
 # a meridiem stuck to the digits before it: `9:43AM`, `12:32PM`
 _MERIDIEM = re.compile(r"#(?:AM|PM|XM)")
+# A weekday the console SUBSTITUTES, which is one screen: `(Day) OPEN:
+# (Date)`, 576013-610 Rev AC p.28-3. See UNKNOWNS A46. Left in, the citation
+# for that screen would be a different one every day of the week -- the same
+# argument `_MERIDIEM` makes about the hour the audit ran.
+#
+# **Deliberately narrow.** A weekday is a LABEL on other screens and must
+# survive there: Fuel Manager draws seven of `LAST SALES-SUN: XXXX GALS`,
+# one per day, and collapsing those would lose six screens and their
+# citations. So this matches only a weekday that OPENS the line and is
+# followed by the one word that screen uses.
+_WEEKDAY = re.compile(r"^(?:SUN|MON|TUE|WED|THR|FRI|SAT)(?= OPEN\b)")
 
 
 def template(line):
@@ -88,6 +102,7 @@ def template(line):
     # digits land in the same place either way
     s = s.replace("( ", "(").replace(" )", ")")
     s = _MONTH.sub("MMM", s)
+    s = _WEEKDAY.sub("DDD", s)
     s = _WHEN.sub("#", s)
     s = _NUM.sub("#", s)
     # a meridiem run onto the end of the digits, `9:43AM`, has no word
@@ -102,8 +117,15 @@ MENUS = [("SETUP", SETUP_MENU, "steps"), ("NORMAL", NORMAL_MENU, "steps"),
          ("DIAGNOSTIC", DIAG_MENU, "screens"),
          ("RECONCILIATION", RECON_MENU, "steps")]
 
+# `mdim` is here and not in COMM_BAYS because `MODULES` gives it the bay
+# `power`: an EDIM lives in the comm bay, an MDIM in the power bay, and the
+# comm-bay walk below could never reach one. Without it no console this walk
+# built had ever had an MDIM in it, so the POWER-side half of every LINE
+# DISABLE and OUTPUT RELAY screen went uncited while the COMMUNICATION-side
+# half was cited off the EDIM -- an asymmetry that looked like a citation
+# file with nothing missing. See FIDELITY V7.
 CARDS = ("probe", "liquid", "vapor", "gw", "2wire", "3wire", "smart", "plld",
-         "wplld", "vlld", "io", "relay", "pump", "pumpmon")
+         "wplld", "vlld", "io", "relay", "pump", "pumpmon", "mdim")
 
 # The communication bay is FOUR slots and there are more comm cards than that
 # with screens of their own, so "one of everything" is not a console that can
@@ -191,8 +213,33 @@ def a_console(path, comm=COMM_BAYS[0]):
     # opens END FACTOR, which is the manual's own "This message appears
     # only if you select METER DATA PRESENT: YES". See FIDELITY G10.
     c.values["S61501"] = "011"
+    # a Shift Start Time, which is what puts LAST-SHIFT INVENTORY on the
+    # panel at all: "At least one Shift Start Time must be entered to
+    # activate the Last Shift Inventory feature". See FIDELITY O22.
+    c.values["S50201"] = "0600"
+    # and ticketed delivery ON, which is what puts DELIVERY MAINTENANCE on
+    # the panel: "Before you use this function, Ticketed Delivery must be
+    # enabled in the Setup Mode". The DLVY ADJUSTMENT screen that hides is
+    # drawn by the hidden-screen pass below. See FIDELITY O23.
+    c.values["S51C00"] = "1"
     # a VST vapor processor, so PMC SETUP and its two threshold screens
     # are drawn and audited
+    # a Mag sensor on the smart card, because both Mag sump functions are
+    # gated on one: "This menu displays only if the console detects a Mag
+    # Sump Sensor capable of leak detection". See FIDELITY U1b.
+    c.values["S72301"] = "0103"
+    # ... and a test on it that has passed, so p.23-1's LAST PASSED TEST and
+    # p.24-3's TEST PASSED are drawn and audited: twelve inches of water
+    # that held, run from three hours before the pinned noon.
+    noon = c.clock_offset
+    c.sumps.pour(1, 12.0)
+    c.clock_offset = noon - 3 * 3600
+    c.sumps.start(1)
+    c.clock_offset += 600
+    c.sumps.measure(1)
+    c.clock_offset = noon
+    c.sumps.tick()
+    c.sumps.printed.clear()
     c.values["SV4000"] = "01"
     c.values["SV4400"] = "000000003DCCCCCD"
     return c
@@ -222,6 +269,56 @@ def selections(fn):
             continue
         for choice in st.get("choices") or ():
             yield {key: choice}
+        if st.get("choices_from") == "lines":
+            # SELECT LINE's lines are the site's own, so the branch is one
+            # of them: `_line_walk` programs it. FIDELITY O24.
+            from tls350sim.ui import line_pick
+            yield {key: line_pick(fn["scope"], DEVICE)}
+    # And a STAGE, which no screen offers as a choice: Figure 6-27's ARE YOU
+    # SURE and WORKING are drawn only after CHANGE and ENTER on the screen
+    # before them, and the panel keeps which stage it is in as a selection.
+    # FIDELITY D27.
+    for st in fn.get("steps") or ():
+        gate = st.get("when") or {}
+        if gate.get("sel") and not any(s.get("sel") == gate["sel"]
+                                       for s in fn.get("steps") or ()):
+            for value in gate.get("is") or ():
+                yield {gate["sel"]: value}
+
+
+def _line_walk(c, fn, mode):
+    """Program a line and its precision schedules while an Operating Mode
+    line function is drawn, and hand back what takes them out again.
+
+    SELECT LINE offers the site's lines and SELECT TEST TYPE offers only the
+    rates a line's schedule allows, so a console with no line and no
+    schedule draws neither `Q 1: PLLD #1` nor `0.2 GPH`. They cannot go on
+    the walk console for good: Setup Mode would then draw `0.20 GPH TEST:
+    MANUAL` where p.10-4's exactly-cited screen reads DISABLED. FIDELITY O24.
+
+    And a console with no pressure line draws `SENSORS NOT CONFIGURED` on
+    the function's own screen and nothing behind it, so PRESSURE LINE
+    RESULTS wants the line too. The bare-console pass draws that screen.
+    CLOSED U18.
+    """
+    kind = fn.get("scope") or fn.get("requires")
+    if mode != "NORMAL" or kind not in ("plld", "wplld"):
+        return lambda: None
+    config, periodic, annual = {"plld": ("781", "78C", "783"),
+                                "wplld": ("7A1", "7A3", "7AC")}[kind]
+    want = {f"S{config}{DEVICE:02d}": f"{DEVICE:02d}1",
+            f"S{periodic}{DEVICE:02d}": f"{DEVICE:02d}3",
+            f"S{annual}{DEVICE:02d}": f"{DEVICE:02d}3"}
+    old = {code: c.values.get(code) for code in want}
+    c.values.update(want)
+
+    def undo():
+        for code, value in old.items():
+            if value is None:
+                c.values.pop(code, None)
+            else:
+                c.values[code] = value
+    return undo
 
 
 def open_gate(c, cond, device=DEVICE):
@@ -254,6 +351,32 @@ def open_gate(c, cond, device=DEVICE):
             c.deliveries.tick()
         c.clock_offset += 600.0
         c.deliveries.tick()
+    if cond.get("no_module"):
+        # The one gate that wants hardware TAKEN OUT. Everything else here
+        # adds some, which is why SERVICE REPORT's two ENTER SERVICE ID
+        # screens could not be drawn on any console this walk built: every
+        # comm bay carries a Maintenance Tracker in one form or another, and
+        # a dual-port MT counts as one through `comm_count`. Slots come out
+        # until the console stops reporting the card. See FIDELITY V7.
+        name = cond["no_module"]
+        c.modules[name] = 0
+        for slot, card in sorted(c.comm_slots.items()):
+            if not c.has(name):
+                break
+            c.comm_slots.pop(slot, None)
+            c.modules[card] = 0
+    if cond.get("relay_assigned"):
+        # "If pump relay assigned" against "If pump relay = NONE", Figure
+        # 6-16's two columns, and `S7C6` is what says which -- a stored
+        # SETTING where every other gate on this screen is a card, which is
+        # why the builder could not satisfy it. See FIDELITY V7 and D1.
+        #
+        # `21` is a PLLD line, because that is what the figure's own example
+        # monitors: it draws `Q 1: RELAY (IN): OFF`, and the letter follows
+        # the WATCHED device (`wiresensors.MONITORED`), so a monitor set to
+        # watch a relay draws `R` and matches no line on the page. The walk
+        # should stand where the manual stands.
+        c.values[f"S7C6{device:02d}"] = f"{device:02d}21{device:02d}"
     for key in cond.get("any_setting") or []:
         c.set_setting(key, (cond.get("is") or ["TRANSMIT"])[0],
                       device if cond.get("device") else 0)
@@ -280,6 +403,38 @@ def open_gate(c, cond, device=DEVICE):
         else:
             body = want
         c.values[full] = pfx + body
+
+
+def bay_for(cond):
+    """The comm bay whose cards satisfy this screen's gate.
+
+    The hidden-screen pass built every console on the FIRST bay, so a screen
+    gated on a card that only ever sits in another one -- an EDIM, a remote
+    printer, the WPLLD Comm Board -- could never be drawn however many other
+    gates were opened for it. Ten of the fifteen screens the walk still gave
+    up on were this. See FIDELITY V7.
+    """
+    wanted = set()
+
+    def collect(one):
+        if not one:
+            return
+        for also in one.get("and") or []:
+            collect(also)
+        for key in ("module", "board", "no_module"):
+            value = one.get(key)
+            if isinstance(value, str):
+                wanted.add(value)
+            elif value:
+                wanted.update(value)
+
+    collect(cond)
+    if not wanted:
+        return COMM_BAYS[0]
+    for bay in COMM_BAYS:
+        if wanted & set(bay.values()):
+            return bay
+    return COMM_BAYS[0]
 
 
 def _lines(app):
@@ -319,23 +474,32 @@ def enumerate_screens(state_path):
         time.time = real_time
 
 
-def _stand_on(app, want, depth=0):
+def _stand_on(app, want, depth=0, second=None):
     """Put the panel on the step called `want`, wherever it is.
 
     Not always a step of the function any more: Setup Mode and Diagnostic
     Mode both put screens a level down behind a PRESS <ENTER> screen, and
     `steps()` offers one level at a time. So this walks the branches too.
+
+    `second` is the screen's own second line, for the screens whose first
+    line is a device and its label: a Vac sensor's figure has eleven screens
+    headed `s 1: (Vac Sensor Label)`, and matching the head alone stood the
+    walk on the first of them every time. FIDELITY D26.
     """
     path = list(app.subs)
     for k, x in enumerate(app.steps()):
         app.subs = list(path)
         app.step = k
-        if (x.get("text") or x.get("l1")) == want:
+        if ((x.get("text") or x.get("l1")) == want
+                and (second is None or x.get("l2") == second)):
             return True
-        parent = app._branch_at() if depth < 3 else None
+        # four levels: Figure 6-29 puts START MANUAL TEST: ALL under SELECT
+        # VAC SENSOR under START MANUAL TEST under VAC SENSOR MANUAL TEST
+        # under VAC SENSOR DIAGS. FIDELITY D28.
+        parent = app._branch_at() if depth < 4 else None
         if parent is not None:
             app.subs = list(path) + [parent]
-            if _stand_on(app, want, depth + 1):
+            if _stand_on(app, want, depth + 1, second):
                 return True
     app.subs = list(path)
     return False
@@ -355,15 +519,27 @@ def _walk(state_path):
     # screen, and `reset_panel` puts the panel back to power-on without one.
     app = SimApp(base, 10099)
     try:
-        for bay in COMM_BAYS:
+        # And the first bay once more with a V-R Polisher in place of the
+        # VST, in Diagnostic Mode alone: PMC DIAGNOSTIC shows one processor's
+        # screens or the other's, so a walk on a VST console never drew
+        # 577013-937 Rev J Figure 49's menu, and none of it had been
+        # audited. FIDELITY I11.
+        variants = [(bay, None) for bay in COMM_BAYS] + [(COMM_BAYS[0], "05")]
+        for bay, processor in variants:
             # The second bay is here for the four cards the first one has no
             # slot for; everything it draws that the first bay drew as well
             # is the same screen and is kept once.
-            app.console = base if bay is COMM_BAYS[0] else fresh(bay)
+            app.console = (base if bay is COMM_BAYS[0] and not processor
+                           else fresh(bay))
+            if processor:
+                app.console.values["SV4000"] = processor
             for mi, mode in enumerate(MODES):
+                if processor and mode != "DIAGNOSTIC":
+                    continue
                 app.mode = mi
                 fns = app.functions()
                 for fi, fn in enumerate(fns):
+                  undo = _line_walk(app.console, fn, mode)
                   for picked in selections(fn):
                     app.reset_panel()
                     app.sel.update(picked)
@@ -385,6 +561,7 @@ def _walk(state_path):
                         out.append({"mode": mode, "function": fn["function"],
                                     "index": si, "l1": l1, "l2": l2,
                                     "when": None})
+                  undo()
             # And the screens a level DOWN, on THIS bay's console. The
             # figures put a screen you reach with ENTER in a column of its
             # own, and the top-level walk above never stands on one, so a
@@ -433,6 +610,8 @@ def _walk(state_path):
                 app.subs = list(path)
 
             for mode_name in ("DIAGNOSTIC", "SETUP"):
+                if processor and mode_name != "DIAGNOSTIC":
+                    continue
                 mi = MODES.index(mode_name)
                 app.mode = mi
                 for fi, fn in enumerate(app.functions()):
@@ -445,6 +624,34 @@ def _walk(state_path):
         app.console = base
         app.reset_panel()
 
+        # And the function screens of a console with its cards fitted and
+        # nothing programmed on them: `IN-TANK INVENTORY` over `NO ACTIVE
+        # TANKS` and the pressure line functions over `SENSORS NOT
+        # CONFIGURED`, which every console above has too much programmed to
+        # draw. CLOSED U18.
+        if os.path.exists(state_path):
+            os.remove(state_path)
+        bare = Console(state_path)
+        bare.modules["plld"] = 1
+        app.console = bare
+        app.reset_panel()
+        mi = MODES.index("NORMAL")
+        app.mode = mi
+        for fi, fn in enumerate(app.functions()):
+            if not app._unconfigured(fn):
+                continue
+            app.reset_panel()
+            app.mode, app.func, app.step = mi, fi, HEADER
+            l1, l2 = _lines(app)
+            which = ("NORMAL", fn["function"], l1, l2)
+            if which in seen:
+                continue
+            seen.add(which)
+            out.append({"mode": "NORMAL", "function": fn["function"],
+                        "index": HEADER, "l1": l1, "l2": l2, "when": None})
+        app.console = base
+        app.reset_panel()
+
         # now the screens no configuration above could show
         hidden = []
         for mode, menu, key in MENUS:
@@ -453,7 +660,7 @@ def _walk(state_path):
                     if not any(base.visible(st, dev) for dev in range(1, 17)):
                         hidden.append((mode, fn["function"], i, st))
         for mode, fnm, i, st in hidden:
-            c = fresh()
+            c = fresh(bay_for(st.get("when")))
             open_gate(c, st.get("when"))
             if not c.visible(st, DEVICE):
                 out.append({"mode": mode, "function": fnm, "index": i,
@@ -469,7 +676,7 @@ def _walk(state_path):
                 continue
             app.func, app.device = fi[0], DEVICE
             want = st.get("l1") or st.get("text")
-            if not _stand_on(app, want):
+            if not _stand_on(app, want, second=st.get("l1") and st.get("l2")):
                 continue
             app.editing, app.buf, app.confirm, app.msg = False, "", None, ""
             l1, l2 = _lines(app)

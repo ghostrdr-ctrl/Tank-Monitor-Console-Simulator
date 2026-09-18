@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The alarm and maintenance reports, 113 to 11B.
 
 Five of these look like one report with five titles and they are not. The
@@ -115,3 +118,31 @@ def count_field(tok, n):
     """The record count, written the way this particular code writes it."""
     how, width = COUNT.get(tok, ("d", 2))
     return ("%0*X" if how == "x" else "%0*d") % (width, n)
+
+
+def service_rows(tok, entries):
+    """116's and 11A's display rows, one per service log entry.
+
+    576013-635 Rev AA p.56 and p.59's own columns. 11A carries two LABEL
+    columns this console has nothing for -- the technician's name and the
+    service description -- so they stand empty rather than being filled with
+    something invented. The serial report and the panel's SERVICE REPORT on
+    paper both draw these. See FIDELITY D24.
+    """
+    import time
+    from .clock import clock_words
+    wide, wide_code, _numeric = SERVICE_WIDTHS[tok]
+    rows = []
+    for e in entries:
+        stamp = time.strptime(e["at"], "%y%m%d%H%M")
+        at = clock_words(time.mktime(stamp))
+        if tok == "11A":
+            rows.append(f"{at:43s}"
+                        f"{e['id']:<7.{wide}s}"
+                        f"{'':20s}"
+                        f"{e['code']:<{wide_code}.{wide_code}s}")
+        else:
+            rows.append(f"{at:23s}"
+                        f"{e['id']:<12.{wide}s}"
+                        f"{e['code']:<{wide_code}.{wide_code}s}")
+    return rows

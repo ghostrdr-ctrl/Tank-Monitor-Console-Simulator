@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Look every screen line up in the manuals and write tests/citations.json.
 
 This is the machine half of the audit. It needs the PDFs, which are not in
@@ -30,7 +33,6 @@ Anything that matches none of those is written to the `uncited` list with
 nothing invented, so the gap is visible rather than papered over.
 """
 import collections
-import glob
 import json
 import os
 import re
@@ -137,7 +139,7 @@ FLAG_STATES = (("ENABLED", "DISABLED"), ("ON", "OFF"), ("YES", "NO"),
 # SUN and then MON and says "Repeat the procedures just described until you
 # have entered an average daily sales for each day of the week".
 #
-# **THR, not THU.** No figure on this shelf draws a Thursday screen -- the
+# THR, not THU. No figure on this shelf draws a Thursday screen -- the
 # ones that draw days draw SUN and MON and say "repeat" -- and the only
 # literal Thursday anywhere is 576013-610 Rev AC p.7-3's report row,
 # `AVG SALES-THR`. This list said THU, which is the ordinary abbreviation
@@ -291,6 +293,11 @@ PHOTOGRAPHED = {
     "ACCU_CHART DIAGNOSTICS": "photographed 2026-09-10",
     "GROUND TEMP DIAGNOSTIC": "photographed 2026-09-10",
     "ARCHIVE DIAGNOSTIC": "photographed 2026-09-10",
+    # The same bare console's function screens in Operating Mode, its probe
+    # and PLLD cards fitted and nothing programmed on either. No manual
+    # draws a console with nothing programmed. CLOSED U18.
+    "NO ACTIVE TANKS": "photographed 2026-09-10",
+    "SENSORS NOT CONFIGURED": "photographed 2026-09-10",
 }
 
 
@@ -316,7 +323,7 @@ def main():
         names the screen exactly, where `(Insert more deliveries for other
         tanks)` -- the case the floor was written for -- carries none at
         all. So a word of four letters or more passes on its own. See
-        FIDELITY Q4.
+        UNKNOWNS A46, filed as FIDELITY Q4.
         """
         return any(len(w) >= 4 and w.isalpha()
                    for w in re.split(r"[^A-Za-z]+", literal))
@@ -445,8 +452,8 @@ def main():
                     hit, kind = (name, page), "printed"
                     break
         if hit and kind != "given" and ALL_PLACEHOLDER.match(n):
-            # **A template that is nothing but placeholders identifies
-            # nothing.** The MODIFY TANK/METER MAP row is
+            # A template that is nothing but placeholders identifies
+            # nothing. The MODIFY TANK/METER MAP row is
             # `X    XX   XX    XX    XX`, which masks to `# # # # #` and
             # matched a DIP switch legend on p.4-5 -- and would have
             # matched any row of five numbers in any manual on the shelf.
@@ -458,7 +465,7 @@ def main():
             # it sits under, or it is uncited.
             hit = kind = None
         if not hit and n in PHOTOGRAPHED:
-            # **A photograph of the glass outranks the page.** See the
+            # A photograph of the glass outranks the page. See the
             # PHOTOGRAPHED table above for what each of these is and why.
             hit, kind = (PHOTOGRAPHED[n], "a real TLS-350"), "photographed"
         if hit:

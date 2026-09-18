@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """What the hardware reads, so a diagnostic screen has a number on it.
 
 A diagnostic screen in a manual is drawn with X's, because the manual cannot
@@ -459,7 +462,7 @@ def vapor_ppm(console, number, ohms):
     screens are drawn at different widths, which is the manual saying so
     twice. See FIDELITY R7.
 
-    **No conversion curve is on this shelf, and the two ENDS are.**
+    No conversion curve is on this shelf, and the two ENDS are.
     576013-623 Rev AN p.19-2 calibrates the sensor: "measure the resistance
     across the V and G terminals for each sensor using an ohmmeter ... for
     each sensor, multiply the measured resistance by 4 to determine the

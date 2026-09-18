@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The printer behind the left door: what comes out, and how wide it is.
 
 The roll is forty characters and everything has to arrive on it. Some reports
@@ -51,12 +54,13 @@ def every_report(console):
         "setup": printer.setup(console),
         "leak tests": printer.leak_tests(console),
         "deliveries": printer.deliveries(console),
-        "ticketed": printer.ticketed(console),
         "csld": printer.csld(console),
         "shift": printer.shift(console),
         "meters": printer.meters(console),
         "sensors": printer.sensors(console),
         "fuel": printer.fuel(console),
+        "fuel, every product": printer.fuel_all_products(console),
+        "last-shift inventory": printer.last_shift(console),
         "relays": printer.relays(console),
         "service codes": printer.service_codes(console),
         "alarm history": printer.alarm_history(console, system=True),
@@ -213,8 +217,24 @@ class OnThePaper(unittest.TestCase):
         """A report the console writes for itself is written to fit."""
         console = a_site()
         wide = {}
+        # `shift` and `reconciliation` were NOT on this list, which is how
+        # `_figure` kept a 27-character value line against a 24-column roll
+        # for as long as it did. They are the same report in the same layout
+        # now -- see `printer.shift` -- and both fit, so both are guarded.
+        #
+        # Nor were the three variance reports, which is how the other two of
+        # `_figure`'s family kept theirs: `delivery variance` was 26 against
+        # a sample that measures exactly 24 and `book variance` was 27 to 28
+        # against one that measures 30 and fits no roll. That is 12 folded
+        # lines from one and 32 from the other on a four-tank site, sitting
+        # either side of `variance analysis`, which rendered none. All three
+        # are guarded now, which is the whole of FIDELITY T13's lesson: a
+        # pass that fixes one report of a family has to look sideways.
         for name in ("inventory", "alarms", "status", "revision", "setup",
-                     "deliveries", "sensors", "leak tests"):
+                     "deliveries", "sensors", "leak tests",
+                     "shift", "reconciliation",
+                     "delivery variance", "book variance",
+                     "variance analysis"):
             for line in every_report(console)[name]:
                 for one in str(line).split(chr(10)):
                     if len(one) > printer.WIDTH:
@@ -238,6 +258,41 @@ class OnThePaper(unittest.TestCase):
                               if re.match(r"^[A-Z]{3} +\d", str(l))]), 1)
         self.assertLess(out.index("SYSTEM STATUS REPORT"),
                         out.index("INVENTORY REPORT"))
+
+    def test_a_figure_is_the_width_the_page_measures(self):
+        """576013-610 Rev AC p.28-2 draws the whole SHIFT RECONCILIATION
+        report. Its word boxes put every label at column 0 and the right
+        edge of all eight values at column 23.1, in a 5.40pt monospace:
+
+            OPENING VOLUME:
+                          5511 GALS
+
+        The value and its unit are one right-aligned field. This was
+        `f"{value:22.0f} {unit}"`, which is 27 -- three over the roll -- and
+        the docstring said it was laid out for a 40 column one. UNKNOWNS A19.
+        """
+        out = []
+        printer._figure(out, "OPENING VOLUME", 5511.0)
+        printer._figure(out, "WATER HEIGHT", 2.10, "INCH")
+        self.assertEqual(out[0], "OPENING VOLUME:")
+        self.assertEqual(out[1], "5511 GALS".rjust(23))
+        self.assertEqual(out[4], "2.10 INCH".rjust(23))
+        for line in out:
+            self.assertLessEqual(len(line), printer.WIDTH, repr(line))
+
+    def test_the_paper_report_is_not_the_wire_report(self):
+        """`bir.report` is IC03, a seventy-character table of eight columns
+        that the WIRE asks for, and the roll used to be handed it. Its
+        column header and its 35-character SIGNATURE line -- which occurs in
+        576013-635 and on no page of the Operator's Manual -- both folded.
+        """
+        console = a_site()
+        paper = [str(x) for x in printer.fit(printer.shift(console))]
+        for wrong in ("DLVRIES", "PHYSICL", "SIGNATURE"):
+            self.assertNotIn(wrong, " ".join(paper), wrong)
+        # and the title is printed once, not once per layout
+        self.assertEqual(sum(1 for l in paper
+                             if "SHIFT RECONCILIATION" in l), 1)
 
     def test_folding_keeps_every_word(self):
         wide = ["DATE TIME  OPENING DLVRIES   SALES  ADJUST  CALC'D PHYSICL"]
@@ -599,6 +654,88 @@ class WhatTheConsolePrintsWithoutBeingAsked(unittest.TestCase):
                 return [str(x) for x in lines]
         return None
 
+    def a_csld_console(self, report_only=None):
+        """A tank CSLD really runs on: the key, S611's method 7, and a float,
+        which only a Mag probe has -- `test_console`'s own recipe."""
+        from tests.test_console import a_tank, fitted
+        c = fitted()
+        a_tank(c)
+        c.software["csld"] = True
+        c.values["S61101"] = "01" + "12" + "0" + "7" + "0000"
+        c.values["S62F01"] = "011"
+        if report_only:
+            c.values["S61C01"] = report_only
+        return c
+
+    def csld_printed(self, c, year, month, day):
+        """The CSLD reports owed across eight o'clock on that day."""
+        for minute, keep in ((7 * 60 + 59, False), (8 * 60 + 1, True)):
+            c.clock_offset = time.mktime(
+                (year, month, day, minute // 60, minute % 60, 0, 0, 1, -1)
+            ) - time.time()
+            printed = printer.automatic(c)
+        return [lines for note, lines in printed
+                if note == "-- PRINT: CSLD test results"]
+
+    def test_csld_results_print_at_eight_every_morning(self):
+        """576013-818 Rev AB ch.11: "Test results are provided automatically
+        every 24 hours at 8:00 a.m." Nothing printed them. FIDELITY K6."""
+        c = self.a_csld_console()
+        slips = self.csld_printed(c, 2026, 9, 14)
+        self.assertEqual(len(slips), 1)
+        self.assertIn("CSLD TEST RESULTS", [str(x).strip() for x in slips[0]])
+
+    def test_report_only_prints_on_its_days_and_not_between(self):
+        """576013-623 Rev AN p.8-9: "Day 15 and End of Month (both at 8:00
+        a.m.)"."""
+        c = self.a_csld_console(report_only="2")
+        self.assertEqual(self.csld_printed(c, 2026, 9, 14), [])
+        self.assertEqual(len(self.csld_printed(c, 2026, 9, 15)), 1)
+        self.assertEqual(self.csld_printed(c, 2026, 9, 25), [])
+        self.assertEqual(len(self.csld_printed(c, 2026, 9, 30)), 1)
+
+    def test_end_of_month_alone_waits_for_the_last_day(self):
+        """"End of Month (at 8:00 a.m.)", and February's is the 28th."""
+        c = self.a_csld_console(report_only="1")
+        self.assertEqual(self.csld_printed(c, 2027, 2, 15), [])
+        self.assertEqual(len(self.csld_printed(c, 2027, 2, 28)), 1)
+
+    def test_a_tank_without_csld_prints_no_csld_report(self):
+        c = self.a_csld_console()
+        c.software["csld"] = False
+        self.assertEqual(self.csld_printed(c, 2026, 9, 14), [])
+
+    def an_isd_console(self):
+        c = a_site()
+        c.set_board("E6")
+        c.software["isd"] = True
+        printer.automatic(c)
+        return c
+
+    def test_an_isd_site_alarm_prints_its_own_slip(self):
+        """577013-800 Rev P Figure 21, "Example Warning Posting": `---- ISD
+        SITE ALARM ----` over the alarm and its time. FIDELITY I11."""
+        c = self.an_isd_console()
+        c.isd_force("leakage", "warn")
+        printed = printer.automatic(c)
+        self.assertEqual(self.notes(printed), ["-- PRINT: ISD site alarm"])
+        slip = printed[0][1]
+        self.assertEqual(slip[:2], ["---- ISD SITE ALARM ----",
+                                    "ISD VAPOR LEAKAGE WARN"])
+        self.assertEqual(len(slip), 3)
+
+    def test_an_isd_hose_alarm_names_the_hose(self):
+        """Figure 22: `h 1: FP1 SUPER` over `FLOW COLLECT FAIL`."""
+        c = self.an_isd_console()
+        hose = c.isd_add_hose()
+        c.set_setting("evr_hose_label", "SUPER", hose)
+        c.isd_force("collect_flow", "warn")
+        slips = [lines for note, lines in printer.automatic(c)
+                 if note == "-- PRINT: ISD hose alarm"]
+        self.assertEqual(slips[0][:3], ["---- ISD HOSE ALARM ----",
+                                        "h 1: FP1 SUPER",
+                                        "FLOW COLLECT WARN"])
+
     def test_a_console_nobody_has_asked_owes_nothing(self):
         """The watermarks are primed from where the console already is, so
         the first ask does not reprint the day it has behind it."""
@@ -738,6 +875,113 @@ class WhatTheConsolePrintsWithoutBeingAsked(unittest.TestCase):
         return run
 
 
+class TheTicketedDeliveryReport(unittest.TestCase):
+    """576013-610 Rev AC p.5-4, which PRINT on Delivery Maintenance gives.
+
+    It gave `DELIVERY REPORT`, gross and TC on one row and ticket and
+    variance on the next -- no temperatures, no BOL, no basis line -- and
+    the right title lived in `printer.ticketed`, over I221's serial columns,
+    called by nothing. FIDELITY O7.
+    """
+
+    T0 = time.mktime((2026, 9, 14, 13, 0, 0, 0, 0, -1))
+
+    def a_console(self):
+        c = a_site()
+        c.deliveries.records = {}
+        c.values["S51D00"] = "0"
+        return c
+
+    def a_delivery(self, c, at, ticket=2500.0, bol="EXX23223", tank=1,
+                   gross=2599.0, tc=2590.0):
+        run = delivery.Delivery(tank, {"at": at - 900, "volume": 3000.0,
+                                       "tc": 2990.0, "water": 0.0,
+                                       "temp": 72.6, "height": 40.0})
+        run.end = {"at": at, "volume": 3000.0 + gross, "tc": 2990.0 + tc,
+                   "water": 0.0, "temp": 73.2, "height": 60.0}
+        run.ticket, run.bol = ticket, bol
+        c.deliveries.records.setdefault(tank, []).insert(0, run)
+        return run
+
+    def test_the_page_s_rows_on_the_roll(self):
+        c = self.a_console()
+        self.a_delivery(c, self.T0)
+        got = printer.deliveries(c, [1])
+        label = c.text("602", 1) or "TANK 1"
+        # the mixed temperature: 5599 gallons at 73.2 less 3000 at 72.6,
+        # over the 2599 that came in
+        self.assertEqual(got, [
+            f"T 1:{label}".rstrip(), "TICKETED DELIVERY REPORT",
+            c.clock_stamp(), "VOLUMES ARE STANDARD", "",
+            printer.clock_words(self.T0),
+            "TICKET VOL    :2500 GALS",
+            "GAUGED VOL    :2599 GALS",
+            "DLVY VAR      : -99 GALS",
+            "EST DLVY TEMP :   73.9 F",
+            "PRE DLVY TEMP :   72.6 F",
+            "POST DLVY TEMP:   73.2 F",
+            "BOL           : EXX23223",
+            ""])
+
+    def test_the_tape_s_own_grid_where_the_values_fit_it(self):
+        """`WATER WARNING   :    0.8` on the site tape: label and colon in
+        sixteen, the value right-aligned to the last column."""
+        self.assertEqual(printer.colon_row("PRE DLVY TEMP", "72.6 F"),
+                         "PRE DLVY TEMP   : 72.6 F")
+        self.assertEqual(len(printer.colon_row("BOL", "", 16)), 17)
+
+    def test_an_inserted_delivery_has_no_gauge_and_no_temperatures(self):
+        """"When you insert ticketed deliveries, gauged volume and
+        temperature information appear as 'UNAVAIL'", p.5-3 -- and the
+        variance is taken from the gauge."""
+        c = self.a_console()
+        c.deliveries.insert(1, self.T0, 2500.0, "EXX1")
+        rows = dict(line.split(":", 1)
+                    for line in printer.deliveries(c, [1])[6:13])
+        self.assertEqual(rows["TICKET VOL    "], "2500 GALS")
+        for name in ("GAUGED VOL", "DLVY VAR", "EST DLVY TEMP",
+                     "PRE DLVY TEMP", "POST DLVY TEMP"):
+            self.assertEqual(rows[name.ljust(14)].strip(), "UNAVAIL", name)
+
+    def test_a_tc_ticketed_site_reports_on_the_tc_basis(self):
+        """576013-623 Rev AN p.5-6, TC TICKETED DELIVERY: "you can choose
+        whether the values you enter are standard (gross) volumes or
+        temperature-compensated (TC) volumes"."""
+        c = self.a_console()
+        c.values["S51D00"] = "1"
+        self.a_delivery(c, self.T0)
+        got = printer.deliveries(c, [1])
+        self.assertIn("VOLUMES ARE TC", got)
+        self.assertIn("GAUGED VOL    :2590 GALS", got)
+        self.assertIn("DLVY VAR      : -90 GALS", got)
+
+    def test_a_day_prints_that_day_s_deliveries_alone(self):
+        """"Press PRINT to print a Delivery Report for all deliveries for
+        the day and tank shown", p.5-3."""
+        c = self.a_console()
+        self.a_delivery(c, self.T0 - 86400, bol="YESTERDAY")
+        self.a_delivery(c, self.T0, bol="TODAY")
+        every = chr(10).join(printer.deliveries(c, [1]))
+        one = chr(10).join(printer.deliveries(c, [1], day=self.T0 + 3600))
+        self.assertIn("YESTERDAY", every)
+        self.assertIn("TODAY", one)
+        self.assertNotIn("YESTERDAY", one)
+
+    def test_five_digit_volumes_come_off_the_roll_unfolded(self):
+        c = self.a_console()
+        self.a_delivery(c, self.T0, ticket=12000.0, gross=12050.0,
+                        bol="B" * 20)
+        for line in printer.deliveries(c, [1]):
+            self.assertLessEqual(len(line), printer.WIDTH, line)
+
+    def test_a_tank_with_no_deliveries_prints_no_invented_line(self):
+        c = self.a_console()
+        self.assertEqual(printer.deliveries(c, [2])[1:4],
+                         ["TICKETED DELIVERY REPORT", c.clock_stamp(),
+                          "VOLUMES ARE STANDARD"])
+        self.assertEqual(len(printer.deliveries(c, [2])), 5)
+
+
 class TheAlarmReportCarriesWhenItHappened(unittest.TestCase):
     """576013-610 Rev AC p.29-1 counts three things and the slip had two.
 
@@ -867,6 +1111,265 @@ class TheSetupReportOnAConsoleNobodyHasProgrammed(unittest.TestCase):
         rows = [r for r in self.section(c, "VMC SETUP")[2:] if r.strip()]
         self.assertEqual(rows, ["ADD VMC SERIAL NUMBER", "x 1:",
                                 "EDIT VMC SERIAL NUMBER", "x 1:"])
+
+
+class TheTwoRelayReports(unittest.TestCase):
+    """FIDELITY T12. 576013-635 Rev AA function 322 draws PUMP RELAY MONITOR
+    STATUS with four columns -- the pump's own state, the relay LINE it is
+    watching, and a STATUS of NORMAL or the standing alarm -- and
+    `wiresensors` has rendered all four all along for `I322`. The paper
+    built a row of its own instead: a label and ONE state, with the reason
+    the report exists dropped.
+
+    No page on this shelf draws that paper. 576013-610 Rev AC p.2091 indexes
+    the function and its `PRINT - Status for all relays` and gives no
+    sample, so the report is the wire's, folded onto the roll -- the rule
+    D23 and D24 both settled for the same shape.
+    """
+
+    def a_monitor(self):
+        c = Console()
+        for key in ("probe", "relay", "io", "pump", "pumpmon"):
+            c.modules[key] = 1
+        c.values["S7C501"] = "01PUMP RELAY UNLEADED "
+        c.values["S80701"] = "01HORN                "
+        c.tick()
+        return c
+
+    def test_the_paper_is_the_wire_s_own_rows(self):
+        from tls350sim import wiresensors
+        c = self.a_monitor()
+        rows = printer.relays(c, "pumpmon")
+        wire = wiresensors.pumpmon_status_rows(c)
+        self.assertEqual(rows[-len(wire) + 1:], wire[1:])
+        self.assertIn("PUMP RELAY MONITOR STATUS REPORT", rows)
+
+    def test_the_row_carries_the_status_the_report_exists_for(self):
+        c = self.a_monitor()
+        row = [r for r in printer.relays(c, "pumpmon")
+               if r.strip().startswith("1 ")][0]
+        self.assertIn("PUMP RELAY UNLEADED", row)
+        self.assertTrue(row.rstrip().endswith("NORMAL"), row)
+
+    def test_and_the_two_line_column_head_is_there(self):
+        """The stacked head the paper had no line of at all."""
+        rows = printer.relays(self.a_monitor(), "pumpmon")
+        self.assertTrue(any("PUMP RELAY" in r and "PUMP" in r for r in rows))
+        self.assertTrue(any(r.startswith("DEVICE") and r.endswith("STATUS")
+                            for r in rows))
+
+    def test_the_setup_report_stacks_its_state(self):
+        """`R 1:HORN` over `ON`, the way `printer.sensors` draws the same
+        shape: there is no column 21 the 24 character roll does not have.
+        It was one 26 character line that folded to the same two by
+        accident, and truncated to 18 where the roll has room for 20."""
+        c = self.a_monitor()
+        c.values["S80701"] = "01HORN AND BEACON 12345"[:23].ljust(23)
+        rows = printer.relays(c, "relay")
+        head = [r for r in rows if r.startswith("R 1:")][0]
+        self.assertEqual(head, "R 1:" + c.text("807", 1))
+        self.assertEqual(rows[rows.index(head) + 1], "OFF")
+
+    def test_neither_report_has_a_row_the_roll_cannot_fold(self):
+        """`fit` breaks at the last space that fits; a row with no space in
+        its first 24 columns is chopped mid-word instead."""
+        c = self.a_monitor()
+        for kind in ("relay", "pumpmon"):
+            for row in printer.relays(c, kind):
+                if len(row) > printer.WIDTH:
+                    self.assertIn(" ", row[:printer.WIDTH + 1],
+                                  f"{kind}: {row!r}")
+
+
+class TheTwoVarianceReportsOnTheirOwnGrid(unittest.TestCase):
+    """FIDELITY T13. 576013-610 Rev AC typesets this family at two widths.
+
+    p.28-10's DELIVERY VARIANCE, measured off its word boxes, is the roll's
+    own 24 -- the label run to a colon in column 11 and the value and its
+    unit right-aligned as one field:
+
+        TICKET VOL :     800 GAL
+        % VAR SALES:      11.23%
+
+    p.28-14's BOOK VARIANCE measures 30 and fits no roll anybody has, so
+    that block gives up its value field's padding the way the TICKETED
+    DELIVERY REPORT's does and keeps the page's labels and its one colon
+    column. A manual sample is typeset, not photographed.
+    """
+
+    def a_site_with_a_variance(self):
+        c = a_site()
+        c.tick()
+        return c
+
+    def a_sample_row(self, **values):
+        """p.28-10's own figures, through the door the report reads."""
+        c = a_site()
+        c.bir.current(1)                    # opens the period the row is in
+        c.bir.period[(1, c.recon_kind)].update(values)
+        return c
+
+    def test_the_delivery_rows_are_the_sample_s_own_columns(self):
+        c = self.a_sample_row(opening=9704.0, sales=285.0, ticketed=800.0,
+                              deliveries=899.0, adjust=0.0)
+        c.tank_level[1]["volume"] = 8904.0
+        rows = printer.delivery_variance(c, [1])
+        self.assertIn("TICKET VOL :     800 GAL", rows)
+        self.assertIn("GAUGED VOL :     899 GAL", rows)
+        self.assertIn("DLVY VAR   :      99 GAL", rows)
+
+    def test_every_row_of_both_reports_is_the_roll_s_width(self):
+        """Not "folds tidily" -- fits. These were 26, and 27 to 28."""
+        for site in presets.PRESETS:
+            c = a_site(site)
+            for name, report in (("delivery", printer.delivery_variance(c)),
+                                 ("book", printer.book_variance(c)),
+                                 ("analysis", printer.variance_analysis(c))):
+                for line in report:
+                    self.assertLessEqual(len(str(line)), printer.WIDTH,
+                                         f"{site} / {name}: {line!r}")
+
+    def test_the_book_block_keeps_one_colon_column(self):
+        """What `colon_block` is for: the labels give up their padding
+        TOGETHER, so the colons stay in one column when the values shrink
+        the field."""
+        rows = [r for r in printer.book_variance(self.a_site_with_a_variance())
+                if ":" in r and r.split(":")[0].strip() in (
+                    "OPN GAUG VOL", "METER SALES", "TICKET DLVY",
+                    "MANUAL ADJ", "BOOK INV", "GAUGED INV", "WATER HT")]
+        self.assertTrue(rows)
+        self.assertEqual(len({r.index(":") for r in rows}), 1, rows)
+
+    def test_neither_report_prints_minus_zero(self):
+        """A variance that rounds to nothing from below printed `-0 GAL`.
+        `variance_analysis` had guarded against it and its two neighbours
+        had not -- the same sideways look T13 is about."""
+        c = self.a_sample_row(opening=1000.0, sales=100.0, ticketed=0.0,
+                              deliveries=0.0, adjust=0.0)
+        c.tank_level[1]["volume"] = 900.0 - 1e-9
+        for report in (printer.delivery_variance(c, [1]),
+                       printer.book_variance(c, [1])):
+            for line in report:
+                self.assertNotIn("-0 GAL", str(line))
+                self.assertNotIn("-0.00%", str(line))
+
+
+class TheFiveFactsThisConsoleRenderedTwice(unittest.TestCase):
+    """FIDELITY O27, found by rendering all 31 printer reports and all 569
+    wire display answers on ONE console at ONE instant and diffing the pairs.
+
+    **A console member that reaches exactly one surface is the signature of a
+    second generator**, and it named every one of these.
+    """
+
+    def a_tank(self, **values):
+        c = Console()
+        for card in ("probe", "rs232", "liquid"):
+            c.modules[card] = 4
+        c.values["S60201"] = "01REGULAR UNLEADED   "
+        c.values["S60A01"] = "01" + struct.pack(">f", 10000.0).hex().upper()
+        c.values.update(values)
+        c.tank_level[1] = {"volume": 1000.8, "water": 0.50}
+        c.tick()
+        return c
+
+    def ask(self, c, code):
+        from tls350sim.wire import Handler, SOH
+        return Handler(c, verbose=False).handle(SOH + code).decode("latin-1")
+
+    # ---- density and mass ------------------------------------------------
+
+    def test_the_programmed_density_reaches_the_paper_and_the_wire(self):
+        """`console.py`'s `live_reading` read `61E` and `product_density`
+        did not, so the glass said 7.2500 LBS/GAL and the roll said 6.8045
+        at the same instant. Two closed entries already assert this fix --
+        Y10, and O13a's residue in UNKNOWNS -- and both were true of
+        `live_reading` alone."""
+        c = self.a_tank(S61E01="01" + struct.pack(">f", 7.25).hex().upper())
+        self.assertAlmostEqual(c.product_density(1), 7.25, places=4)
+        self.assertAlmostEqual(c.product_mass(1), 1000.8 * 7.25, places=2)
+        self.assertIn("7.2500", c.live_reading("density", 1))
+
+    def test_a_tank_with_no_programmed_density_keeps_its_own_reading(self):
+        """"A value of 0 indicates that the density for the product in this
+        tank has not been entered"."""
+        c = self.a_tank()
+        low, high = Console.DENSITY_BAND
+        self.assertTrue(low <= c.product_density(1) <= high)
+
+    # ---- water -----------------------------------------------------------
+
+    def test_the_printed_inventory_applies_the_water_threshold(self):
+        """It took the float's raw depth while the WATER VOL row two lines
+        below it went through `water_volume`, which applies the threshold --
+        so one report answered the same question both ways: `WATER VOL = 0
+        GALS` over `WATER = 0.50 INCHES`."""
+        c = self.a_tank(S64801="01" + struct.pack(">f", 0.8).hex().upper())
+        rows = [str(r) for r in printer.inv_rows(c, 1, c.full_volume(1))]
+        water = [r for r in rows if r.split("=")[0].strip() == "WATER"][0]
+        volume = [r for r in rows
+                  if r.split("=")[0].strip() == "WATER VOL"][0]
+        self.assertIn("0.00", water)
+        self.assertIn("0 GALS", volume)
+
+    def test_and_so_does_the_wire_s_inventory(self):
+        c = self.a_tank(S64801="01" + struct.pack(">f", 0.8).hex().upper())
+        row = [r for r in self.ask(c, b"I20101").split("\r\n")
+               if r.strip().startswith("1 ")][0]
+        self.assertNotIn("0.50", row)
+
+    def test_a_float_above_the_threshold_is_still_water(self):
+        c = self.a_tank(S64801="01" + struct.pack(">f", 0.2).hex().upper())
+        rows = [str(r) for r in printer.inv_rows(c, 1, c.full_volume(1))]
+        self.assertIn("0.50", [r for r in rows
+                               if r.split("=")[0].strip() == "WATER"][0])
+
+    # ---- whole numbers ---------------------------------------------------
+
+    def test_237_truncates_like_everything_else(self):
+        """`%.0f` ROUNDS. On 1000.8 gallons that is 1001 against I201's
+        1000, and the TOTAL compounded it. The manual's own arithmetic is
+        truncation: p.4-2 prints 2549 x 5.9987 = 15290.68 as `MASS = 15290`.
+        CLOSED Y11 states the rule; 237, 238, 214 and 2E2 never got it."""
+        c = self.a_tank()
+        c.tank_level[2] = {"volume": 2000.8, "water": 0.0}
+        c.values["S60202"] = "02PREMIUM UNLEADED   "
+        c.values["S60A02"] = "02" + struct.pack(">f", 10000.0).hex().upper()
+        c.tick()
+        rows = self.ask(c, b"I23700").split("\r\n")
+        body = [r for r in rows if r.strip()[:1].isdigit()]
+        # the VOLUME column, which is the one holding 1000.8 and 2000.8
+        self.assertEqual([r.split()[-2] for r in body], ["1000", "2000"])
+        # and every subtotal is the truncated sum of its own rows rather
+        # than the rounded sum of the raw ones: 1000.8 + 2000.8 printed as
+        # 3002 where the rows under it summed to 3000
+        totals = [int(r.split()[-2]) for r in rows if "TOTAL:" in r]
+        self.assertEqual(sum(totals), 3000)
+
+    # ---- the sensor's status ---------------------------------------------
+
+    def test_a_latched_sensor_alarm_is_on_the_paper_too(self):
+        """576013-610 p.15-1: SENSOR NORMAL shows "if the sensor is
+        functioning properly **and no alarm conditions exist**". This read
+        the physical state alone, so a dried-out sensor with a latched FUEL
+        ALARM printed SENSOR NORMAL on paper and answered FUEL ALARM on the
+        wire -- one console with two stories about one sensor."""
+        c = self.a_tank()
+        c.values["S70301"] = "0104"          # a discriminating pan sensor
+        c.values["S70201"] = "01SUMP 1              "
+        c.sensor_state[("liquid", "1")] = "fuel"
+        c.compute_alarms()
+        self.assertEqual(c.sensor_reading("liquid", 1), "FUEL ALARM")
+        c.sensor_state[("liquid", "1")] = "normal"
+        self.assertEqual(c.sensor_reading("liquid", 1), "FUEL ALARM")
+        self.assertIn("FUEL ALARM", "".join(printer.sensors(c)))
+
+    def test_a_sensor_that_never_alarmed_reads_normal(self):
+        c = self.a_tank()
+        c.values["S70301"] = "0104"
+        c.sensor_state[("liquid", "1")] = "normal"
+        c.compute_alarms()
+        self.assertEqual(c.sensor_reading("liquid", 1), "SENSOR NORMAL")
 
 
 if __name__ == "__main__":

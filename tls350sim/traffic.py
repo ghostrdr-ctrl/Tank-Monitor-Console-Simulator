@@ -8,12 +8,15 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """A site's own day: cars arriving, nozzles lifting, tanks going down.
 
 Nothing here is new physics. A car is a call to `Sales.start()` -- the same
 door the bench's LIFT NOZZLE pill goes through -- so everything downstream
-of `meter_flow` sees exactly what it sees for a nozzle lifted by hand: BIR
-draws the tank and books the shift, the meter events table gets a start and
+of `meter_flow` sees exactly what it sees for a nozzle lifted by hand: the
+tank goes down, BIR books the shift, the meter events table gets a start and
 an end, the DIM is stamped as having reported, CSLD's `busy` reads the rate,
 and the line's HANDLE goes up while the fuel is moving. The generator's
 whole job is deciding WHEN, and out of which tank.
@@ -24,7 +27,7 @@ A truck stop is not a busy retail forecourt with the hours moved -- it is a
 NIGHT shape at whatever volume it does -- and a site that never goes quiet
 is a FLAT shape, which is the only one that can deny CSLD its idle time.
 
-**Arrivals are Poisson, and that is the point.** A car every four minutes
+Arrivals are Poisson, and that is the point. A car every four minutes
 never leaves a thirty minute hole, so a site paced on a fixed interval looks
 identical to a quiet one from CSLD's end and the alarm this generator exists
 to raise could never post. Real idle time is the exponential tail between
@@ -44,7 +47,7 @@ for.
 import random
 import time
 
-from .meterid import MeterDict, meter_key
+from .meterid import meter_key
 
 
 # ---------------------------------------------------------------------------
@@ -297,22 +300,22 @@ class Traffic:
     def can_sell(self):
         """Can a gallon actually LEAVE a tank on this console?
 
-        `Bir._dispense` is the only thing on this bench that draws a tank
-        down from a sale, and it runs only with the BIR key in the console
-        and a DIM in the cage -- the bench models the fuel the console can
-        account for, and "the fuel still flows at the site, but this
-        console cannot see it, so the bench meters go quiet too".
+        A nozzle with a tank behind it can, and nothing else is asked.
+        `Sales.draw` takes the fuel out of the tank on the handle alone --
+        the STP runs, the probe sees the level fall, the line test follows
+        the hang-up -- and whether the console can ACCOUNT for the sale is
+        a separate question that the BIR key and the DIM answer, in
+        `Bir._dispense`, without touching the fuel.
 
-        Which means a site with meters mapped and no BIR key is a site
-        where `selling()` is full, a car can be sent, a handle goes up, and
-        not one gallon moves. Measured: 313 cars and 5,963 gallons against
-        a tank that never left 8,000. Counting a sale that did not happen
-        is worse than not sending the car -- the header would report a
-        day's trade that no screen, no report and no probe agrees with --
-        so the car is not sent, and `blockers()` says why instead.
+        This used to want the key and a DIM as well, because the draw lived
+        inside BIR and nothing else moved fuel: a site without them had
+        meters mapped, a car could be sent, a handle went up, and not one
+        gallon moved (313 cars and 5,963 gallons against a tank that never
+        left 8,000). The answer then was to send no car. The answer now is
+        that the fuel moves whether or not the console is told, which is
+        what a forecourt does.
         """
-        return (self.c.licensed("bir")
-                and (self.c.has("edim") or self.c.has("mdim")))
+        return bool(self.selling())
 
     def blockers(self):
         """Why no car can buy anything, in words, with where to go fix it.
@@ -320,25 +323,21 @@ class Traffic:
         The generator has one failure that looks exactly like success: it
         says RUNNING, the curve draws, the hour lights up, and no car ever
         arrives -- because `selling()` is empty and there was nothing for
-        the arrivals to be spent on. A site with no DIM in the cage cannot
-        have a meter, a console without BIR cannot have meter data at all,
-        and either way a technician staring at the line screen waiting for
-        HANDLE ON is waiting for something that was never going to come.
+        the arrivals to be spent on. A site with no meter mapped to a tank
+        has no nozzle a car can lift, and a technician staring at the line
+        screen waiting for HANDLE ON is waiting for something that was
+        never going to come.
 
         So the reasons are named rather than left to be deduced. Each is
         (what is wrong, which bench view fixes it), ordered the way they
-        have to be fixed: the card goes in before the meter is mapped, and
-        the meter is mapped before it can be a blend's component.
+        have to be fixed: the meter is mapped before it can be a blend's
+        component. A missing BIR key or DIM is NOT on the list: the fuel
+        moves without either, and what they cost is the reconciliation,
+        which the console's own screens say for themselves.
         """
         c = self.c
         out = []
-        if not c.licensed("bir"):
-            out.append(("BIR is not installed, so no metered transaction "
-                        "reaches this console at all.", "Modules"))
-        if not (c.has("edim") or c.has("mdim")):
-            out.append(("No DIM is fitted, so there is nothing to report a "
-                        "meter. Fit an EDIM or MDIM.", "Modules"))
-        elif not c.meters:
+        if not c.meters:
             out.append(("No meter is mapped to a tank. Map one under "
                         "Dispensers.", "Site"))
         empty = [m for m in sorted(c.blends) if not c.blend_meters(m)]
@@ -576,6 +575,14 @@ class Traffic:
         day = self._days.get(stamp)
         if day is None:
             day = self._days[stamp] = Day()
+            # A day after the console's own date is from before somebody set
+            # the clock back, and it is not this console's past. Kept, those
+            # days sorted as the newest, the day just made was the one
+            # pruned, and every car after the set-back was counted into a
+            # Day nobody held.
+            today = self._stamp()
+            for later in [k for k in self._days if k > today and k != stamp]:
+                self._days.pop(later, None)
             for old in sorted(self._days)[:-self.KEEP_DAYS]:
                 self._days.pop(old, None)
         return day

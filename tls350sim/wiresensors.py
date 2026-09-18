@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The sensor family of function codes: what is on the end of each wire.
 
 Every report a technician uses to answer "is that sump wet, and if the console
@@ -359,14 +362,14 @@ def _sensor_rows(status_column=STATUS_COLUMN):
 # numbers the same list differently at S723, SMART SENSOR CATEGORY, so the
 # two numberings have to be mapped rather than assumed equal.
 #
-# **Category 08, the vapour valve, was missing.** 723's own note ends
+# Category 08, the vapour valve, was missing. 723's own note ends
 # "08=vapor valve  (Version 29)" and `consoledata.json` carries it, so the
 # panel could hold a category the wire had no word for: a sensor programmed
 # as a vapour valve came back `UNKNOWN` / `0000` from `I333`, `IB34`, `IB35`
 # and `IB36`, on a console that answers `IB61` VAPOR VALVE DIAGNOSTIC and
 # `IB62` for the same sensor. See FIDELITY L4.
 #
-# *The NAME is certain and the CODE is inferred.* B34's own TTTT list stops
+# The NAME is certain and the CODE is inferred. B34's own TTTT list stops
 # at 0010 and has no vapour valve in it -- it predates the category, which
 # arrived in Version 29 -- but B62's does: "TT - Smart Sensor Type (Hex) ...
 # 0E = Vapor Valve", the same field under a shorter name. `000E` is that
@@ -397,7 +400,7 @@ def isd_serial(console, number):
     PRESSURE SENSOR SELECT screens -- and this was the wire's alone, built
     inline where nothing else could reach it, so the panel drew `SN#:` with
     nothing after it on a console that could answer the same question over
-    the port. *Panel and port do not disagree about a device's serial.*
+    the port. Panel and port do not disagree about a device's serial.
     """
     kind = console.sensor_type("smart", number) or ""
     if not kind:
@@ -456,6 +459,18 @@ def _smart_serial(console, number):
     return int(_number(console.diag_reading("ss_serial", number)))
 
 
+def install_time(console, number):
+    """When the console learned this sensor was there: 333's install event.
+
+    The console keeps no install log of its own, so an install is the cold
+    start it counts its test needed warnings from, less a stable spread per
+    sensor. The panel's SMART SENSOR INSTALL LOG prints the same moment.
+    FIDELITY D30.
+    """
+    began = console._commissioned or time.mktime(console.now())
+    return began - readings.fixed(0.0, 7200.0, "install", number)
+
+
 def _smart_model(console, number):
     """"MODEL 101": the model number a smart sensor answers with.
 
@@ -474,30 +489,53 @@ def _mag_values(console, number):
     return [_number(console.diag_reading(t, number)) for t in tokens]
 
 
-def _vac_stamp(console, ago):
+def _vac_stamp_at(when):
     """The date line B38 stands in front of a reading, in its own form.
 
     `4-12-04 11:28AM` on p.534: two digit year, and no space before the
-    meridiem. It is a line of its own -- see `_vac_diagnostic`.
+    meridiem. It is a line of its own -- see `_vac_diagnostic`. It takes the
+    moment the reading was TAKEN, because that is what it stamps; it used to
+    take an offset from now, which stamped every report with the hour it was
+    asked for. FIDELITY L18.
     """
-    return time.strftime("%m-%d-%y %I:%M%p",
-                         time.localtime(time.mktime(console.now()) - ago))
+    return time.strftime("%m-%d-%y %I:%M%p", time.localtime(when))
+
+
+def _atm_psi(console, number):
+    """The ATM P sensor's reading, which a vacuum sensor is compensated by.
+
+    "The atmospheric pressure [ATMP] sensor is resident in the Smart Sensor /
+    Press Module. One ATMP sensor is required with Vac Sensor systems per
+    site", 576013-623 Rev AN p.26-3 -- so on a site that has one there is
+    exactly one to find, and its reading is the site's. A site that has not
+    programmed one still has to answer, and answers off the vacuum sensor's
+    own position, which is where this reading came from before.
+    """
+    for one in range(1, max(console.capacity("smart"), 0) + 1):
+        if _smart_kind(console, one) == ATMP:
+            return _number(console.diag_reading("ss_atm", one))
+    return _number(console.diag_reading("ss_atm", number))
 
 
 def _vac_pressures(console, number):
     """(compensated, uncompensated) PSI on a vacuum sensor.
 
-    A sump under vacuum sits near the -9 psi of the manual's own sample; one
-    that has lost it is above -1 psi, which is the console's own threshold
-    for the No Vacuum Alarm. The uncompensated reading is the same sensor
-    before the atmospheric correction, so it sits a little away from it.
+    The compensated reading is the interstitial pressure this console
+    MODELS -- `vac_psi`, the one the bench drives, the one the panel draws
+    and the one the No Vacuum Alarm is posted against. Both readings were a
+    `readings.wander` band near -9 psi instead, so the sump the bench was
+    filling and the sump the port reported were two different sumps: a space
+    driven to -0.4 by a leak still went out over B38 at -9.1. FIDELITY L18.
+
+    The uncompensated reading is the same sensor BEFORE the atmospheric
+    correction: "COMPENSATED PRESSURE ... Pressure sensor value minus ATMP
+    sensor value", 576013-818 Rev AB Figure 6-29, whose -0.155 stands against
+    its own uncompensated -0.094 and Figure 6-32's ATM PRESSURE of 0.062.
+    Subtracting the atmosphere is what makes the compensated one, so adding
+    it back is what makes the uncompensated one.
     """
-    lost = console.sensor_state.get(("smart", str(number))) == "novacuum"
-    band = (-0.9, -0.2) if lost else (-9.5, -8.5)
-    compensated = readings.wander(console, band[0], band[1], "vac", number,
-                                  swing=0.15, period=1500.0)
-    offset = readings.fixed(-0.20, 0.20, "vacoffset", number)
-    return compensated, compensated + offset
+    compensated = console.vac_psi(number)
+    return compensated, compensated + _atm_psi(console, number)
 
 
 def _evacuations(console, number, count=5):
@@ -538,6 +576,53 @@ def _channels(console, number):
             for i in range(3)]
 
 
+# How often an ISD sensor is read, for SS COMM DIAG's SAMPLES READ. No page
+# says; the probe's own count (`Console.probe_samples_read`) is a sample a
+# second, and an ISD sensor's is taken as one a minute. UNKNOWNS A56.
+ISD_SAMPLE_SECONDS = 60.0
+
+
+def ss_comm_counts(console, number):
+    """SS COMM DIAG's six counters: samples read, samples used, parity
+    errors, partial reads, comm errors, restarts.
+
+    The ISD manuals print them (577013-800 Rev P p.20-44) and define none.
+    Read is counted from commissioning, the way A15 counts a probe's; a
+    sensor the bench has put into a communication or fault alarm is losing
+    samples to it, so its comm or partial count is one and USED is that
+    much short. UNKNOWNS A56.
+    """
+    now = time.mktime(console.now())
+    installed = console._commissioned or now
+    read = int(max(0.0, now - installed) / ISD_SAMPLE_SECONDS)
+    state = console.sensor_state.get(("smart", str(int(number))), "normal")
+    comm = 1 if state == "comm" else 0
+    partial = 1 if state in ("fault", "faultwarn") else 0
+    return (read, max(0, read - comm - partial), 0, partial, comm, 0)
+
+
+def ss_channel_words(console, number):
+    """SS CHANNEL DIAG's twenty-four sixteen-bit words, `C00` to `C20`.
+
+    The first six are the sensor's channel values -- the same `_channels`
+    B34 reports -- as the IEEE floats they are, split into words; the rest
+    are stable per sensor. What the words ARE is on no page. UNKNOWNS A56.
+    """
+    words = []
+    for value in _channels(console, number)[:3]:
+        bits = int(_float(value), 16)
+        words += [bits >> 16, bits & 0xFFFF]
+    while len(words) < 24:
+        words.append(readings.integer(0, 0xFFFF, "sschanword", int(number),
+                                      len(words)))
+    return words[:24]
+
+
+def smart_protocol(number):
+    """B35's protocol version, which SS CONSTANTS DIAG prints too."""
+    return readings.integer(1, 9, "ssproto", number)
+
+
 def _channel_grid(values):
     """The ten-across table the last sample report draws them in."""
     # p.529 numbers the ten columns at 8, 13, 18 and so on, five apart,
@@ -565,7 +650,12 @@ def _mag_constants(console, number):
     install position are enabled. The thresholds are the ends of the sensor,
     which is what the manual's sample shows, 0.0 and the 24 inch length.
     """
-    length = readings.fixed(18.0, 36.0, "sslength", number)
+    # 577013-812 Rev G sells two, a 1-foot and a 2-foot measurement range,
+    # and 576013-610 Rev AC p.24-2 calls them the 12-inch and the 24-inch
+    # sensor. This drew anything from 18 to 36; the bench says which one
+    # is fitted, and the leak test's WATER TOO HIGH is read off the same
+    # number. FIDELITY U1b.
+    length = float(console.sumps.range_of(number))
     return [float(_smart_model(console, number)), length,
             readings.wander(console, 350.0, 370.0, "ssgrad", number,
                             swing=0.05),
@@ -841,7 +931,7 @@ def _relay_closed(console, number):
 # What each module's own typical response prints for its reference channels,
 # which is the only figure the manual gives for them.
 #
-# **HIGH REF is the manual's LEFT column and not the larger number.** On four
+# HIGH REF is the manual's LEFT column and not the larger number. On four
 # of the seven codes it happens to be both, and on the three chlorine ones it
 # is not: 576013-635 Rev AA prints `B41` as `1 5 1815 7823 4193` under
 # `SENSOR COUNTER HIGH REF LOW REF VALUE`, and `B46` and `B4B` as
@@ -932,8 +1022,7 @@ def _diagnostic_report(handler, code, tok, dev):
                            _reference(c, tok, number, low, "low2")]
             values += [last2, avg2]
             shown.append(last2)
-        rows.append(f"{number:6d}{counter:8.0f}{hi1:9.0f}{lo1:10.0f}"
-                    + "".join(f"{v:13.0f}" for v in shown))
+        rows.append(_diag_row(number, counter, hi1, lo1, shown))
         body += f"{number:02d}" + _floats(values)
     if code[0].isupper():
         return handler._frame(code, SEP.join(rows))
@@ -950,6 +1039,20 @@ def _diagnostic_report(handler, code, tok, dev):
 # SENSOR at 0, COUNTER at 7, the two REFs at 20 and 30, and the value held
 # right against 45 -- with a second channel's held right against 58. This
 # console had every one of those a column or more out.
+def _diag_row(number, counter, high, low, values):
+    """One data row under `_diag_header`, in the heading's own columns.
+
+    6, 8, 9, 10 and 13 wide, so the five fields end at 6, 14, 23, 33 and 46
+    -- which is where p.523's `1 5 1072 193 145727` and p.527's
+    `1 50 1086 215 28393` both put them, the widths being the same on every
+    page that stacks this heading. A row builder living beside the heading
+    builder, because the one report that hand-rolled its own drifted a
+    column to six wider than the heading above it. FIDELITY L11.
+    """
+    return (f"{number:6d}{counter:8.0f}{high:9.0f}{low:10.0f}"
+            + "".join(f"{v:13.0f}" for v in values))
+
+
 def _diag_header(channels):
     """The two heading lines these six reports stack."""
     first = " " * 8 + "SAMPLE" + " " * 5 + "HIGH" + " " * 7 + "LOW"
@@ -1074,8 +1177,12 @@ def handle(handler, tok, dev, code, data):
             last = average * (1.0 + readings.wander(
                 c, -0.01, 0.01, "sample", "gw", number, 1,
                 swing=1.0, period=30.0))
-            rows.append(f"{number:6d}{counter:9.0f}{hi:11.0f}{lo:11.0f}"
-                        f"{last:15.0f}")
+            # the SAME widths as every other report that stacks this header,
+            # which this one did not have: 6/9/11/11/15 against the shared
+            # 6/8/9/10/13, so B21's data row ran a column to six wider than
+            # the heading printed directly above it. p.527 sets it exactly as
+            # p.523 does. FIDELITY L11.
+            rows.append(_diag_row(number, counter, hi, lo, [last]))
             body += f"{number:02d}" + _floats([counter, hi, lo, last, average])
         note = "groundtemp diagnostic"
         if display:
@@ -1172,6 +1279,31 @@ def _inputs(handler, tok, dev, code):
     return handler._frame(code, body), "input alarm history"
 
 
+def pumpmon_status_rows(c, dev="00"):
+    """I322's report as lines, for whichever end of the console asks.
+
+    The panel's PUMP RELAY MONITOR print built its own row -- a label and
+    the pump's state and nothing else -- where this one carries the pump,
+    the relay LINE it is watching and the STATUS that is the reason the
+    report exists. One renderer, folded onto the roll the way `csld_monthly`
+    and the Service Report already are. See FIDELITY T12.
+    """
+    devices = _devices(c, "pumpmon", "7C4", dev)
+    standing = _standing(c, PUMPMON_AA)
+    rows = ["PUMP RELAY MONITOR STATUS REPORT", "",
+            _PUMPMON_UPPER, _PUMPMON_LOWER]
+    for number in devices:
+        kind, device = _monitored(c, number)
+        pump = _pump_out(c, kind, device)
+        nn = _worst(PUMPMON_AA, standing.get(number, []))
+        rows.append(f"{number:6d}  "
+                    f"{_label(c, '7C5', number, 'PUMP RELAY {n}'):<23.23s}"
+                    f"{'ON' if pump else 'OFF':<7s}"
+                    f"{_monitor_text(c, number):<13s}"
+                    + _words(PUMPMON_AA, nn, "NORMAL"))
+    return rows
+
+
 def _pumpmon(handler, tok, dev, code, display):
     """I322, I323 and IB72: the monitor that watches a pump's contactor."""
     c = handler.c
@@ -1196,17 +1328,18 @@ def _pumpmon(handler, tok, dev, code, display):
     #     DEVICE  LABEL                 (OUT)     (IN)       RELAY     TIME
     #          1  PUMP RELAY UNLEADED    OFF    Q 1: OFF     0 SEC    00:00
     #
-    # **The upper line is the one with PUMP on it, and this console had the
-    # two the other way round** -- DEVICE and LABEL on top with the
+    # The upper line is the one with PUMP on it, and this console had the
+    # two the other way round -- DEVICE and LABEL on top with the
     # parenthesised halves under them. `_diag_header` gets the same shape
     # right for the six resistance diagnostics, so it was a slip and not a
     # misunderstanding. The columns were out as well, by three and by six.
     # See FIDELITY L6.
-    upper = (" " * 30 + f"{'PUMP':<7s}"
-             + ("PUMP RELAY" if tok == "322"
-                else f"{'PUMP RELAY':<14s}{'STUCK':<10s}RUN"))
-    lower = (f"{'DEVICE':<8s}{'LABEL':<22s}{'(OUT)':<10s}{'(IN)':<11s}"
-             + ("STATUS" if tok == "322" else f"{'RELAY':<10s}TIME"))
+    upper = (_PUMPMON_UPPER if tok == "322"
+             else " " * 30 + f"{'PUMP':<7s}"
+             + f"{'PUMP RELAY':<14s}{'STUCK':<10s}RUN")
+    lower = (_PUMPMON_LOWER if tok == "322"
+             else f"{'DEVICE':<8s}{'LABEL':<22s}{'(OUT)':<10s}{'(IN)':<11s}"
+             + f"{'RELAY':<10s}TIME")
     rows = ["PUMP RELAY MONITOR STATUS REPORT" if tok == "322"
             else "PUMP RELAY MONITOR DIAGNOSTIC", "", upper, lower]
     body = ""
@@ -1239,6 +1372,13 @@ def _pumpmon(handler, tok, dev, code, display):
     if display:
         return handler._frame(code, SEP.join(rows)), note
     return handler._frame(code, body), note
+
+
+# 576013-635 Rev AA p.118's own two-line stacked head for function 322,
+# kept where both the wire and the roll can reach it. See FIDELITY T12.
+_PUMPMON_UPPER = " " * 30 + f"{'PUMP':<7s}PUMP RELAY"
+_PUMPMON_LOWER = (f"{'DEVICE':<8s}{'LABEL':<22s}{'(OUT)':<10s}"
+                  f"{'(IN)':<11s}STATUS")
 
 
 SMART_STATUS_COLUMN = 21
@@ -1280,13 +1420,12 @@ def _smart(handler, tok, dev, code, display):
         # the sensor was there, which on this bench is the cold start it
         # counts its test needed warnings from.
         devices = _smart_devices(c, dev)
-        began = c._commissioned or time.mktime(c.now())
         # p.120: SENSOR right against 23, SERIAL NUMBER at 27 and TYPE at
         # 43, with the hour space padded the way it is everywhere else
         rows = ["SMART SENSOR INSTALL LOG", "", wiretables.heading("333")]
         body = f"{len(devices):03d}"
         for number in devices:
-            when = began - readings.fixed(0.0, 7200.0, "install", number)
+            when = install_time(c, number)
             packed = time.strftime("%y%m%d%H%M", time.localtime(when))
             serial = _smart_serial(c, number)
             type_code, type_name = SMART_TYPE.get(_smart_kind(c, number),
@@ -1314,7 +1453,11 @@ def _smart(handler, tok, dev, code, display):
         for number in _smart_devices(c, dev, MAG):
             values = _mag_values(c, number)
             rows += [head(number), ""]
-            rows += [f" {name:<12s}{value:6.1f} {unit}"
+            # p.528: a leading space, the label from column 1, the figure
+            # held right against 20 and its unit at 21 -- ` TOTAL HT
+            # 15.0 IN.`. This had the figure a column left of that, so the
+            # whole value column sat one out. FIDELITY L11.
+            rows += [f" {name:<12s}{value:7.1f} {unit}"
                      for name, value, unit in zip(names, values, units)]
             rows.append("")
             body += f"{number:02d}" + _floats(values)
@@ -1356,7 +1499,7 @@ def _smart(handler, tok, dev, code, display):
             model = _smart_model(c, number)
             serial = _smart_serial(c, number)
             date_code = readings.integer(10000, 60000, "ssdate", number)
-            protocol = readings.integer(1, 9, "ssproto", number)
+            protocol = smart_protocol(number)
             # the two numbers are held RIGHT against 52 and 63, which is
             # where p.530 puts them: `123456` under SERIAL NUMBER at 40-52
             # and `26214` under DATE CODE at 55-63. The serial field was
@@ -1384,8 +1527,13 @@ def _smart(handler, tok, dev, code, display):
             psi = _number(c.diag_reading("ss_atm", number))
             rows += [head(number), "",
                      "ATM P SENSOR",
-                     f"{'SERIAL NUMBER':<16s}{serial:>10d}",
-                     f"{'ATM PRESSURE':<16s}{psi:>10.3f} PSI", ""]
+                     # p.533, and it is NOT p.531's column: this report
+                     # holds its serial right against 24 where the constants
+                     # report holds its against 23, and the pressure against
+                     # 20 with the unit at 21. Each report is measured off
+                     # its own page. FIDELITY L11.
+                     f"{'SERIAL NUMBER':<13s}{serial:>11d}",
+                     f"{'ATM PRESSURE':<12s}{psi:>8.3f} PSI", ""]
             body += f"{number:02d}{serial:08X}" + _floats([psi])
         note = "atm sensor diagnostic"
         if display:
@@ -1469,7 +1617,10 @@ def _smart_constants(handler, dev, code, display, head, label_of):
         else:
             # a sensor the console has not identified holds no constants
             values, names, shown = [], (), []
-        rows += [f"{name:<16s}{text:>10s}"
+        # p.531 holds every constant right against 23 -- `SERIAL NUMBER
+        # 123456`, `MODEL 101`, `GRADIENT 360.000` all ending in the same
+        # column -- where this held them against 26. FIDELITY L11.
+        rows += [f"{name:<13s}{text:>10s}"
                  for name, text in zip(names, shown)]
         rows.append("")
         whole = CONSTANT_INTS.get(kind, set())
@@ -1507,19 +1658,39 @@ def _vac_diagnostic(handler, dev, code, display, head):
         state = c.sensor_state.get(("smart", str(number)), "normal")
         serial = _smart_serial(c, number)
         compensated, uncompensated = _vac_pressures(c, number)
-        evac = "5" if state == "novacuum" else "0"
+        # `Console.evacuation_state` is the one place this is decided, and
+        # B38's field is the one hex digit its own note lists. The state was
+        # read off `sensor_state` here, which knows about No Vacuum and
+        # nothing about the valve -- so an EVAC HOLD the panel was showing
+        # never reached this report at all. FIDELITY L18.
+        evac = c.evacuation_state(number)[-1]
         fluid = "1" if state in ("fault", "faultwarn") else (
             "2" if state == "high" else "0")
-        # the valve only opens to pull the sump back down, so a sump that is
-        # holding its vacuum is a valve sitting closed
-        vcv = "1" if evac in ("2", "4") else "0"
+        # ...and the valve is the valve. This asked the evacuation state
+        # whether the valve was open, and answered CLOSED for every state
+        # this console can reach, so the one screen and the one report that
+        # both name VCV disagreed whenever a technician held it open.
+        vcv = "1" if c.vac_valve_open(number) else "0"
         # the manual's own typical response has a relief valve fault on it,
         # which is the fault a sensor in a fault state reports here
         faults = 4 if fluid == "1" else 0
-        rate = readings.wander(c, 0.05, 0.30, "vacrate", number, swing=0.3)
-        minutes = readings.integer(600, 12000, "vacnovac", number)
-        ratio = readings.fixed(3.0, 8.0, "vacratio", number)
-        at_psi = readings.fixed(-5.0, -3.0, "vacratiopsi", number)
+        # The last manual test that finished, which is what the three
+        # stamped readings ARE -- B38 carries a date and a validity flag for
+        # each of them, and the panel's three result screens read the same
+        # record. These were a `readings.wander` band, so a sensor that had
+        # never run a test answered with all three and a sensor that had
+        # answered with numbers unrelated to its own result. FIDELITY L18.
+        result = c.vac_result(number) or {}
+        rate, hours = result.get("rate"), result.get("hours")
+        ratio, at_psi = result.get("ratio"), result.get("psi")
+        minutes = None if hours is None else int(round(hours * 60.0))
+        # V, v and f: "1=Leak Rate valid ... 1=Time to No Vacuum valid ...
+        # 1=Evac Ratio valid", p.531 and p.532. All three were hard-coded 1,
+        # which is the console asserting three measurements it had not made.
+        valid = ["1" if v is not None else "0"
+                 for v in (rate, minutes, ratio)]
+        when = _stamp(c) if result.get("at") is None else time.strftime(
+            "%y%m%d%H%M", time.localtime(result["at"]))
         rows += [head(number), "",
                  "VAC SENSOR",
                  # `SERIAL NUMBER        24` -- the number is held right
@@ -1549,8 +1720,8 @@ def _vac_diagnostic(handler, dev, code, display, head):
         #     SENSOR FAULTS:
         #       RELIEF VALVE FAULT
         #
-        # **The date is a line of its own, standing IN FRONT of the reading
-        # it stamps, and the label shares its line with the value.** This
+        # The date is a line of its own, standing IN FRONT of the reading
+        # it stamps, and the label shares its line with the value. This
         # console had it the other way round -- the label alone and the date
         # concatenated with the value -- which put a timestamp inside the
         # measurement column:
@@ -1561,7 +1732,7 @@ def _vac_diagnostic(handler, dev, code, display, head):
         # TIME TO NO VAC is the reading with NO date on it; the second date
         # belongs to EVAC RATIO, which is a different measurement made at a
         # different moment. See FIDELITY L7.
-        # **A blank line before the FIRST date and not before the second.**
+        # A blank line before the FIRST date and not before the second.
         # Measured off the page rather than argued: p.534's lines are 8.6
         # apart and the gap between `VCV: CLOSED` and `4-12-04 11:28AM` is
         # 17.2, while the gap in front of the second date is 8.6.
@@ -1572,14 +1743,33 @@ def _vac_diagnostic(handler, dev, code, display, head):
         # gets the one in front of `SENSOR FAULTS:` and misses this one, so
         # the blank is here. Any report whose sample breaks in front of a
         # line made of site data has the same hole in it.
-        rows += ["",
-                 _vac_stamp(c, 3600.0),
-                 f"{'LEAK RATE:':<10s}{f'{rate:.3f} GPH':>14s}",
-                 "TIME TO NO VAC:",
-                 f"{f'{minutes // 60:d}:{minutes % 60:02d} HHHH:MM':>24s}",
-                 _vac_stamp(c, 7200.0),
-                 "EVAC RATIO:" f"{ratio:.1f} @ {at_psi:.1f}PSI"]
-        # **A clean sensor still prints the heading.** Figure 6-29 draws
+        #
+        # A reading whose validity flag is 0 has no moment either, so the
+        # date line in front of it goes with it: printing the console's own
+        # clock over a measurement nobody made would be the report claiming
+        # one. What it draws INSTEAD of the number is this console's, not a
+        # page's -- 576013-818 Rev AB draws Figure 6-29 fully populated and
+        # says nothing anywhere about an unrun test, and neither do the two
+        # vacuum manuals beside it. The dashes are the panel's own form,
+        # already on the glass for the same three readings, so that the
+        # screen and the paper answer alike. See UNKNOWNS A73.
+        stamp = (None if result.get("at") is None
+                 else _vac_stamp_at(result["at"]))
+        rows.append("")
+        if valid[0] == "1":
+            rows += [stamp,
+                     f"{'LEAK RATE:':<10s}{f'{rate:.3f} GPH':>14s}"]
+        else:
+            rows.append(f"{'LEAK RATE:':<10s}{'--- GPH':>14s}")
+        rows.append("TIME TO NO VAC:")
+        shown = ("---:--" if minutes is None
+                 else f"{minutes // 60:d}:{minutes % 60:02d}")
+        rows.append(f"{shown + ' HHHH:MM':>24s}")
+        if valid[2] == "1":
+            rows += [stamp, "EVAC RATIO:" f"{ratio:.1f} @ {at_psi:.1f}PSI"]
+        else:
+            rows.append("EVAC RATIO:--- @ ---PSI")
+        # A clean sensor still prints the heading. Figure 6-29 draws
         # `SENSOR FAULTS:` over ` NONE`, and this printed neither -- so the
         # one screen that answers "is anything wrong with this sensor"
         # answered by saying nothing, which reads as a report that stopped
@@ -1588,10 +1778,15 @@ def _vac_diagnostic(handler, dev, code, display, head):
         rows.append("SENSOR FAULTS:")
         rows += [f"  {name}" for name in named] or [" NONE"]
         rows.append("")
-        body += (f"{number:02d}{serial:08X}{evac}{fluid}{vcv}1"
-                 + _stamp(c, 1.0) + _float(rate) + "1"
-                 + _stamp(c, 2.0) + f"{minutes:08X}" + "1"
-                 + _stamp(c, 3.0) + _float(ratio) + _float(at_psi)
+        # The three stamps are one stamp: the console takes all three
+        # readings off one manual test, so they are one moment. The manual
+        # draws two, 11:28AM and 10:15AM, because a real evacuation and a
+        # real leak measurement happen at different times -- what it settles
+        # is that the fields are SEPARATE, not that they must differ.
+        body += (f"{number:02d}{serial:08X}{evac}{fluid}{vcv}{valid[0]}"
+                 + when + _float(rate or 0.0) + valid[1]
+                 + when + f"{minutes or 0:08X}" + valid[2]
+                 + when + _float(ratio or 0.0) + _float(at_psi or 0.0)
                  + f"{faults:04X}"
                  + _floats([compensated, uncompensated]))
     if display:

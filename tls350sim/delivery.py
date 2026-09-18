@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Deliveries the console notices for itself.
 
 Nobody tells a TLS-350 that a tanker has arrived. It watches the level, and
@@ -28,10 +31,21 @@ import time
 from . import packed
 from .clock import clock_date, clock_words
 
-# How much the level has to climb before the console calls it a delivery
-# rather than noise. A tanker drop is thousands of gallons; a probe's own
-# jitter is fractions of one.
-START_GALLONS = 25.0
+# What RATE of fill the console calls a delivery. 576013-623 Rev AN p.7-17
+# states the TLS-350's rule as a rate and gives no number -- "the rate of
+# fill can be too gradual for the system to recognize the increase as a
+# delivery" -- and the only Veeder-Root statement of the number is the
+# TLS-450's, on the Water Alarm Filter pages that describe the same feature
+# with the same three settings, 577013-940 Rev F pp.69-71: "the Console
+# detects that a Delivery is occurring when the fuel level in the Tank
+# increases by 25 Gallons per Minute (GPM)" on the Low and Medium filters,
+# and "six Gallons per Minute" on High. This used to be 25 GALLONS,
+# cumulative, which was the right magnitude and the wrong dimension: a fill
+# the manual says a console does not recognise was recognised here once it
+# had added up. The rate is taken over one look, with a second under it.
+# UNKNOWNS A24.
+START_GPM = 25.0
+START_GPM_HIGH_FILTER = 6.0
 
 # What the operator's manual tells you to wait after one before leak testing:
 # "not waiting 8 hours after a delivery to begin an In-Tank Leak Detect Test
@@ -114,6 +128,7 @@ class Deliveries:
         self._last = {}        # tank -> (volume, when it stopped rising)
         self._rose = {}        # tank -> when the level last went UP
         self._sets = {}        # tank -> what its siphon set held last look
+        self._look = {}        # tank -> (volume, when) at the last look
 
     # ---- watching ----------------------------------------------------------
     def tick(self):
@@ -135,9 +150,23 @@ class Deliveries:
         return sum((self.c.tank_level.get(one) or {}).get("volume", 0.0)
                    for one in self.c.siphon_set(tank))
 
+    def start_gpm(self, tank):
+        """The rate of fill this tank's console calls a delivery.
+
+        "The Water Alarm Filter setting of High follows the same behavior
+        as the Medium level filter, however in this case the Console
+        detects that a Delivery is occurring when the fuel level in the
+        Tank increases by six Gallons per Minute (GPM)", 577013-940 Rev F
+        p.71.
+        """
+        level = str(self.c.setting("water_filter", tank, "LOW") or "").upper()
+        return START_GPM_HIGH_FILTER if level == "HIGH" else START_GPM
+
     def _watch(self, tank, now):
         volume = self.c.tank_level.get(tank, {}).get("volume", 0.0)
         seen, since = self._last.get(tank, (volume, now))
+        looked, looked_at = self._look.get(tank, (volume, now))
+        self._look[tank] = (volume, now)
         running = self.running.get(tank)
         total, held_total = self._set_total(tank), self._sets.get(tank)
         self._sets[tank] = total
@@ -167,8 +196,12 @@ class Deliveries:
                 self._pending[tank] = running
             self._last[tank] = (volume, now)
             self._rose[tank] = now
-            if volume - running.start["volume"] >= START_GALLONS:
-                self.running[tank] = running        # big enough to be a drop
+            if tank not in self.running:
+                # gallons a minute over this one look, with a second under
+                # the look so that two in the same second divide by something
+                minutes = max(now - looked_at, 1.0) / 60.0
+                if (volume - looked) / minutes >= self.start_gpm(tank):
+                    self.running[tank] = running    # fast enough to be a drop
             return
 
         if volume < seen - 0.05:                    # dispensing, or a drain
@@ -182,8 +215,6 @@ class Deliveries:
                 return
         else:
             self._last[tank] = (seen, since)
-        if running is None:
-            return
         # "a delay time between the completion of a bulk delivery and the
         # Delivery Increase Report": timed from the last RISE, because a
         # forecourt goes on selling while the tanker is still on the ground,
@@ -191,6 +222,14 @@ class Deliveries:
         # `settling_delay` rather than the setting: there is a four-minute
         # floor under it that no setting turns off.
         delay = self.c.settling_delay(tank) * 60.0
+        if running is None:
+            if (tank in self._pending
+                    and now - self._rose.get(tank, now) >= delay):
+                # a rise the console never called a delivery, and over: the
+                # next one starts from where the tank is, not from here
+                self._pending.pop(tank, None)
+                self._rose.pop(tank, None)
+            return
         if now - self._rose.get(tank, since) >= delay:
             self._finish(tank, now)
 
@@ -201,7 +240,7 @@ class Deliveries:
         if run is None:
             return
         run.end = snapshot(self.c, tank, now)
-        if run.amount < START_GALLONS:
+        if run.amount <= 0.0:
             return
         if (self.c.service_session() is not None
                 and self.c.delivery_override()):
@@ -699,6 +738,16 @@ class Loads:
 
         self._last[tank] = (seen, since)
         if running is None:
+            # A fall that stopped short of a load was not the start of one.
+            # Kept, the pending start stayed put on a quiet forecourt, every
+            # later car's gallons were added to it, and forty fifteen-gallon
+            # sales twenty minutes apart were booked -- and auto-printed --
+            # as one Tanker Load. A tanker pumps without stopping, and a
+            # level that has been flat for the delay has finished whatever
+            # it was doing.
+            if (tank in self._pending
+                    and now - since >= self.c.delivery_delay(tank) * 60.0):
+                self._pending.pop(tank, None)
             return
         # The SETTING and not the settling floor: 576013-939's four minutes
         # are stated for the delivery report -- "between the end of the
@@ -720,11 +769,17 @@ class Loads:
         self.running.pop(tank, None)
 
     def _next_number(self, tank, now):
-        """"The sequence number is reset to one at the beginning of each day"."""
+        """"The sequence number is reset to one at the beginning of each day".
+
+        A number and nothing else. Any fall in level opens a pending load,
+        the first car after midnight included, and this used to empty the
+        day's list as it numbered one -- so a small sale erased yesterday's
+        loads. The day turns over in `_finish`, when there is a load to put
+        in it.
+        """
         day = time.strftime("%Y%m%d", time.localtime(now))
         if self._day.get(tank) != day:
-            self._day[tank] = day
-            self.records[tank] = []
+            return 1
         return len(self.records.get(tank) or []) + 1
 
     def _finish(self, tank, now):
@@ -735,6 +790,12 @@ class Loads:
         run.end = snapshot(self.c, tank, now)
         if run.total < self.LOAD_GALLONS:
             return
+        run.number = self._next_number(tank, run.start["at"])
+        day = time.strftime("%Y%m%d", time.localtime(run.start["at"]))
+        if self._day.get(tank) != day:
+            # the first load of a new day, and the day's list is its own
+            self._day[tank] = day
+            self.records[tank] = []
         self.records.setdefault(tank, []).insert(0, run)
         # "Up to 40 loads per tank will be recorded in a day"
         del self.records[tank][40:]

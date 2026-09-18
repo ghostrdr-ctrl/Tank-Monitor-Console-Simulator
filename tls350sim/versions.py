@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The board in the console and the software on it.
 
 A TLS-350, a TLS-350 PLUS and a TLS-350R are the same box. What is different
@@ -183,7 +186,7 @@ ECPU2_NVMEM203 = ("E6", "M6")
 # setup steps and a whole FUNCTION on software with no code behind any of it.
 # No board is named because no document names one. See FIDELITY F13.
 #
-# **The VMCI board is NOT here, and F13 said it should be.** That entry read
+# The VMCI board is NOT here, and F13 said it should be. That entry read
 # 577013-528 Rev G p.5's "Multiport modules require ... an ECPU2 board, a
 # NVMEM203 memory module and software version 24 or higher" as covering the
 # VMCI. It covers the MULTIPORT modules of that table, which is the RS-485

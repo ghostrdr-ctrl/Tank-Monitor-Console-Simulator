@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Run the suite as if the wall clock were somewhere else in the day.
 
     python tools/clockprobe.py 9          # nine hours from now
@@ -23,8 +26,8 @@ runs the clock forward from whenever it happens to be run is a test that
 fails at midnight" -- and pinning a fixture is the fix. This is how you find
 which fixtures need it.
 
-**It found two, and it found them by the suite going red at three in the
-afternoon on a green commit**, which is the worst way to find out. See
+It found two, and it found them by the suite going red at three in the
+afternoon on a green commit, which is the worst way to find out. See
 FIDELITY V5.
 
 The mechanism is a shim over `time.time` and `time.localtime`, installed

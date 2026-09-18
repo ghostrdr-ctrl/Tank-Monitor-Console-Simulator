@@ -1,3 +1,16 @@
+# Tank Monitor Console Simulator -- a training simulator for TLS-350
+# compatible tank monitor consoles.
+# Copyright (C) 2026 Verbose Software
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The DIM link, one port at a time, with the history BA1 reports.
 BENCH.md D1."""
 import os

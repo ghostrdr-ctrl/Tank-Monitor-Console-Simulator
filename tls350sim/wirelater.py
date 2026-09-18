@@ -8,10 +8,13 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The function codes later revisions added, which Revision U lacks.
 
-Fifteen of them: eleven from **Revision Y** (software 020/132/332/432/520)
-and four more from **Revision AA** (020/133/333/433/520).
+Fifteen of them: eleven from Revision Y (software 020/132/332/432/520)
+and four more from Revision AA (020/133/333/433/520).
 
 For a long time this simulator answered 9999 to eleven codes and the note
 against them said "not obtainable" -- the census knew they existed because it
@@ -20,7 +23,7 @@ U, which stops before them. Revision Y turned up (software 020/132/332/432/520,
 674 pages) and every one of the eleven is in it, with a full Command Format
 and notes. So they are implemented from the manual like everything else.
 
-**Every name the index gave them was wrong.** The index is a one-line
+Every name the index gave them was wrong. The index is a one-line
 Function Type list and it was read out of a later revision's appendix; the
 bodies say something different in almost every case:
 
@@ -39,7 +42,7 @@ bodies say something different in almost every case:
 That is worth keeping because it is the argument against implementing from an
 index: five of eleven would have been built as the wrong feature entirely.
 
-**Revision Y has copy-paste errors in these pages**, and they are the kind
+Revision Y has copy-paste errors in these pages, and they are the kind
 that look like data:
 
   * `8C4`'s "Typical Response Message, Display Format" is 8C3's, verbatim --
@@ -59,7 +62,7 @@ the part a tool has to match.
 
 import time
 
-from . import isd, wiretables
+from . import isd, masks, wiretables
 from .clock import clock_words
 
 SEP = "\r\n"
@@ -222,16 +225,46 @@ MANIFOLD_DELIVERY = {"239": 1, "23A": 2}    # timestamps per record
 APM_TESTS = {"01": "APM TESTS", "02": "APM SENSOR SELF TEST",
              "03": "APM SETUP SELF TEST"}
 
+# The same three tests as VA8 numbers them, which is not how VA7 does: VA7's
+# "03 = APM Setup Self Test, 02 = APM Sensor Self Test, 01 = APM Tests"
+# against VA8's "01=APM Setup Self Tests, 03=APM Tests, 06=APM Sensor Self
+# Tests". A clear on one is logged on the other. FIDELITY I8.
+APM_CLEAR_EVENT = {"01": "03", "02": "06", "03": "01"}
+
 # "S - Status of APM Setup Test, 0=Pass, 1=Fail". Note the direction: ZERO is
 # the good one here, where every test verdict elsewhere in this manual counts
 # up from NO TEST through to PASS. Reading it the familiar way reports a
 # failure as a pass.
 APM_SETUP_PASS = "0"
 
+# The ten category-37 alarms under the names IVAC00 prints them, which are
+# 577014-009 Rev B Table 2 p.16's SHORT names and not `consoledata.json`'s
+# long ones ("APM Setup Failure warning"). Keyed by the console's own type
+# code, which is NOT the order Table 2 lists them in: the table puts SETUP
+# sixth where the enumeration puts the sensor-test pair at 06 and 07 and
+# SETUP at 08, so these were matched by name. See UNKNOWNS A60.
+APM_FAULTS = {"01": "GROSS PRES TEST WRN",
+              "02": "APM GROSS PRES WARN",
+              "03": "APM GROSS PRES FAIL",
+              "04": "APM DEGRD PRES WARN",
+              "05": "APM DEGRD PRES FAIL",
+              "06": "APM SENSOR WARN",
+              "07": "APM SENSOR FAIL",
+              "08": "APM SETUP WARN",
+              "09": "APM SENSOR OUT WARN",
+              "10": "APM SENSOR OUT FAIL"}
+
+# "ASSESSMENT TIME / 11:59 PM" is what 577014-009 Rev B's APM SETUP walk
+# draws as the value, and Figure 15 prints the same one in the report, so it
+# is the default rather than a worked example. **This console has no APM
+# SETUP walk to change it**, which is its own gap and is recorded in
+# UNKNOWNS A60 rather than papered over here.
+APM_ASSESSMENT_TIME = "11:59 PM"
+
 MINE = {"404", "54E", "8C3", "8C4", "BA1",
         "V12", "V82", "V88", "VA1", "VA2", "VA3",
         "237", "238", "239", "23A",
-        "908", "VA4", "VA5", "VA6", "VA7", "VA8"}
+        "908", "VA4", "VA5", "VA6", "VA7", "VA8", "VAB", "VAC"}
 
 # what each one needs in the cage or on the software key before it means
 # anything. "An ISD/APM SEM is required for this command" is 54E's own note.
@@ -240,14 +273,14 @@ NEEDS_SOFTWARE = {"54E": ("isd", "pmc"), "V12": ("isd",), "V82": ("pmc",),
                   "VA3": ("isd",),
                   # "APM feature required" is the manual's own note on these
                   "VA4": ("isd",), "VA6": ("isd",), "VA7": ("isd",),
-                  "VA8": ("isd",)}
+                  "VA8": ("isd",), "VAB": ("isd",), "VAC": ("isd",)}
 NEEDS_MODULE = {"8C3": "vmc", "8C4": "vmc", "VA1": "vmc", "VA2": "vmc",
                 "VA3": "vmc", "VA5": "vmc"}
 
 # Two of the eleven are reports and nothing else: no Set format on the page.
 INQUIRE_ONLY = {"404", "BA1", "V12", "V82", "V88", "VA1", "VA2", "VA3",
                 "237", "238", "239", "23A",
-                "908", "VA4", "VA5", "VA6", "VA8"}
+                "908", "VA4", "VA5", "VA6", "VA8", "VAB", "VAC"}
 
 
 def _hexfloat(value):
@@ -310,6 +343,7 @@ def _set(handler, tok, dev, code, body):
         if which not in APM_TESTS:
             return handler._nine(code), "REJECTED: test type 01, 02 or 03"
         c.apm_cleared[which] = time.mktime(c.now())
+        c.apm_log("03", APM_CLEAR_EVENT[which])   # "Test Manually Cleared"
         c.save()
         return handler._frame(code), f"{APM_TESTS[which].lower()} cleared"
 
@@ -317,7 +351,7 @@ def _set(handler, tok, dev, code, body):
     # which is what the note at the top of this module records and why this
     # was written to guess: two hex digits, printed as seconds.
     #
-    # **Revision AA has the real page**, and it was invisible for a different
+    # Revision AA has the real page, and it was invisible for a different
     # reason -- p.486 echoes the block `S8C4xx`, a SET, and the title
     # generator keyed on `I`. It says: "hh - Timeout value in HOURS
     # (Decimal, 00-99, 99=Alarm Disabled)", under `VMC COMMUNICATIONS
@@ -375,6 +409,10 @@ def _inquire(handler, tok, dev, code, body):
         return _power_up(handler, code, display)
     if tok in ("VA4", "VA5", "VA6", "VA7", "VA8"):
         return _apm_report(handler, tok, code, display, body)
+    if tok == "VAB":
+        return _apm_daily_summary(handler, code, display, body)
+    if tok == "VAC":
+        return _apm_fault_history(handler, code, display, body)
     if tok in ("237", "238"):
         return _grouped_inventory(handler, tok, dev, code, display)
     if tok in MANIFOLD_DELIVERY:
@@ -413,10 +451,8 @@ def _generator_report(handler, dev, code, display):
     if display:
         rows = ["INPUT GENERATOR REPORT",
                 "     START               END          DURATION  CONSUMPTION"]
-        any_run = False
         for tank in tanks:
             for run in c.generator_runs(tank):
-                any_run = True
                 rows.append(
                     f"{_when(run['start'])}  {_when(run['end'])}  "
                     f"{run['hours']:7.2f}  {run['used']:9.1f}")
@@ -440,6 +476,170 @@ def _when(seconds):
 
 def _packed_stamp(seconds):
     return time.strftime("%y%m%d%H%M", time.localtime(seconds))
+
+
+def _apm_stamp(seconds):
+    """`10-04-30 11:36:26`, p.668's DATE and TIME columns."""
+    return time.strftime("%y-%m-%d %H:%M:%S", time.localtime(seconds))
+
+
+def _at_cols(*pairs):
+    """Place each (column, text) where the page puts it, zero-indexed.
+
+    The APM reports are the only ones here whose columns were taken off the
+    PDF's word boxes rather than counted in a text extraction, so the call
+    sites read as the measurements they are. A cell that would overrun the
+    next column pushes it right by a space rather than being cut.
+    """
+    line = ""
+    for col, text in pairs:
+        if len(line) > col:
+            line += " "
+        else:
+            line += " " * (col - len(line))
+        line += str(text)
+    return line.rstrip()
+
+
+def _fault_window(rows, body):
+    """IVAC00's `YYYYMMDDYYYYMMDDlll`, over `alarm_log`'s string stamps.
+
+    Table 3 writes the command `<SOH>IVAC00YYYYMMDDYYYYMMlll` -- a start
+    date, an end date and a three digit record limit -- and its second date
+    is six characters where the first is eight, which is the table's own
+    slip: a `YYYYMM` end date would exclude every row in its own month. It
+    is read as `YYYYMMDD` here, and the limit follows at 16.
+
+    `_apm_window` cannot be reused: VA8's log keeps a float timestamp and
+    this one keeps `%y%m%d%H%M` as text.
+    """
+    start, end, limit = body[0:8], body[8:16], body[16:19]
+    out = []
+    for row in rows:
+        day = "20" + str(row["at"])[:6]          # %y%m%d -> YYYYMMDD
+        if len(start) == 8 and start.isdigit() and int(start) and day < start:
+            continue
+        if len(end) == 8 and end.isdigit() and int(end) and day > end:
+            continue
+        out.append(row)
+    if limit.isdigit() and int(limit):
+        out = out[:int(limit)]
+    return out
+
+
+def _apm_fault_history(handler, code, display, body):
+    """IVAC00, the APM Fault History Report -- 577014-009 Rev B Figure 16.
+
+    Two commands in that manual's Table 3 are in NO revision of 576013-635,
+    which is why both answered the refusal marker until now: the function
+    code manual never indexed them and only the APM manual documents them.
+
+    The columns are measured off Figure 16's word boxes at a 6.291pt pitch:
+    the date opens the line, the time sits at 9, the fault at 19 in a field
+    nineteen wide (the width of its own rule), and the state at 41.
+
+        AUTOMATIC PRESSURE MONITORING FAULT HISTORY REPORT
+
+           DATE      TIME         FAULT           STATE
+        ---------- -----    -------------------    -----
+        11-04-30 23:59:00  APM SENSOR WARN        CLEAR
+
+    The rows are real: `alarm_log` already records every alarm this console
+    posts and clears, so this filters it to category 37 and names each one
+    off Table 2. An empty log prints the header and nothing, as every other
+    empty report here does -- see FIDELITY U5, and VA8's own note.
+
+    *One thing the log cannot supply.* Figure 16 stamps to the second and
+    `alarm_log` keeps `%y%m%d%H%M`, so the seconds column reads `:00`. That
+    is a limit of the log, which I111, I112 and I206 all share, and not a
+    claim about what a console prints.
+    """
+    rows = _fault_window([r for r in handler.c.alarm_log
+                          if r.get("aa") == "37"], body)
+    if not display:
+        # Table 3 gives the PC-to-console command and Figure 16 calls itself
+        # the "Serial to PC Format"; there is no packed layout on any page.
+        # 7B1 is the other code in this position -- see `wirelists`.
+        return handler._nine(code), "VAC has no computer format"
+    out = ["AUTOMATIC PRESSURE MONITORING FAULT HISTORY REPORT", "",
+           _at_cols((3, "DATE"), (12, "TIME"), (25, "FAULT"), (41, "STATE")),
+           _at_cols((0, "-" * 10), (11, "-" * 5), (19, "-" * 19),
+                    (41, "-" * 5))]
+    for row in rows:
+        stamp = str(row["at"])
+        when = (f"{stamp[0:2]}-{stamp[2:4]}-{stamp[4:6]}",
+                f"{stamp[6:8]}:{stamp[8:10]}:00")
+        out.append(_at_cols(
+            (0, when[0]), (9, when[1]),
+            (19, APM_FAULTS.get(row.get("nn"), "").ljust(19)),
+            (41, "CLEAR" if row.get("state") == "01" else "ALARM")))
+    return handler._frame(code, SEP.join(out)), "APM fault history"
+
+
+def _apm_daily_summary(handler, code, display, body):
+    """IVAB00, the APM Daily Summary Report -- 577014-009 Rev B Figure 15.
+
+    Its header block is the figure's, measured at a 5.693pt pitch, and it is
+    the one report in this module the manual sets in MIXED case: the title,
+    the status-code legend and every column head. Figure 16's fault history
+    on the facing page is upper throughout, and the date is `YYYY/MM/DD`
+    here where that one writes `YY-MM-DD`. Both are as drawn.
+
+        Automatic Pressure Monitoring Daily Summary Report
+
+        ASSESSMENT TIME OF DAY = 11:59 PM
+
+        Status Codes: (W)Warn (F)Fail/Shutdown (ST-W/F)Self Test-Warn/Fail (N)No Test
+
+                   System  ----------Test Results (KPA)----------  ---- Pressure KPA ----
+        Date       Status  Gross      Degrd      Sensor Test        Max    Avg    Min
+        ---------- ------  ---------  ---------  ----------------  ------ ------ ------
+
+    **And it prints no rows, on purpose.** A row is a day's APM assessment --
+    a gross verdict, a degradation verdict, a sensor verdict and the day's
+    maximum, average and minimum ullage pressure in kPa. This console models
+    none of that: there is no kPa reading taken over a one hour moving
+    window, which is the same gap that leaves nine of the ten category-37
+    alarms without a producer. Every figure in a row would be invented, so
+    the header stands alone the way an empty report does here. See UNKNOWNS
+    A60, and FIDELITY U5 for why there is no `NO DATA AVAILABLE` line.
+    """
+    if not display:
+        return handler._nine(code), "VAB has no computer format"
+    del body                            # the window has nothing to filter
+    return handler._frame(code, SEP.join([
+        "Automatic Pressure Monitoring Daily Summary Report", "",
+        f"ASSESSMENT TIME OF DAY = {APM_ASSESSMENT_TIME}", "",
+        "Status Codes: (W)Warn (F)Fail/Shutdown (ST-W/F)Self Test-Warn/Fail"
+        " (N)No Test", "",
+        _at_cols((11, "System"), (18, "-" * 10 + "Test Results (KPA)"
+                                  + "-" * 10), (58, "---- Pressure KPA ----")),
+        _at_cols((0, "Date"), (11, "Status"), (19, "Gross"), (30, "Degrd"),
+                 (41, "Sensor Test"), (59, "Max"), (67, "Avg"), (74, "Min")),
+        _at_cols((0, "-" * 10), (11, "-" * 6), (18, "-" * 9), (29, "-" * 9),
+                 (40, "-" * 16), (58, "-" * 6), (66, "-" * 6), (73, "-" * 6)),
+    ])), "APM daily summary"
+
+
+def _apm_window(events, body):
+    """VA8's optional `YYYYMMDDyyyymmddnnnn`.
+
+    "YYYYMMDD - Start Date stamp (optional)", "yyyymmdd - End Date stamp
+    (optional)", "nnnn - Limit number of records (optional)" -- each one
+    left off, or sent as zeros, means all of them.
+    """
+    start, end, limit = body[0:8], body[8:16], body[16:20]
+    out = []
+    for e in events:
+        day = time.strftime("%Y%m%d", time.localtime(e["at"]))
+        if len(start) == 8 and start.isdigit() and int(start) and day < start:
+            continue
+        if len(end) == 8 and end.isdigit() and int(end) and day > end:
+            continue
+        out.append(e)
+    if limit.isdigit() and int(limit):
+        out = out[:int(limit)]
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -687,9 +887,20 @@ def _grouped_inventory(handler, tok, dev, code, display):
                 sub_v += volume
                 sub_tc += tc
                 label = c.text("602", tank) or ("TANK %d" % tank)
-                rows.append("%3d  %-26.26s%6.0f%14.0f"
-                            % (tank, label, volume, tc))
-            rows.append("%27s%10.0f%14.0f" % ("TOTAL:", sub_v, sub_tc))
+                # TRUNCATED, like every other whole-number quantity this
+                # console prints, on the glass and on the paper and in the
+                # display form of the wire. `%.0f` ROUNDS, so 1000.8 gallons
+                # came back 1001 here and 1000 from I201 -- and the TOTAL
+                # compounded it, 1000.8 + 2000.8 printing as 3002 where the
+                # rows under it summed to 3000. The manual's own arithmetic
+                # is truncation: p.4-2 prints 2549 x 5.9987 = 15290.68 as
+                # `MASS = 15290`. CLOSED Y11 states the rule and 201 and 21A
+                # were the only two given it. FIDELITY O27.
+                rows.append("%3d  %-26.26s%6s%14s"
+                            % (tank, label, masks.whole(volume),
+                               masks.whole(tc)))
+            rows.append("%27s%10s%14s" % ("TOTAL:", masks.whole(sub_v),
+                                          masks.whole(sub_tc)))
         return handler._frame(code, SEP.join(rows)), title.lower()
     body = "%02X" % len(tanks)
     for group in groups:
@@ -822,16 +1033,30 @@ def _apm_report(handler, tok, code, display, body):
             if c.apm_cleared.get(k) else "000000"
             for k in sorted(APM_TESTS))), "APM service report")
 
-    # VA8, the miscellaneous events report
-    events = c.apm_events()
+    # VA8, the miscellaneous events report. p.668's title and columns --
+    # the description is 32 wide, so ACTION/NAME starts at 50 -- where this
+    # printed `APM MISCELLANEOUS EVENTS` over a header of its own and the
+    # invented `NO EVENTS`; an empty log prints the header and nothing, as
+    # every other empty report does (FIDELITY U5). The computer form is
+    # p.669's `SSSSSSSSaabbccddeett`: cc, dd and ee are "(future use)".
+    events = _apm_window(c.apm_events(), body)
     if display:
-        rows = ["APM MISCELLANEOUS EVENTS", "DATE  TIME        EVENT"]
+        rows = ["AUTOMATIC PRESSURE MONITORING MISCELLANEOUS EVENTS REPORT",
+                "DATE     TIME     DESCRIPTION                     ACTION/NAME"]
         for e in events:
-            rows.append("%s  %s" % (_when(e["at"]), e["what"]))
-        if not events:
-            rows.append("NO EVENTS")
+            words, action = c.APM_EVENT_WORDS.get((e["aa"], e["bb"]),
+                                                  ("", ""))
+            if action is None:
+                action = _apm_stamp(e["data"]) if e.get("data") else ""
+            rows.append(f"{_apm_stamp(e['at'])} {words:<32s}{action}".rstrip())
         return handler._frame(code, SEP.join(rows)), "APM events"
     packed_body = "%04d" % len(events)
     for e in events:
-        packed_body += _stamp_seconds(e["at"]) + "%02d" % e["code"]
+        packed_body += _stamp_seconds(e["at"]) + e["aa"] + e["bb"] + "000000"
+        # "tt - Data Type to follow ... 01=Integer": the time a clock change
+        # left, in the "seconds since 1/1/1970, Hex" every stamp here uses
+        if e.get("data") is not None:
+            packed_body += "01" + _stamp_seconds(e["data"])
+        else:
+            packed_body += "00"
     return handler._frame(code, packed_body), "APM events"

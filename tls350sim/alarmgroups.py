@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The alarm GROUPS an output relay and a line disable are assigned by.
 
 576013-623 Rev AN ch.24 and ch.25 walk the same seventeen screens, in the
@@ -18,8 +21,8 @@ same seventeen for an auto-dial destination with `RECEIVER ALARMS` inserted
 among them, which is the group only a receiver has.
 
 The screens themselves live in `consoledata.json`, one step per group per
-function, because that is where every other screen lives. **What is here is
-the pairing those screens cannot carry**: which alarm CATEGORY -- the `AA`
+function, because that is where every other screen lives. What is here is
+the pairing those screens cannot carry: which alarm CATEGORY -- the `AA`
 of the wire's `AANNTTss` -- each group is the front of, so that a relay
 assigned an in-tank leak over the serial port reads `IN-TANK ALARMS: YES`
 on the glass, and a group switched to NO on the glass takes its category's

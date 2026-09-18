@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The console's printer.
 
 A TLS-350 has a paper roll behind the left door, and PRINT is not a screenshot
@@ -28,6 +31,7 @@ from . import wiretables
 from . import leaktest
 from . import masks
 from . import screens
+from .clock import clock_hhmm
 from .clock import clock_words
 from .console import DAY_NAMES
 from .console import describe_alarms
@@ -48,6 +52,14 @@ from .console import describe_alarms
 # This was 40, which is why the setup report looked like the odd one out at
 # 24 and got a constant of its own. It is not the odd one out; the roll is
 # just narrow, and SETUP_COLS below is the same number for the same reason.
+#
+# And a THIRD witness, found 2026-09-17 and a document rather than a
+# measurement: 577013-369 Rev B is Veeder-Root's own A/E specification for a
+# TLS-350, and its section 3.1.E requires "an integral, **24-character**,
+# thermal report printer". Its 3.1.B does the same for the display -- "a
+# two-line 24-character liquid crystal display" -- which is what closes the
+# first half of UNKNOWNS A52. The paper was measured right before the
+# specification was read; this is the citation catching up with the tape.
 WIDTH = 24
 # A folded line is NOT indented. The one wrap visible on real paper --
 # "PRESSURE LINE LEAK TEST" over "RESULTS" -- has its continuation flush at
@@ -166,7 +178,7 @@ def inv_row(label, value, unit):
 def density_row(density):
     """The DENSITY row, and the one row of the block that is not the grid.
 
-    **It cannot be.** The inventory grid was measured off a photograph of
+    It cannot be. The inventory grid was measured off a photograph of
     real paper (FIDELITY W3): the label runs left in ten, the `=` sits at
     column ten, the value is right justified in six and the unit follows.
     That puts the widest rows on exactly the 24 columns the roll gives --
@@ -184,8 +196,8 @@ def density_row(density):
     29.02 INCHES` tight and `WATER   =          0.00 INCHES` loose, with
     identical value widths.
 
-    *This is the weakest row on the report and it is the only one with no
-    paper behind it.* See FIDELITY X8.
+    This is the weakest row on the report and it is the only one with no
+    paper behind it. See FIDELITY X8.
     """
     return f"DENSITY = {density:.4f} LBS/GAL"
 
@@ -213,7 +225,16 @@ def inv_rows(console, n, full, tc=True):
     are gated on. See FIDELITY X8.
     """
     st = console.tank_level.get(n, {})
-    vol, water = st.get("volume", 0.0), st.get("water", 0.0)
+    # The water the console has FOUND, not where the float is resting.
+    # `water_height` applies the Water Minimum Threshold -- 576013-623 Rev
+    # AN p.7-16, "the water float is resting on a layer of debris on the
+    # bottom of the tank" -- and this row took the raw float while the WATER
+    # VOL row two lines below it went through `water_volume`, which does
+    # apply it. So one report answered the same question both ways: `WATER
+    # VOL = 0 GALS` over `WATER = 0.50 INCHES`. CLOSED Y7 claims "the water
+    # volume, the water screen and both water alarms read it"; the printed
+    # inventory did not. FIDELITY O27.
+    vol, water = st.get("volume", 0.0), console.water_height(n)
     ninety = not (console.values.get("S56400") or "").strip().endswith("1")
     pct = "90" if ninety else "95"
     share = full * (0.90 if ninety else 0.95)
@@ -245,7 +266,7 @@ def inv_rows(console, n, full, tc=True):
 # reports in the sense the inventory report is, they are the console saying
 # what it just did.
 #
-# **They DO carry the END mark, and this comment used to say they did not.**
+# They DO carry the END mark, and this comment used to say they did not.
 # `ui.py` has appended one to everything it prints since before either slip
 # existed, so the comment and the code disagreed and had disagreed for as
 # long as there were slips. The mark stays and the comment moves, on the only
@@ -336,7 +357,7 @@ def inventory(console, only=None):
     tanks = console.programmed_tanks()
     if only:
         tanks = {n: v for n, v in tanks.items() if n in only}
-    # **A report with nothing to list prints its heading and stops.**
+    # A report with nothing to list prints its heading and stops.
     # UNKNOWNS A17 retired five inventions of exactly this shape -- `NO
     # SALES DATA`, `NO DELIVERY DATA` and three more -- on the grounds that
     # "a per-feature phrase invented for each screen teaches a technician a
@@ -358,12 +379,12 @@ def inventory(console, only=None):
 def alarms(console):
     """The alarm or warning report, which is what ALARM/TEST prints.
 
-    **Three things, and both manuals count them the same way.**
+    Three things, and both manuals count them the same way.
     576013-610 Rev AC p.29-1: "This report shows the type and location of
-    the warning or alarm **and the date and time it occurred**." 576013-939
+    the warning or alarm and the date and time it occurred." 576013-939
     Quick Help p.12 says it again independently: "the warning or alarm
-    type, its location and **the date and time the warning or alarm
-    condition occurred**."
+    type, its location and the date and time the warning or alarm
+    condition occurred."
 
     The slip carried two of the three. The only stamp on it was the
     header's, which is when the SLIP was printed -- and the occurrence time
@@ -371,9 +392,9 @@ def alarms(console):
     it all along: `_log_alarms` stamps every `02` row and the Alarm History
     reports read exactly this. See the alarm-lifecycle audit, A7.
 
-    *The stamp's place on the slip is the console's own shape rather than a
-    drawing*, because no page draws this report at all -- its head is
-    UNKNOWNS A31 for the same reason. `alarm_history` indents a stamp under
+    The stamp's place on the slip is the console's own shape rather than a
+    drawing, because no page draws this report at all -- its head is
+    UNKNOWNS A35 for the same reason. `alarm_history` indents a stamp under
     the name it belongs to, so this one does too.
     """
     out = header(console, "ALARM/WARNING REPORT")
@@ -406,12 +427,164 @@ def _occurred(console, key):
     wrong with it.
     """
     from .wire import _when
+    at = _occurred_at(console, key)
+    return _when(at) if at is not None else ""
+
+
+def _occurred_at(console, key):
+    """The newest `02` row's stamp for this alarm, YYMMDDHHmm, or None."""
     for record in console.alarm_log:
         if record.get("state") != "02":
             continue
         if record["aa"] + record["nn"] + record["tt"] == key:
-            return _when(record["at"])
-    return ""
+            return record["at"]
+    return None
+
+
+def isd_alarm_slip(console, key):
+    """What an ISD alarm prints when it posts, 577013-800 Rev P p.20-27:
+
+        ---- ISD SITE ALARM ----      ---- ISD HOSE ALARM ----
+        ISD VAPOR LEAKAGE WARN        h 1: FP1 SUPER
+        MMM DD, YYYY HH:MM XM         FLOW COLLECT FAIL
+                                      MMM DD, YYYY HH:MM XM
+
+    Figures 21 and 22 draw these as the "Printed message" of a warning
+    posting and an alarm posting, beside the display's two lines. Every
+    posting printed the ALARM/WARNING REPORT instead. Category 30 is the
+    site and 31 the hose, whose line is the hose, its fuel position label
+    and its hose label. FIDELITY I11.
+    """
+    alarm = describe_alarms([key])[0]
+    try:
+        # the alarm log keeps its stamp packed, YYMMDDHHmm
+        at = time.mktime(time.strptime(_occurred_at(console, key) or "",
+                                       "%y%m%d%H%M"))
+    except ValueError:
+        at = time.mktime(console.now())
+    stamp = clock_words(at)
+    name = alarm["description"].upper()
+    if alarm["aa"] != "31":
+        return ["---- ISD SITE ALARM ----", name, stamp]
+    hose = int(alarm["tt"]) if alarm["tt"].isdigit() else 0
+    fp = str(console.setting("evr_fuel_pos", hose, "")).strip()
+    label = str(console.setting("evr_hose_label", hose, "")).strip()
+    where = f"h {hose}: " + (f"FP{int(fp)} " if fp.isdigit() else "") + label
+    return ["---- ISD HOSE ALARM ----", where.rstrip(), name, stamp]
+
+
+# Figure 4's walk of CLEAR TEST AFTER REPAIR, as V85's test types.
+ISD_CLEAR_ORDER = ("01", "02", "06", "04", "05", "03")
+
+
+def isd_clear_dates(console):
+    """TEST FAIL CLEAR DATES, 577013-819 Rev F p.35's example printout:
+
+        TEST FAIL CLEAR DATES
+        CONTAINMENT OVER PRESS
+        02-06-11  12:43
+        VAPOR COLLECTION TEST
+        FP: 1 h:   1 MIDGRADE
+        02-06-10 11:13
+
+    Figure 4 puts PRINT on the CLEAR TEST AFTER REPAIR menu -- "See example
+    printout at right" -- and nothing printed it. One block for the last
+    clear of each selection, in the menu's order, and one per hose for a
+    collection clear. The stamp is the ISD event log's YY-MM-DD HH:MM with
+    one space; the page's two samples disagree about that gap (UNKNOWNS
+    A58). Nothing cleared prints the title and nothing. FIDELITY I11.
+    """
+    from . import isd
+    out = header(console)[:-1] + ["TEST FAIL CLEAR DATES"]
+    for code in ISD_CLEAR_ORDER:
+        clears = [r for r in console.isd_clears if r["test"] == code]
+        if not clears:
+            continue
+        if code != isd.COLLECTION:
+            out += [isd.CLEAR_MENU[code], _isd_clear_stamp(clears[0]["at"])]
+            continue
+        done = set()
+        for record in clears:                          # newest first
+            for hose, fp, label in _cleared_hoses(console, record):
+                if hose in done:
+                    continue
+                done.add(hose)
+                out += [isd.CLEAR_MENU[code],
+                        f"FP: {fp} h:{hose:>4} {label}".rstrip(),
+                        _isd_clear_stamp(record["at"])]
+    return out
+
+
+def pmc_diagnostics(console):
+    """PMC DIAGNOSTICS, 577013-937 Rev J p.12-59 and p.12-60, in two forms.
+
+    The membrane's, Figure 48:     The polisher's, Figure 49:
+
+        PMC DIAGNOSTICS                PMC DIAGNOSTICS
+        ----------------------         ----------------------
+        PMC VERSION: XX.XX             PMC VERSION: XX.XX
+
+        VAPOR PROCESSOR MODE           VAPOR PRESSURE INCHES H20: -X.XXX
+        AUTOMATIC                      VEEDER-ROOT POLISHER LOAD:  24.9%
+                                       VAPOR PROCESSOR MODE
+        VAPOR PROCESSOR STATE          EFFLUENT EMISSION: X.XX LB/KGAL
+        VP STATE ON                    AUTOMATIC
+                                       VAPOR VALVE POSITION
+                                       CURRENT   : CLOSED
+                                       REQUESTED : CLOSED
+
+                                       TEMP:  75.05 DEG F
+
+    Both figures say PRINT "Prints out a copy of the PMC Diagnostic report",
+    and PRINT printed the function's screens. The polisher's order, its
+    `H20` and its width are the figure's own, read off the word positions
+    rather than the text: EFFLUENT EMISSION does stand between the mode's
+    label and its value, and the lines are wider than the roll, which folds
+    them (UNKNOWNS A61). FIDELITY I11.
+    """
+    from . import isd
+    head = header(console)[:-1] + ["PMC DIAGNOSTICS", "-" * 22,
+                                   f"PMC VERSION: {isd.PMC_VERSION}", ""]
+    mode = isd.VP_CONTROL[console.vp_control()]
+    if (console.values.get("SV4000") or "00").strip()[-2:] not in isd.POLISHERS:
+        return head + ["VAPOR PROCESSOR MODE", mode, "",
+                       "VAPOR PROCESSOR STATE",
+                       "VP STATE " + isd.VP_RUNNING[console.vp_running()]]
+    fig = console.pmc_figures()
+    return head + [
+        f"VAPOR PRESSURE INCHES H20: {fig['vapor']:.3f}",
+        f"VEEDER-ROOT POLISHER LOAD:  {fig['load']:.1f}%",
+        "VAPOR PROCESSOR MODE",
+        f"EFFLUENT EMISSION: {fig['effluent']:.2f} LB/KGAL",
+        mode,
+        "VAPOR VALVE POSITION",
+        f"CURRENT   : {fig['valve_cur']}",
+        f"REQUESTED : {fig['valve_req']}",
+        "",
+        f"TEMP:  {fig['temp']:.2f} DEG F"]
+
+
+def _isd_clear_stamp(at):
+    return time.strftime("%y-%m-%d %H:%M", time.localtime(at))
+
+
+def _cleared_hoses(console, record):
+    """[(hose, fuel position, label)] one collection clear reached.
+
+    V85's own three cases: "FF=00, HH=00: All FP's and hoses are cleared",
+    "FF=FP Label, HH=00: All hoses for the FP are cleared", and "FF=FP
+    Label, HH=Hose Id: The selected hose is cleared."
+    """
+    fp, hose = record["fp"], record["hose"]
+    out = []
+    for device, position, label in console.isd_hoses():
+        at = int(position) if position.isdigit() else 0
+        if fp not in ("", "00") and at != int(fp):
+            continue
+        if hose not in ("", "00") and device != int(hose):
+            continue
+        out.append((device, at, label))
+    return out
 
 
 def status(console):
@@ -522,7 +695,7 @@ def setup_section(console, fn, device=None):
     headed = set()
     opened = 0
     for family, run in _families(fn):
-        # **A run with no device in it has no device to be absent.** The
+        # A run with no device in it has no device to be absent. The
         # comment on the gate below has said so since it was written and
         # only `devices: "console"` was reaching it: a section whose steps
         # are console-scoped in the menu data -- SYSTEM SETUP is all of
@@ -538,8 +711,8 @@ def setup_section(console, fn, device=None):
         # the console reads" -- and the tape agrees: its COMMUNICATIONS
         # SETUP prints three boards, all at their defaults.
         #
-        # *The one sentence that could be read the other way is quoted
-        # here so a reader can disagree*: p.5-1 calls the report "a record
+        # The one sentence that could be read the other way is quoted
+        # here so a reader can disagree: p.5-1 calls the report "a record
         # of all setup values ENTERED into this system". Against it: the
         # console is displaying those defaults, the tape prints defaulted
         # values, and both of this module's own comments say defaults
@@ -575,7 +748,7 @@ def setup_section(console, fn, device=None):
                         # copy: the tank's block simply opens "T 1:PREMIUM".
                         # So the value IS the head.
                         #
-                        # **Asked of the STEP, not of the value's shape.**
+                        # Asked of the STEP, not of the value's shape.
                         # `is_label_step` is the console's own test -- the
                         # code is in `LABEL_CODES` -- and this matched any
                         # two-line block whose second line looked like a
@@ -1151,8 +1324,8 @@ def tank_leak_history(console, tank):
     the console could already build and could not reach. See FIDELITY H13.
 
     The title is 576013-635 p.65's, because it is the same report: one
-    printout, one name, whichever port asks for it. **576013-610 draws no
-    in-tank leak test HISTORY anywhere**, which is W7's question and its
+    printout, one name, whichever port asks for it. 576013-610 draws no
+    in-tank leak test HISTORY anywhere, which is W7's question and its
     answer -- the panel's own manual has none, the serial manual has this
     one, and the only screen that reaches it is a diagnostic.
     """
@@ -1246,37 +1419,123 @@ def delivery(console, tank, record):
     return out
 
 
-def deliveries(console, tanks=None):
-    # "PRINT - Deliveries to all tanks", or to the one selected
-    """Every delivery the console is holding, as PRINT gives them."""
+def colon_row(label, value, colon=16):
+    """One row of the TICKETED DELIVERY REPORT, on the tape's own grid.
+
+    576013-610 Rev AC p.5-4 draws `TICKET VOL      :  2500 GALS`. Measured
+    off its word boxes, at the page's own pitch of 5.40 points, the label
+    run puts its colon at column 16 and the value run right-aligns every
+    value and its unit to one edge -- at 27.7, on a roll that is 24. That
+    overrun is the artwork's and not the paper's: p.4-2's INVENTORY REPORT,
+    whose real paper is measured (W3), runs to 27.8 in the same manual.
+
+    The real site tape prints the grid itself on its setup rows,
+    `WATER WARNING   :    0.8` and `DELIVERY DELAY  :  3 MIN`: the label
+    in sixteen, the colon at sixteen, the value and its unit right-aligned
+    to the last column. A gallon row is nine characters where that leaves
+    seven, so the block's labels give up their padding for it, together,
+    and keep p.5-4's colons in one column -- `TICKET VOL    :2500 GALS`, a
+    value hard against its colon, which is the tape's own
+    `THERMAL COEFF   :.000690`. `colon` is that column. What a real console
+    gives up is on no page and no paper: UNKNOWNS A66.
+    """
+    head = label.ljust(max(len(label), colon))
+    return (head + ":" + value.rjust(WIDTH - 1 - len(head))).rstrip()
+
+
+# 576013-610 Rev AC p.28-10's DELIVERY VARIANCE column, measured off the
+# page's word boxes: the label run ends with a colon in column 11 and the
+# value and its unit are one field right-aligned to the last column. It is
+# the one sample in this family that is the roll's own width. FIDELITY T13.
+VARIANCE_COLON = 11
+
+
+def colon_block(rows):
+    """`colon_row` for a block: (label, value) pairs, None for a blank.
+
+    The colon column is the block's -- sixteen where every value fits the
+    tape's seven, and as far left as the widest value needs otherwise --
+    and a label longer than that keeps its own. See `colon_row`.
+    """
+    widest = max(len(row[1]) for row in rows if row)
+    colon = min(16, WIDTH - 1 - widest)
+    return ["" if row is None else colon_row(row[0], row[1], colon)
+            for row in rows]
+
+
+def _same_day(one, other):
+    return time.localtime(one)[:3] == time.localtime(other)[:3]
+
+
+def deliveries(console, tanks=None, day=None):
+    """TICKETED DELIVERY REPORT, which PRINT gives on Delivery Maintenance.
+
+    576013-610 Rev AC p.5-3 says what it carries -- "the delivery time,
+    ticketed volume, gauged volume, fuel temperatures, delivery variance
+    (ticketed volume-gauged volume), and Bill of Lading number" -- and p.5-4
+    draws it: the tank, the title, the stamp and the basis, then a block per
+    delivery. p.5-3 gives PRINT three scopes, one per screen: every tank on
+    the function's own screen, "all deliveries for the tank shown" on
+    `SELECT: EDIT/VIEW`, and "all deliveries for the day and tank shown" on
+    a delivery's own screen, which is `day`.
+
+    This was `DELIVERY REPORT`, gross and TC on one row and a ticket and a
+    variance on the next, with no temperatures, no BOL and no basis line --
+    a layout no page draws -- while `ticketed()` beside it had the right
+    title over I221's seventy columns of serial layout, and nothing called
+    it. FIDELITY O7.
+    """
     tanks = tanks or sorted(console.tank_level)
-    out = header(console, "DELIVERY REPORT")
+    # "Volumes can be either standard or temperature-compensated. This
+    # feature is selected in the Setup Mode": TC TICKETED DELIVERY,
+    # 576013-623 Rev AN p.5-6, the setting I221 heads itself by as well
+    tc = (console.values.get("S51D00") or "").strip().endswith("1")
+    out = []
     for tank in tanks:
         records = console.deliveries.records.get(tank) or []
+        if day is not None:
+            records = [r for r in records
+                       if r.end and _same_day(r.end["at"], day)]
         label = console.text("602", tank) or f"TANK {tank}"
-        out.append("")
-        out.append(f"T {tank}:{label}")
-        if not records:
-            # A17 retired `NO DELIVERY DATA` by name; this was the same
-            # invention with a word on the end. See FIDELITY U5.
-            pass
+        out += [f"T {tank}:{label}".rstrip(), "TICKETED DELIVERY REPORT",
+                console.clock_stamp(),
+                "VOLUMES ARE " + ("TC" if tc else "STANDARD")]
         for record in records:
-            when = clock_words(record.end["at"])
-            out.append(f"  {when}")
-            out.append(f"    GROSS {record.amount:9.0f}"
-                       f"   TC {record.tc_amount:9.0f}")
-            if record.ticket is not None:
-                out.append(f"    TICKET {record.ticket:8.0f}"
-                           f"   VAR {record.variance():8.0f}")
+            out.append("")
+            out += _delivery_block(console, record, tc)
+        out.append("")
     return out
 
 
-def ticketed(console, tanks=None):
-    """TICKETED DELIVERY REPORT, ticket against gauge."""
-    tanks = tanks or sorted(console.tank_level)
-    out = header(console, "TICKETED DELIVERY REPORT")
-    out.append(console.deliveries.ticketed_report(tanks))
-    return out
+def _delivery_block(console, record, tc):
+    """One delivery of p.5-4: when it finished, then its seven rows.
+
+    "When you insert ticketed deliveries, gauged volume and temperature
+    information appear as 'UNAVAIL' (unavailable) on the report", p.5-3.
+    The variance is ticket less gauge, so an inserted delivery has none to
+    take either, and a gauged delivery nobody has ticketed has no ticket.
+    """
+    def gallons(value):
+        return "UNAVAIL" if value is None else f"{masks.whole(value)} GALS"
+
+    def degrees(value):
+        return "UNAVAIL" if value is None else f"{value:.1f} F"
+
+    gauged = pre = post = est = None
+    if not record.inserted:
+        gauged = record.tc_amount if tc else record.amount
+        pre, post = record.start["temp"], record.end["temp"]
+        est = console.deliveries.delivered_temperature(record)
+    variance = (None if record.ticket is None or gauged is None
+                else record.ticket - gauged)
+    rows = [("TICKET VOL", gallons(record.ticket)),
+            ("GAUGED VOL", gallons(gauged)),
+            ("DLVY VAR", gallons(variance)),
+            ("EST DLVY TEMP", degrees(est)),
+            ("PRE DLVY TEMP", degrees(pre)),
+            ("POST DLVY TEMP", degrees(post)),
+            ("BOL", record.bol or "")]
+    return [clock_words(record.end["at"])] + colon_block(rows)
 
 
 def csld(console, tanks=None):
@@ -1308,9 +1567,9 @@ def accuchart_update(console, tank, when):
     the tank, the time, and what the calibration moved, which is what a
     notification is for.
 
-    **This sentence used to say the invention was recorded in UNKNOWNS.md
-    and it was not** -- not there, not in FIDELITY.md, not anywhere. It is
-    UNKNOWNS A30 now. A citation to a register entry is worth exactly as
+    This sentence used to say the invention was recorded in UNKNOWNS.md
+    and it was not -- not there, not in FIDELITY.md, not anywhere. It is
+    UNKNOWNS A34 now. A citation to a register entry is worth exactly as
     much as the entry, and a sweep for invented console text is what found
     the gap. See FIDELITY U5.
     """
@@ -1329,17 +1588,87 @@ def accuchart_update(console, tank, when):
 
 
 def shift(console, tanks=None, previous=None):
-    """SHIFT RECONCILIATION, the eight numbers and a line to sign.
+    """SHIFT RECONCILIATION, in the layout the PAPER draws it in.
 
     The closed shift if there is one, "a Shift Reconciliation Report for the
     previous shift": and the one running otherwise, so the report is not
     empty on a console nobody has closed yet.
+
+    **This used to hand the roll `bir.report`, which is IC03 -- the report
+    the WIRE asks for**, a seventy-character table of eight columns whose
+    own docstring says so. Folded onto a twenty-four column roll it came out
+    as a column header spread over four lines (`DATE TIME  OPENING` /
+    `DLVRIES   SALES  ADJUST` / `CALC'D PHYSICL WATER` / `VAR`), the title
+    printed twice, and the wire form's thirty-five character
+    `SIGNATURE ____...` broken into a full line and one stray underscore. No
+    console prints that.
+
+    576013-610 Rev AC p.28-2 draws this report on paper and it is the
+    label-over-value form `reconcile` already builds, so this defers to it
+    rather than keeping a second layout under the same title. The SIGNATURE
+    line goes with the wire form it belongs to: it occurs in 576013-635 and
+    in no page of the Operator's Manual at all.
+
+    See UNKNOWNS A19, whose "prior question" this was -- the paper was being
+    handed a terminal's table.
     """
     tanks = tanks or sorted(console.tank_level)
     if previous is None:
         previous = any(console.bir.last(t) for t in tanks)
-    out = header(console, "SHIFT RECONCILIATION")
-    out.append(console.bir.report(tanks, previous=previous))
+    return reconcile(console, tanks, kind="shift", previous=previous)
+
+
+def last_shift(console, tanks=None, ending=False):
+    """The Last-Shift Inventory Report, a block per shift per tank.
+
+    576013-610 Rev AC p.8-1: "Press PRINT to print a Last-Shift Inventory
+    Report. The system will print a report for all shifts for up to eight
+    tanks", and it draws one: `SHIFT STARTING INV #1`, the stamp, the tank,
+    seven inventory rows, DLVY ADJUSTMENT, GROSS CHANGE, TC NET CHANGE and
+    HEIGHT, with the blank lines where the page leaves them. p.8-2 gives
+    END INVENTORY an "Ending Inventory Report", which is `ending`; its
+    title is the "Shift Ending Inv" p.8-2 names beside "Shift Starting Inv".
+
+    PRINT here gave `SHIFT RECONCILIATION` -- Reconciliation Mode's report,
+    off BIR's shift. The operating-mode audit's OP7; FIDELITY O22.
+
+    No rule under the title, where the page draws one: W9 found real paper
+    drops the rule this manual draws under INVENTORY REPORT, and this is
+    that report, stored. The grid is `colon_block`'s. Both are UNKNOWNS A67.
+    """
+    shifts = console.shifts
+    labels = console.programmed_tanks()
+    tanks = tanks or sorted(labels)
+    out = []
+    for n in shifts.programmed():
+        snap = shifts.end_of(n) if ending else shifts.start_of(n)
+        if snap is None:
+            continue
+        out += [f"SHIFT {'ENDING' if ending else 'STARTING'} INV #{n}",
+                clock_words(snap["at"])]
+        for tank in tanks:
+            row = snap["tanks"].get(tank)
+            if row is None:
+                continue
+            fig = shifts.figures(n, tank)
+            label = labels.get(tank, ("", 0.0))[0]
+            out += ["", f"T {tank}: {label}".rstrip()]
+            out += colon_block([
+                ("VOLUME", f"{masks.whole(row['volume'])} GALS"),
+                ("ULLAGE", f"{masks.whole(row['ullage'])} GALS"),
+                (f"{row['pct']}% ULLAGE", f"{masks.whole(row['share'])} GALS"),
+                ("TC VOLUME", f"{masks.whole(row['tc'])} GALS"),
+                None,
+                ("WATER VOL", f"{masks.whole(row['water_vol'])} GALS"),
+                ("WATER", f"{row['water']:.2f} INCHES"),
+                ("TEMP", f"{row['temp']:.1f} DEG F"),
+                None,
+                ("DLVY ADJUSTMENT", masks.whole(fig["deliveries"])),
+                ("GROSS CHANGE", masks.whole(fig["gross"])),
+                ("TC NET CHANGE", masks.whole(fig["tc_net"])),
+                None,
+                ("HEIGHT", f"{row['height']:.2f} INCHES")])
+        out.append("")
     return out
 
 
@@ -1395,6 +1724,26 @@ def fuel(console, only=None, index=None, long=True):
     manual's and the padding is what fits. See FIDELITY O4.
     """
     out = header(console, "FUEL MANAGEMENT REPORT")
+    return out + _fuel_body(console, only, long)
+
+
+def fuel_all_products(console):
+    """PRINT on FUEL MANAGEMENT's own screen: "a Fuel Management report for
+    all products", 576013-610 Rev AC p.7-1.
+
+    p.7-3's report once per product under one header, so each product's
+    seven average-sales rows sit under its own tanks rather than being
+    added up across products. The operating-mode audit's OP8; FIDELITY O23.
+    """
+    out = header(console, "FUEL MANAGEMENT REPORT")
+    for _code, tanks in console.fuel_products():
+        out += _fuel_body(console, tanks, True)
+    return out
+
+
+def _fuel_body(console, only, long):
+    """The tank blocks, and with `long` the product's seven sales rows."""
+    out = []
     tanks = console.programmed_tanks()
     for n, (label, full) in sorted(tanks.items()):
         if only and n not in only:
@@ -1425,21 +1774,32 @@ def fuel(console, only=None, index=None, long=True):
 def relays(console, kind="relay"):
     """Output relay setup, or what the pump relay monitors are reading."""
     if kind == "pumpmon":
-        out = header(console, "PUMP RELAY MONITOR STATUS")
-        for n in range(1, console.capacity("pumpmon") + 1):
-            label = console.text("7C5", n) or f"MONITOR {n}"
-            out.append(f"r {n}:{label[:18]:18s} "
-                       + ("ON" if console.relays.get(n) else "OFF"))
+        # 576013-635 Rev AA function 322's own report, which `wiresensors`
+        # has rendered all along: the pump's state, the relay LINE it is
+        # watching, and the STATUS that is the reason the report exists.
+        # The paper built a row of its own carrying the first of those and
+        # calling it the pump's -- one report with two renderings and the
+        # wire the right one, which is the shape D23 and D24 both had.
+        # `fit` folds it onto the roll. See FIDELITY T12.
+        from . import wiresensors
+        rows = wiresensors.pumpmon_status_rows(console)
         # "FITTED" is the BENCH's word for a card in a bay, and it was on
         # a printed page. A console with no monitor prints the heading and
         # no rows. See FIDELITY U5.
-        return out
+        return header(console, rows[0]) + rows[1:]
     out = header(console, "OUTPUT RELAY SETUP")
     for n in range(1, max(console.capacity("relay"),
                           console.capacity("io")) + 1):
+        # Two lines, the way `sensors` draws the same shape three hundred
+        # lines up: the label on the device's own line and the state under
+        # it, because there is no column 21 the 24 character roll does not
+        # have. This was one 26 character line padded to a column the paper
+        # cannot reach, and it folded at whatever space came last -- the
+        # right answer by accident, and it truncated an 18 character label
+        # the roll has room for 20 of. See FIDELITY T12.
         label = console.text("807", n) or f"RELAY {n}"
-        state = "ON" if console.outputs.energised(n) else "OFF"
-        out.append(f"R {n}:{label[:18]:18s} {state}")
+        out.append(f"R {n}:{label}".rstrip())
+        out.append("ON" if console.outputs.energised(n) else "OFF")
     return out
 
 
@@ -1466,6 +1826,36 @@ def service_codes(console):
     out.extend(f"{name:<20.20s}{code}"
                for code, name in console.user_service_codes)
     return out
+
+
+def service_history(console, most=25):
+    """The Service Report the function's own screen prints, or None.
+
+    576013-818 Rev AB Figure 6-3: "Press Print to printout a list of the 25
+    most recent services codes entered. If none exist, there will be no
+    printout." No page draws that paper, so its rows are the ones the wire
+    serves the same log with -- 116's before Version 27, when 116 went
+    obsolete, and 11A's from then -- through one renderer, folded to the
+    roll the way every report wider than it is. See FIDELITY D24.
+    """
+    entries = console.service_log(most)
+    if not entries:
+        return None
+    tok = "11A" if int(console.version) >= 27 else "116"
+    rows = [wiretables.heading(tok)] + alarmreports.service_rows(tok, entries)
+    return header(console, "SERVICE REPORT") + rows
+
+
+def csld_monthly(console, tank, previous=False):
+    """CSLD MONTHLY REPORT for the tank and the month the panel shows.
+
+    576013-610 Rev AC p.27-3: "Press PRINT to print out the report for the
+    tank shown", on the CUR and PRV CSLD MONTHLY screens. The rows are A56's
+    display body, from the renderer the wire answers with. See FIDELITY D23.
+    """
+    from .wire import Handler
+    rows = Handler(console, verbose=False).csld_monthly_rows([tank], previous)
+    return header(console, rows[0]) + rows[1:]
 
 
 def meter_events(console):
@@ -1518,13 +1908,13 @@ def blocked_keys(console):
 # Figure 32-2 prints function 119's `MAINTENANCE HISTORY` where the SCREEN
 # says `MAINTENANCE REPORT`. See W13.
 #
-# **Two of them have no title at all**, and that is the manual's doing rather
+# Two of them have no title at all, and that is the manual's doing rather
 # than an omission here: function 352 (VLLD) goes straight from the station
 # header to `P 1:REGULAR UNLEADED`, and function 402 (external input) to
 # `INPUT   LOCATION`. A letter absent from this table and present in
 # HISTORY_UNTITLED prints its device line and no title. See W25.
 #
-# **X is VMCI and x is VMC**, which this table had the other way round. The
+# X is VMCI and x is VMC, which this table had the other way round. The
 # serial manual's category list reads `35=VMCI Dispenser Interface Alarm`
 # and `36=VMC Alarm`, `consoledata.json` maps 35 to X and 36 to x, and
 # functions 411 and 412 print `VMCI ALARM HISTORY REPORT` and
@@ -1598,7 +1988,7 @@ def alarm_history(console, letter=None, system=False, device=None):
         title = None
     else:
         title = HISTORY_TITLE.get(letter or "", "ALARM HISTORY REPORT")
-    # **Twelve** of the fourteen titles are longer than the roll -- only
+    # Twelve of the fourteen titles are longer than the roll -- only
     # `TANK ALARM HISTORY` at 18 and one 24 fit -- because 576013-635 Rev
     # AA's are the DISPLAY format's, forty columns wide, and this paper is
     # twenty-four. This report clipped its own title before `fit()` could
@@ -1715,14 +2105,41 @@ PERIOD_WORD = {"shift": "SHIFT", "daily": "DAILY", "weekly": "WEEK",
                "periodic": "PERIODIC"}
 
 
+FIGURE_COLS = 23
+
+
 def _figure(out, label, value, unit="GALS"):
-    """"OPENING VOLUME:" over its number, which is how the console lays it
-    out on a 40 column roll. Gallons are whole; inches are not."""
+    """"OPENING VOLUME:" over its number, the way p.28-2 draws it.
+
+    Gallons are whole; inches are not. The value and its unit are ONE
+    right-aligned field, and 23 is measured off the page rather than assumed:
+    576013-610 Rev AC p.28-2 draws the whole SHIFT RECONCILIATION report, and
+    its word boxes put every label at column 0 and the right edge of all
+    eight values at column 23.1, in a 5.40pt monospace.
+
+        OPENING VOLUME:
+                      5511 GALS
+
+    This was right-aligned in 22 and then given its unit, which is 27
+    characters, and the docstring said "how the console lays it out on a 40
+    column roll". The roll is 24 -- see `WIDTH`, which was corrected against
+    real paper and is now cited to 577013-369 Rev B s.3.1.E as well -- so
+    every one of these nine lines was three characters over the paper and got
+    folded, putting `GALS` on a line of its own. UNKNOWNS A19.
+
+    *One measured detail is deliberately not reproduced.* On the page the
+    VARIANCE value is one column wider than the others -- it starts at 16.1
+    where DELIVERIES' identical `0 GALS` starts at 17.1 -- which is a sign
+    position, the variance being the one signed figure here. Python writes
+    the sign only when the number is negative, so a zero or positive variance
+    lands one column right of where the page draws it, and a negative one
+    lands exactly. A space held for the sign would match the sample and
+    misalign every other row against itself; the page has one sample and it
+    is a zero, so this is left as the smaller of two guesses.
+    """
     out.append(f"{label}:")
-    if unit == "INCH":
-        out.append(f"{value:22.2f} {unit}")
-    else:
-        out.append(f"{value:22.0f} {unit}")
+    shown = f"{value:.2f}" if unit == "INCH" else f"{value:.0f}"
+    out.append(f"{shown} {unit}".rjust(FIGURE_COLS))
     out.append("")
 
 
@@ -1808,16 +2225,36 @@ def delivery_variance(console, tanks=None, kind=None, previous=None):
         _when_block(out, row)
         var = console.bir.analysis(row)
         sales = row["sales"]
-        out.append(f"TICKET VOL : {row['ticketed']:9.0f} GAL")
-        out.append(f"GAUGED VOL : {row['deliveries']:9.0f} GAL")
+        # 576013-610 Rev AC p.28-10's own grid, read off its word boxes:
+        # the label run to a colon in column 11 and the value and its unit
+        # right-aligned as ONE field to column 23.
+        #
+        #     TICKET VOL :     800 GAL
+        #     % VAR SALES:      11.23%
+        #
+        # These were built `f"TICKET VOL : {…:9.0f} GAL"`, 26 characters, so
+        # all three GAL rows folded their unit onto a line of its own and
+        # `% VAR SALES` came to 23 and lined up with none of them. That is
+        # 12 over-wide lines on a four-tank site, from the one report in
+        # this family whose sample IS the roll's width. `_figure` three
+        # functions above had already fixed the identical defect for the
+        # reconciliation report and did not look sideways. FIDELITY T13.
+        #
         # THIS report's own direction, p.28-7: "difference between gauged and
         # ticketed delivery volumes", and its sample prints 99 for a ticket
         # of 800 against a gauge of 899. The Variance Analysis report on
         # p.28-14 defines the same words the other way round and prints -99
         # for the same pair. Both are right on their own page. FIDELITY G9.
-        out.append(f"DLVY VAR   : {var['gauged_delivery_var']:9.0f} GAL")
         pct = (var["gauged_delivery_var"] / sales * 100.0) if sales else 0.0
-        out.append(f"% VAR SALES: {pct:9.2f}%")
+        # `+ 0.0` on the two signed figures, the way `variance_analysis`
+        # already does it: a variance that rounds to nothing from below
+        # prints `-0 GAL` otherwise, and a report that distinguishes minus
+        # zero from zero is telling a technician something untrue. It did.
+        out += [colon_row(label, value, VARIANCE_COLON) for label, value in (
+            ("TICKET VOL", f"{row['ticketed']:.0f} GAL"),
+            ("GAUGED VOL", f"{row['deliveries']:.0f} GAL"),
+            ("DLVY VAR", f"{var['gauged_delivery_var'] + 0.0:.0f} GAL"),
+            ("% VAR SALES", f"{pct + 0.0:.2f}%"))]
         out.append("")
     return out
 
@@ -1837,15 +2274,25 @@ def book_variance(console, tanks=None, kind=None, previous=None):
             continue
         _when_block(out, row)
         var = console.bir.analysis(row)
-        out.append(f"OPN GAUG VOL : {row['opening']:9.0f} GAL")
-        out.append(f"METER SALES  : {row['sales']:9.0f} GAL")
-        out.append(f"TICKET DLVY  : {row['ticketed']:9.0f} GAL")
-        out.append(f"MANUAL ADJ   : {row['adjust']:9.0f} GAL")
-        out.append(f"BOOK INV     : {console.bir.book(row):9.0f} GAL")
-        out.append(f"GAUGED INV   : {row['physical']:9.0f} GAL")
-        out.append(f"WATER HT     : {row['water']:9.2f} IN")
-        out.append(f"VAR          : {var['book_var']:.0f} GAL "
-                   f"{var['book_pct']:.1f}%")
+        # Its own page does not fit any roll. 576013-610 Rev AC p.28-14
+        # measures **30** columns -- `OPN GAUG VOL :         800 GAL`,
+        # label run to a colon in 13 and a sixteen-wide value field -- where
+        # p.28-10 four pages earlier measures exactly 24 for the report
+        # beside it. A manual sample is typeset, not photographed, so this
+        # block gives up the value field's padding the way the TICKETED
+        # DELIVERY REPORT's does, keeping the page's labels and its one
+        # colon column: `colon_block`, which is what that pair exists for.
+        # The rows were 27 and 28 and every one of them folded. FIDELITY T13.
+        out += colon_block([
+            ("OPN GAUG VOL", f"{row['opening']:.0f} GAL"),
+            ("METER SALES", f"{row['sales']:.0f} GAL"),
+            ("TICKET DLVY", f"{row['ticketed']:.0f} GAL"),
+            ("MANUAL ADJ", f"{row['adjust']:.0f} GAL"),
+            ("BOOK INV", f"{console.bir.book(row):.0f} GAL"),
+            ("GAUGED INV", f"{row['physical']:.0f} GAL"),
+            ("WATER HT", f"{row['water']:.2f} IN"),
+            ("VAR", f"{var['book_var'] + 0.0:.0f} GAL "
+                    f"{var['book_pct'] + 0.0:.1f}%")])
         out.append("")
     return out
 
@@ -1972,34 +2419,469 @@ def loads(console, tanks=None, index=None):
     return out
 
 
+SS_RULE = "-" * 23
+
+
+def _ss_block(console, title, number):
+    """The heading all three SS DIAG printouts share: the title, a run of
+    twenty-three hyphens, and the sensor with its label."""
+    label = console.text("722", number) or f"SMART SENSOR {number}"
+    return header(console)[:-1] + [title, SS_RULE, f"s {number}: {label}"]
+
+
+# The words each smart sensor's own TYPE screen draws, 576013-818 Rev AB
+# Figures 6-28, 6-29 and 6-32, which the install log repeats.
+SMART_TYPE_WORDS = {"03": "MAG SENSOR", "04": "VAC SENSOR",
+                    "05": "ATMP SENSOR"}
+
+
+def smart_diagnostic(console, number):
+    """SMART SENSOR DIAGNOSTIC, the P beside a Mag or an ATMP sensor's walk.
+
+    576013-818 Rev AB Figure 6-28, beside MAG SENSOR DIAGS:
+
+        SMART SENSOR DIAGNOSTIC
+        MMM DD, YYYY  HH:MM XM
+        s1: SUMP 1
+        MAG SENSOR
+        TOTAL HT      XX.X IN.
+        ...
+        BOARD TEMP    XX.X F
+
+    and Figure 6-32 beside ATM P SENSOR DIAGS, with TYPE, SERIAL NUMBER and
+    ATM PRESSURE under the sensor. The readings are the screens' own, so the
+    paper is what the panel showed. None for a sensor of any other kind.
+    """
+    from . import wiresensors
+    kind = console.sensor_type("smart", number)
+    label = console.text("722", number) or f"SMART SENSOR {number}"
+    out = header(console)[:-1] + ["SMART SENSOR DIAGNOSTIC",
+                                  console.clock_stamp(),
+                                  f"s {number}: {label}"]
+    if kind in ("03", "00", ""):
+        names = ("TOTAL HT", "FUEL HT", "WATER HT", "INSTALL POS",
+                 "FLUID TEMP", "BOARD TEMP")
+        units = ("IN.", "IN.", "IN.", "IN.", "F", "F")
+        values = wiresensors._mag_values(console, number)
+        return out + ["MAG SENSOR"] + [
+            f"{name:<14s}{value:4.1f} {unit}"
+            for name, value, unit in zip(names, values, units)]
+    if kind == "04":
+        return out + _vac_paper(console, number)
+    if kind == "05":
+        return out + ["TYPE: ATM P SENSOR",
+                      console.diag_reading("ss_serial9", number),
+                      console.diag_reading("ss_atm", number)]
+    return None
+
+
+def _vac_paper(console, number):
+    """The Vac sensor's half of Figure 6-29's printout, under the head.
+
+    576013-818 Rev AB p.6-24 draws it beside `TYPE: VAC SENSOR`, in its own
+    columns, and every line of it is a reading this console already models:
+
+        VAC SENSOR
+        SERIAL NUMBER XXXXXXXX
+        COMPENSATED PRESSURE:
+         -0.155 PSI
+        UNCOMPENSATED PRESSURE:
+         -0.094 PSI
+        EVACUATION STATE:
+          NO VACUUM
+        FLUID STATUS:  NORMAL
+        VCV: CLOSED
+        MM-DD-YYYY  HH:MM XM
+        LEAK RATE:    0.123 GPH
+        TIME TO NO VAC:
+        150:20   HHH:MM
+        MM-DD-YYYY  HH:MM XM
+        EVAC RATIO:5.2 @-4.1PSI
+        SENSOR FAULTS:
+         NONE
+
+    It is B38's block in the printer's own geometry, which is not B38's: the
+    two pressure values are indented ONE and the evacuation state TWO, where
+    the port holds all three right against 24; `FLUID STATUS:` carries two
+    spaces here and one on the glass; the stamp is `MM-DD-YYYY` with a
+    four-digit year where the port writes `4-12-04`; and the format hint
+    under TIME TO NO VAC is `HHH:MM` against the port's `HHHH:MM`. Measured
+    off the page rather than carried across. FIDELITY D30, which waited on
+    L18 because until L18 the block this shares with the port was invented.
+    """
+    from . import wiresensors
+    compensated, uncompensated = wiresensors._vac_pressures(console, number)
+    state = console.sensor_state.get(("smart", str(number)), "normal")
+    fluid = ("FAULT" if state in ("fault", "faultwarn")
+             else "FLUID" if state == "high" else "NORMAL")
+    evac = wiresensors.EVAC_WORDS[console.evacuation_state(number)[-1]]
+    out = ["VAC SENSOR",
+           console.diag_reading("ss_serial9", number),
+           "COMPENSATED PRESSURE:", f"{compensated:>7.3f} PSI",
+           "UNCOMPENSATED PRESSURE:", f"{uncompensated:>7.3f} PSI",
+           "EVACUATION STATE:", "  " + evac,
+           f"{'FLUID STATUS:':<15s}{fluid}",
+           "VCV: " + ("OPEN" if console.vac_valve_open(number) else "CLOSED")]
+    # ...and then the last manual test, which is the same record the three
+    # result screens read and the same three validity flags B38 sends. A
+    # sensor that has not run one has no moment to stamp, so the date line
+    # goes with the reading it stamps. The dashes are the panel's own form.
+    result = console.vac_result(number) or {}
+    stamp = (None if result.get("at") is None
+             else time.strftime("%m-%d-%Y", time.localtime(result["at"]))
+             + "  " + clock_hhmm(time.localtime(result["at"])))
+    rate, hours = result.get("rate"), result.get("hours")
+    if rate is None:
+        out.append(f"{'LEAK RATE:':<10s}{'--- GPH':>13s}")
+    else:
+        out += [stamp, f"{'LEAK RATE:':<10s}{f'{rate:.3f} GPH':>13s}"]
+    shown = ("---:--" if hours is None
+             else f"{int(hours):d}:{int(round((hours % 1) * 60)):02d}")
+    out += ["TIME TO NO VAC:", f"{shown:<6s}   HHH:MM"]
+    ratio = result.get("ratio")
+    if ratio is None:
+        at_psi = result.get("psi")
+        out.append("EVAC RATIO:--- @ ---PSI" if at_psi is None
+                   else f"EVAC RATIO:--- @{at_psi:.1f}PSI")
+    else:
+        out += [stamp, f"EVAC RATIO:{ratio:.1f} @{result['psi']:.1f}PSI"]
+    # The same fault the port names, off the same sensor state, under the
+    # heading Figure 6-29 draws whether or not there is one to name.
+    named = [name for bit, name in wiresensors.FAULT_BITS
+             if (4 if fluid == "FAULT" else 0) & bit]
+    return out + ["SENSOR FAULTS:"] + ([f"  {n}" for n in named] or [" NONE"])
+
+
+def smart_install_log(console, number):
+    """SMART SENSOR INSTALL LOG, the P on the install log screen.
+
+    576013-818 Rev AB Figures 6-28, 6-31 and 6-32 draw the same paper under
+    all three kinds of sensor:
+
+        SMART SENSOR INSTALL LOG
+        - - - - - - - - - - - -
+        MMM DD, YYYY HH:MM XM
+        s1 MAG SENSOR
+        SERIAL NUMBER:  111111
+
+    The moment is 333's install event and the serial is the one 333 prints,
+    so the paper and the port name one install. It printed the generic
+    sensor status report. FIDELITY D30.
+    """
+    from . import wiresensors
+    word = SMART_TYPE_WORDS.get(console.sensor_type("smart", number))
+    if word is None:
+        return None
+    when = wiresensors.install_time(console, number)
+    serial = wiresensors._smart_serial(console, number)
+    return header(console)[:-1] + [
+        "SMART SENSOR INSTALL LOG", "- " * 11 + "-", clock_words(when),
+        f"s{number} {word}", f"SERIAL NUMBER:  {serial}"]
+
+
+def ss_comm_diag(console, number):
+    """SS COMM DIAG, 577013-800 Rev P p.20-44, 577013-937 Rev J Figure 45
+    and 577013-819 Rev F p.34, all three the same:
+
+        SS COMM DIAG
+        -----------------------
+        s 1: AFM1   FP1-2
+        SAMPLES READ    58
+        SAMPLES USED    54
+        PARITY ERR       0
+        PARTIAL READ     0
+        COMM ERR         0
+        RESTARTS         0
+
+    Every PRINT on SMART SENSOR DIAGNOSTIC gave the generic sensor status
+    report. FIDELITY I11; the counters are UNKNOWNS A56.
+    """
+    from . import wiresensors
+    names = ("SAMPLES READ", "SAMPLES USED", "PARITY ERR", "PARTIAL READ",
+             "COMM ERR", "RESTARTS")
+    counts = wiresensors.ss_comm_counts(console, number)
+    return _ss_block(console, "SS COMM DIAG", number) + [
+        name + str(count).rjust(18 - len(name))
+        for name, count in zip(names, counts)]
+
+
+def ss_constants_diag(console, number):
+    """SS CONSTANTS DIAG, the same three pages:
+
+        SS CONSTANTS DIAG
+        -----------------------
+        s 1: AFM1   FP1-2
+
+        VAPOR PRESSURE
+        SERIAL NUMBER     1007
+        PROTOCOL VERSION     0
+    """
+    from . import wiresensors
+    _code, name = wiresensors.SMART_TYPE.get(
+        console.sensor_type("smart", number), wiresensors.SMART_UNKNOWN)
+    serial = wiresensors._smart_serial(console, number)
+    protocol = wiresensors.smart_protocol(number)
+    return _ss_block(console, "SS CONSTANTS DIAG", number) + [
+        "", name,
+        "SERIAL NUMBER" + str(serial).rjust(22 - len("SERIAL NUMBER")),
+        "PROTOCOL VERSION" + str(protocol).rjust(22 - len("PROTOCOL VERSION"))
+    ] + [label + text.rjust(22 - len(label))
+         for label, text in _ss_type_constants(console, number)]
+
+
+def _ss_type_constants(console, number):
+    """The rows SS CONSTANTS DIAG adds for a sensor of each kind.
+
+    576013-818 Rev AB Figure 6-28 prints a Mag sensor's MODEL, LENGTH,
+    GRADIENT, MIN and MAX THRESHOLD, NUM FLOATS, TEMPERATURE and INSTALL POS;
+    Figures 6-31 and 6-32 print a Vac and an ATMP sensor's MODEL, SLOPE and
+    OFFSET. The values are the ones B36 serves for the same sensor, so the
+    paper and the port agree. An ISD sensor's Figure 45 prints none of them.
+    FIDELITY D26.
+    """
+    from . import wiresensors
+    kind = console.sensor_type("smart", number)
+    if kind == wiresensors.MAG:
+        v = wiresensors._mag_constants(console, number)
+        return [("MODEL", f"{v[0]:.0f}"), ("LENGTH", f"{v[1]:.1f}"),
+                ("GRADIENT", f"{v[2]:.3f}"), ("MIN THRESHOLD", f"{v[3]:.1f}"),
+                ("MAX THRESHOLD", f"{v[4]:.1f}"),
+                ("NUM FLOATS", f"{v[5]:.0f}"),
+                ("TEMPERATURE", "YES" if v[6] else "NO"),
+                ("INSTALL POS", "YES" if v[7] else "NO")]
+    if kind == wiresensors.VAC:
+        v = wiresensors._vac_constants(console, number)
+        return [("MODEL", f"{v[0]:.0f}"), ("SLOPE", f"{v[1]:.3f}"),
+                ("OFFSET", f"{v[2]:.3f}")]
+    if kind == wiresensors.ATMP:
+        v = wiresensors._atmp_constants(console, number)
+        return [("MODEL", f"{v[0]:.0f}"), ("SLOPE", f"{v[2]:.3f}"),
+                ("OFFSET", f"{v[3]:.3f}")]
+    return []
+
+
+def ss_channel_diag(console, number):
+    """SS CHANNEL DIAG, the same three pages:
+
+        SS CHANNEL DIAG
+        -----------------------
+        s 1: AFM1   FP1-2
+        YY-MM-DD  HH:MM:SS
+        C00 B50B 3D68 00E0 0000
+        ...
+        C20 0709 0032 04C9 880F
+    """
+    from . import wiresensors
+    words = wiresensors.ss_channel_words(console, number)
+    stamp = time.strftime("%y-%m-%d  %H:%M:%S", console.now())
+    return _ss_block(console, "SS CHANNEL DIAG", number) + [stamp] + [
+        f"C{i:02d} " + " ".join(f"{w:04X}" for w in words[i:i + 4])
+        for i in range(0, 24, 4)]
+
+
+def ps_calibration(console, number):
+    """VAPOR PRESSURE SENSOR / CALIBRATION HISTORY, 577013-800 Rev P p.20-45
+    and 577013-937 Rev J Figure 46.
+
+        VAPOR PRESSURE SENSOR
+        CALIBRATION HISTORY
+
+        s 1: VAPOR PRESSURE
+        DATE: MM-DD-YY HH:MM
+        SERIAL #: XXXXXXXX
+        SLOPE:  XXXX.XXX
+        OFFSET: XXXX.XXX
+        CALB STATUS: PASS
+
+    One entry per calibration, newest first, ending with the factory one.
+    FIDELITY I11.
+    """
+    from . import readings
+    out = header(console)[:-1] + ["VAPOR PRESSURE SENSOR",
+                                  "CALIBRATION HISTORY"]
+    serial = readings.digits(8, "ss", number)
+    for at, slope, offset, passed in console.calibration_history(
+            "smart", number, most=10):
+        out += ["", f"s {number}: VAPOR PRESSURE",
+                "DATE: " + time.strftime("%m-%d-%y %H:%M",
+                                         time.localtime(at)),
+                f"SERIAL #: {serial}", f"SLOPE:  {slope:8.3f}",
+                f"OFFSET: {offset:8.3f}",
+                f"CALB STATUS: {'PASS' if passed else 'FAIL'}"]
+    return out
+
+
+def _sump_label(console, n):
+    return console.text("722", n) or f"SUMP {n}"
+
+
+def _sump_head(console, titles, rule=False, at=None, gap=1, station=True):
+    """The station header, then the Mag sump reports' own order.
+
+    All four of 576013-610 Rev AC's sump figures put the title OVER the
+    stamp, where every other report here stamps first: `MAG SUMP LEAK TEST`
+    / `IN PROGRESS` / the spaced rule / the stamp on Figure 24-1, and the
+    same without the rule on Figure 24-2, p.23-1 and p.23-2. `at` stamps a
+    report with the moment it describes rather than the moment it prints.
+    """
+    out = header(console)[:-1] if station else []
+    out += titles
+    if rule:
+        out.append(SETUP_RULE)
+    out += [""] * gap
+    out.append(clock_words(at) if at is not None else console.clock_stamp())
+    return out
+
+
+def sump_slip(console, test, at, station=True):
+    """MAG SUMP LEAK TEST, IN PROGRESS or RESULT: 576013-610 Rev AC Figures
+    24-1 and 24-2.
+
+        MAG SUMP LEAK TEST              MAG SUMP LEAK TEST
+        IN PROGRESS                     RESULT
+        - - - - - -  - - - - - -
+                                        MMM DD, YYYY  HH:MM XM
+        FEB 21, 2005  10:00 AM          S  1:  SUMP 1
+        S 1: SUMP 1
+                                        RESULT: TEST ABORTED
+        STATUS:MEASURING HEIGHT         REASON:WATER TOO LOW
+        START TIME:                     START TIME:
+         FEB 19, 2005  9:43 AM            FEB 19, 2005  9:43 AM
+        START HT:     20.971 IN.        START HT:      5.710 IN
+        ...
+
+    One report, whether PRINT asked for it or the console printed it by
+    itself. FIDELITY U1b.
+    """
+    from . import sumpreports
+    head = f"S {test.sensor}: {_sump_label(console, test.sensor)}"
+    if test.running:
+        out = _sump_head(console, ["MAG SUMP LEAK TEST", "IN PROGRESS"],
+                         rule=True, at=at, station=station)
+        return out + [head, ""] + sumpreports.in_progress_rows(console, test,
+                                                               at)
+    out = _sump_head(console, ["MAG SUMP LEAK TEST", "RESULT"], at=at,
+                     station=station)
+    return out + [head, ""] + sumpreports.result_rows(console, test)
+
+
+def sump_report(console, only=None):
+    """PRINT on MAG SUMP LEAK TEST: "the status of the current test, if in
+    progress, or the last completed test", 576013-610 Rev AC p.24-5."""
+    numbers = [only] if only else console.mag_sensors()
+    if not numbers:
+        return header(console, "MAG SUMP LEAK TEST") + ["NO SENSORS PROGRAMMED"]
+    now = time.mktime(console.now())
+    out = []
+    for n in numbers:
+        station = not out
+        if out:
+            out.append("")
+        test = console.sumps.tests.get(n)
+        if test is not None:
+            out += sump_slip(console, test, now, station=station)
+            continue
+        # p.24-3 annotates this screen "Press PRINT to printout Mag Sump Leak
+        # Test (no test data available)" and draws no such printout: this is
+        # 317's status word under Figure 24-1's heading. UNKNOWNS A53.
+        out += _sump_head(console, ["MAG SUMP LEAK TEST"], station=station)
+        out += [f"S {n}: {_sump_label(console, n)}", "",
+                "NO TEST DATA AVAILABLE"]
+    return out
+
+
+def sump_last_passed(console, only=None):
+    """576013-610 Rev AC p.23-1: "Press PRINT to printout the last passed Mag
+    Sump Sensor leak test results".
+
+        MAG SUMP LEAK TEST
+        LAST PASSED TEST
+
+
+        MMM DD, YYYY HH:MM XM
+
+        s 1: SUMP 1
+
+        RESULT:      TEST PASSED
+        START TIME:
+        MMM DD, YYYY HH:MM XM
+        START HT:      22.971 IN
+        ...
+    """
+    from . import sumpreports
+    numbers = [only] if only else console.mag_sensors()
+    if not numbers:
+        return header(console, "MAG SUMP LEAK TEST") + ["NO SENSORS PROGRAMMED"]
+    out = []
+    for n in numbers:
+        station = not out
+        if out:
+            out.append("")
+        out += _sump_head(console, ["MAG SUMP LEAK TEST", "LAST PASSED TEST"],
+                          gap=2, station=station)
+        out += ["", f"s {n}: {_sump_label(console, n)}", ""]
+        test = console.sumps.last_passed(n)
+        out += (sumpreports.last_passed_rows(console, test) if test
+                else ["NO TEST DATA AVAILABLE"])
+    return out
+
+
+def _sump_pairs(tests):
+    """p.23-2's entries: the start of the Measuring Height Phase and the
+    height it started at, a blank line between each."""
+    from . import sumpreports
+    if not tests:
+        return ["NO TEST PASSED"]
+    out = []
+    for i, test in enumerate(tests):
+        if i:
+            out.append("")
+        # p.23-2's grid sets `22.971` two columns right of p.23-1's, which
+        # would be twenty-six on a roll that is twenty-four (`WIDTH`) and
+        # fold; read as the grid's own drift, and set as p.23-1 sets it.
+        out += ["START TIME:", clock_words(test.start_at),
+                sumpreports.row("START HT:", f"{test.start_ht:.3f}", " IN")]
+    return out
+
+
 def sump_history(console, only=None):
-    """MAG SUMP LEAK TEST HISTORY, 576013-610 Rev AC p.4646.
+    """MAG SUMP LEAK TEST HISTORY, 576013-610 Rev AC p.23-2.
 
         MAG SUMP LEAK TEST HISTORY
+
+        MMM DD, YYYY  HH:MM XM
         s 1: SUMP 1
+
         LAST 10 TESTS PASSED:
         START TIME:
         FEB 19, 2005  9:43 AM
-        START HT:         22.971 IN
+        START HT:        22.971 IN
+        :
+        LAST PASSED EACH YEAR:
+        ...
 
-    A sump history is not the line report's shape -- no rates, one list of
-    the last ten passes with the height each started at. This screen used to
-    ask `leak_history` for a "sump" kind it did not have, so PRINT on it
-    raised KeyError. The records themselves are not modelled yet, which is
-    why a console with no sump test history prints the heading and
-    NO TEST PASSED under it. See FIDELITY U1.
+    "the last test results and the last passed test for each year, up to the
+    last 10 years". This printed one heading over `NO TEST PASSED` whatever
+    had been run, because there were no records to print. The second section
+    was missing altogether. `NO TEST PASSED` is still this project's own
+    words for an empty section. See FIDELITY U1b.
     """
-    out = header(console, "MAG SUMP LEAK TEST HISTORY")
-    numbers = [only] if only else sorted(
-        n for _m, n, _l in console.programmed_sensors() if _m == "smart")
+    numbers = [only] if only else console.mag_sensors()
     if not numbers:
-        out.append("NO SENSORS PROGRAMMED")
-        return out
+        return header(console, "MAG SUMP LEAK TEST HISTORY") + [
+            "NO SENSORS PROGRAMMED"]
+    out = []
     for n in numbers:
-        out.append("")
-        out.append(f"s {n}: {console.text('722', n) or ''}".rstrip())
-        out.append("LAST 10 TESTS PASSED:")
-        out.append("NO TEST PASSED")
+        station = not out
+        if out:
+            out.append("")
+        out += _sump_head(console, ["MAG SUMP LEAK TEST HISTORY"],
+                          station=station)
+        out += [f"s {n}: {_sump_label(console, n)}", "",
+                "LAST 10 TESTS PASSED:"]
+        out += _sump_pairs(console.sumps.last_ten(n))
+        out += ["", "LAST PASSED EACH YEAR:"]
+        out += _sump_pairs(console.sumps.each_year(n, 10))
     return out
 
 
@@ -2007,7 +2889,7 @@ def leak_history(console, kind="plld", only=None):
     """"the last 3.0 gph, the first 0.2 gph, and the first 0.1 gph test
     results for each month".
 
-    **A LINE report, and only a line report.** 576013-610 Rev AC draws
+    A LINE report, and only a line report. 576013-610 Rev AC draws
     PRESSURE LINE LEAK TEST HISTORY, WPLLD LINE LEAK TEST HISTORY and MAG
     SUMP LEAK TEST HISTORY, and draws no in-tank leak test history at all --
     so this used to carry a fourth entry, `IN-TANK LEAK TEST HISTORY`, an
@@ -2268,20 +3150,27 @@ def _marks(console):
     return marks
 
 
-def _due(before, now, hhmm):
-    """Whether a programmed HHmm fell in the window just gone.
+def _occurrences(before, now, hhmm):
+    """The moments a programmed HHmm fell in the window just gone.
 
     Yesterday's occurrence as well as today's, because a window that runs
     over midnight would otherwise lose the time inside it. This is the walk
     `bir._scheduled` makes over its own closing times, for the same reason.
+    -> struct_times, so a caller can ask what DAY each one fell on.
     """
     stamp = time.localtime(now)
+    out = []
     for day in (-1, 0):
         when = time.mktime((stamp.tm_year, stamp.tm_mon, stamp.tm_mday + day,
                             int(hhmm[:2]), int(hhmm[2:]), 0, 0, 1, -1))
         if before < when <= now:
-            return True
-    return False
+            out.append(time.localtime(when))
+    return out
+
+
+def _due(before, now, hhmm):
+    """Whether a programmed HHmm fell in the window just gone."""
+    return bool(_occurrences(before, now, hhmm))
 
 
 def _time_setting(console, code):
@@ -2336,6 +3225,21 @@ def _auto_leak_slips(console):
     return out
 
 
+def _auto_sumps(console):
+    """Three printouts on one page, 576013-610 Rev AC p.24-1: "The TLS will
+    automatically print that the Test Phase was started", "... that the
+    Measuring Height Phase was started", and "the test result when the test
+    has been completed". The page draws none of the first two, so each is
+    the IN PROGRESS report as it stood at that moment. UNKNOWNS A53."""
+    words = {"started": "test phase started",
+             "measuring": "measuring height started", "result": "result"}
+    out = [(f"-- PRINT: mag sump leak test {words[what]}, sensor {n}",
+            sump_slip(console, test, at))
+           for what, n, test, at in console.sumps.printed]
+    console.sumps.printed.clear()
+    return out
+
+
 def generator_slip(console, number, on, when):
     """GENERATOR ON, GENERATOR OFF: "messages are printed whenever the
     generator turns on and off", 576013-623 p.23-2. Three lines, the way
@@ -2382,7 +3286,14 @@ def _auto_alarms(console, marks):
             for a in describe_alarms(console.compute_alarms())}
     fresh = keys - marks["posted"]
     marks["posted"] = keys
-    return [("-- PRINT: alarm posted", alarms(console))] if fresh else []
+    # An ISD site or hose alarm prints its own slip, 577013-800 Rev P Figures
+    # 21 and 22; anything else posted prints the report ALARM/TEST prints.
+    isd_keys = sorted(k for k in fresh if k[:2] in ("30", "31"))
+    out = [("-- PRINT: ISD %s alarm" % ("hose" if k[:2] == "31" else "site"),
+            isd_alarm_slip(console, k)) for k in isd_keys]
+    if fresh - set(isd_keys):
+        out.append(("-- PRINT: alarm posted", alarms(console)))
+    return out
 
 
 def _auto_shift_inventory(console, before, now):
@@ -2419,6 +3330,40 @@ def _auto_fuel(console, before, now):
         return [("-- PRINT: fuel management report",
                  fuel(console, long=False))]
     return []
+
+
+def _auto_csld(console, before, now):
+    """CSLD TEST RESULTS, which the console prints by itself.
+
+    576013-818 Rev AB ch.11: "Test results are provided automatically every
+    24 hours at 8:00 a.m." 576013-610 Rev AC: "except when the CSLD Report
+    Only feature is enabled in setup" -- and 576013-623 Rev AN p.8-9 says
+    what that feature prints instead: "only prints CSLD status reports at one
+    of the times selected below: End of Month (at 8:00 a.m.), Day 15 and End
+    of Month (both at 8:00 a.m.), or Day 25 and End of Month (both at 8:00
+    a.m.)". Nothing printed CSLD results at any of those times. A set is
+    reported under its primary tank, and the tanks due at one moment share
+    one report. FIDELITY K6.
+    """
+    import calendar
+    from . import csld as csldmod
+    hhmm = "%02d00" % csldmod.REPORT_ONLY_HOUR
+    out = []
+    for when in _occurrences(before, now, hhmm):
+        month_end = calendar.monthrange(when.tm_year, when.tm_mon)[1]
+        due = []
+        for tank in sorted(console.tank_level):
+            if (not console.csld.enabled(tank)
+                    or console.csld.primary(tank) != tank):
+                continue
+            only = console.csld.report_only(tank)
+            if (only == csldmod.REPORT_ONLY_OFF
+                    or when.tm_mday == month_end
+                    or when.tm_mday in csldmod.REPORT_ONLY_DAYS[only]):
+                due.append(tank)
+        if due:
+            out.append(("-- PRINT: CSLD test results", csld(console, due)))
+    return out
 
 
 def _auto_bir(console, marks):
@@ -2488,11 +3433,13 @@ def automatic(console):
     out = []
     out.extend(_auto_deliveries(console))
     out.extend(_auto_leak_slips(console))
+    out.extend(_auto_sumps(console))
     out.extend(_auto_generator(console))
     out.extend(_auto_confirmations(console))
     out.extend(_auto_accuchart(console))
     out.extend(_auto_shift_inventory(console, before, now))
     out.extend(_auto_fuel(console, before, now))
+    out.extend(_auto_csld(console, before, now))
     out.extend(_auto_bir(console, marks))
     out.extend(_auto_loads(console, marks))
     out.extend(_auto_alarms(console, marks))

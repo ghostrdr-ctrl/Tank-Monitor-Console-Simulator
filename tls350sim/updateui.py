@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The windows the updater puts up, and the thread it does the waiting on.
 
 Tk is single-threaded and the network is slow, so every request runs on a
@@ -167,6 +170,8 @@ def about(parent):
         "Free software under the GNU General Public License, version 3 or "
         "later. It comes with ABSOLUTELY NO WARRANTY. You may redistribute "
         "it, and the source is published with it.\n\n"
+        "The full licence is in LICENSE.txt beside the program, and at "
+        "https://www.gnu.org/licenses/\n\n"
         f"{DISCLAIMER}\n\n"
         f"https://github.com/{update.UPDATE_REPO}",
         parent=parent)

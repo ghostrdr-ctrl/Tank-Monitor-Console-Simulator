@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Screens the audit against the manuals found missing or wrong.
 
 Each of these was checked by hand against the manual named in its docstring
@@ -90,10 +93,21 @@ class Diagnostics(unittest.TestCase):
         self.assertIn(("VEEDER-ROOT POLISHER", "LOAD:       XX.X%"), pmc)
 
     def test_csld_diagnostics_has_both_months(self):
-        """Figure 6-11 has a current and a previous month branch."""
+        """Figure 6-11 has a current and a previous month, and they are ONE
+        screen: `SELECT: CURRENT MONTH` with a `C` to `SELECT: PREVIOUS
+        MONTH`, which 576013-610 Rev AC p.27-3 walks as "Press CHANGE, then
+        ENTER". They were two STEP screens and CHANGE did nothing on either.
+        The previous month's line is drawn by the selection now, and the
+        citation walk reaches it by walking both choices. FIDELITY D23."""
+        fn = [f for f in DIAG_MENU if f["function"] == "CSLD DIAGNOSTICS"][0]
+        pick = [sc for sc in fn["screens"] if sc.get("sel") == "csld_month"]
+        self.assertEqual(len(pick), 1)
+        self.assertEqual(pick[0]["l2"], "SELECT: CURRENT MONTH")
+        self.assertEqual(pick[0]["choices"],
+                         ["CURRENT MONTH", "PREVIOUS MONTH"])
         got = screens("CSLD DIAGNOSTICS")
-        self.assertIn(("CSLD MONTHLY REPORT", "SELECT: CURRENT MONTH"), got)
-        self.assertIn(("CSLD MONTHLY REPORT", "SELECT: PREVIOUS MONTH"), got)
+        self.assertNotIn(("CSLD MONTHLY REPORT", "SELECT: PREVIOUS MONTH"),
+                         got)
         self.assertIn(("T #: (Product Label)", "CUR CSLD MONTHLY <PRINT>"), got)
         self.assertIn(("T #: (Product Label)", "PRV CSLD MONTHLY <PRINT>"), got)
 
@@ -215,17 +229,21 @@ class Diagnostics(unittest.TestCase):
         the end, annotated "Displayed when modem is configured" -- which is
         only coherent if that is where the walk starts.
         """
+        #
+        # **And the branch is keys, not screens.** Four of the ten screens
+        # this list used to hold are what CHANGE and ENTER draw -- `AUTO
+        # CONFIG MODEM: YES`, and two confirmations over PRESS <STEP> TO
+        # CONTINUE -- and the last was the first screen come round again, so
+        # STEP walked a trainee past `ARE YOU SURE? : YES` without anything
+        # having been asked. The two screens left after AUTO CONFIG MODEM
+        # are stages the panel reaches by answering it. FIDELITY D27.
         self.assertEqual(screens("COMMUNICATION DIAGNOSTIC"), [
             ("COMM BOARD: 1 S-LINK", "MODEM: VR TLS GSM MODEM"),
             ("c1: MODEM AUTO DETECTED", "VR TLS GSM MODEM"),
             ("COMM BOARD: 1 S-LINK", "RSSI: XX BER: XX"),
             ("COMM BOARD: 1 S-LINK", "AUTO CONFIG MODEM: NO"),
-            ("COMM BOARD: 1 S-LINK", "AUTO CONFIG MODEM: YES"),
-            ("AUTO CONFIG MODEM: YES", "PRESS <STEP> TO CONTINUE"),
             ("AUTO CONFIG MODEM: YES", "ARE YOU SURE? : YES"),
-            ("ARE YOU SURE? : YES", "PRESS <STEP> TO CONTINUE"),
             ("WORKING", "* * * * * * * *"),
-            ("COMM BOARD: 1 S-LINK", "MODEM: VR TLS GSM MODEM"),
         ])
 
     def test_the_modem_it_found_is_not_the_first_thing_it_says(self):
@@ -542,8 +560,12 @@ class Operating(unittest.TestCase):
         """
         from tls350sim.ui import SimApp, MODES
         from tests.test_panel import a_console
+        console = a_console()
+        # "Before you use this function, Ticketed Delivery must be enabled in
+        # the Setup Mode", 576013-610 Rev AC p.5-1. FIDELITY O23.
+        console.values["S51C00"] = "1"
         try:
-            app = SimApp(a_console(), 10087)
+            app = SimApp(console, 10087)
         except tkinter.TclError as exc:              # pragma: no cover
             # This machine's Tcl loses init.tcl every few dozen runs --
             # "couldn't read file ... init.tcl: No error" -- which is the
@@ -583,7 +605,13 @@ class Operating(unittest.TestCase):
         # of the INSERT chain rather than the last of a flat list of eight
         self.assertEqual(inserting[0],
                          ("EDIT/VIEW OR INSERT", "SELECT: INSERT"))
-        self.assertEqual(inserting[-1][0], "BOL")
+        # and p.5-2's next screen names the tank, as p.5-1's does for
+        # EDIT/VIEW. FIDELITY U7.
+        self.assertEqual(drawn[1][0], "SELECT: EDIT/VIEW")
+        self.assertEqual(inserting[1][0], "SELECT: INSERT", inserting[1])
+        self.assertTrue(inserting[1][1].startswith("T 1:"), inserting[1])
+        # p.5-3 heads it with the tank and the delivery's date and time
+        self.assertTrue(inserting[-1][0].startswith("T "), inserting[-1])
         self.assertTrue(inserting[-1][1].startswith("BOL:"), inserting[-1])
 
         # FIDELITY O7. "Press CHANGE to choose INSERT, then press ENTER for
@@ -594,8 +622,11 @@ class Operating(unittest.TestCase):
         # INSERT and pressing STEP landed on the EDIT chain's TICKET VOLUME.
         first = [line for pair in drawn for line in pair]
         second = [line for pair in inserting for line in pair]
-        self.assertIn("PRIOR DLVY FOR TANK", first)
-        self.assertNotIn("PRIOR DLVY FOR TANK", second)
+        self.assertIn("TICKET VOLUME", first)
+        # and neither chain draws p.5-2's "Press STEP to view the previous
+        # delivery for this tank" as a screen of its own: STEP off a BOL is
+        # the older delivery's ticket screen. FIDELITY O7.
+        self.assertNotIn("PRIOR DLVY FOR TANK", first + second)
         self.assertIn("ENTER DELIVERY DATE", second)
         self.assertIn("ENTER DELIVERY TIME", second)
         self.assertNotIn("ENTER DELIVERY DATE", first)
@@ -887,14 +918,50 @@ class TheProbeCalibrationReports(unittest.TestCase):
 
     def test_the_ratios_start_at_zero_and_sit_about_one(self):
         """Every example in the manual starts 0.000, and a probe whose
-        segments behave alike reads about 1.000 across them."""
+        positions all answer as they were built to reads about 1.000 across
+        EVERY one of them.
+
+        This used to skip position 1, because the old normalisation put a
+        permanent outlier there -- the reference positions' spans are a
+        quarter of a segment's, so dividing by the mean segment span left
+        one reading 0.26 on every probe for ever. CLOSED X12.
+        """
         c, h = self.a_site()
         ratios = c.probe_ratios(3)
         self.assertEqual(ratios[0], 0.0)
         self.assertEqual(len(ratios), len(c.probe_calibration(3)))
-        for r in ratios[2:]:
+        for r in ratios[1:]:
             self.assertTrue(0.8 < r < 1.2, r)
         self.assertIn("SENSITIVITY RATIOS", self.send(h, "IA0603"))
+
+    def test_no_position_stands_out_on_a_probe_that_is_not_faulty(self):
+        """CLOSED X12. The screen exists to make ONE position stand out --
+        CAP0's example is `0.000 1.023 0.279 0.971 1.010 1.003 1.010 0.988`
+        and 0.279 is a segment answering at a quarter of what it was built
+        to. A console that shows an outlier on every healthy probe has spent
+        the screen before a technician gets to it.
+
+        Both probe types, because the fault was in the reference positions
+        and both types have two of them."""
+        c, _h = self.a_site()
+        for tank in range(1, 5):
+            if c.probe_type(tank) == "MAG PROBE":
+                continue
+            ratios = c.probe_ratios(tank)
+            far = [r for r in ratios[1:] if abs(r - 1.0) > 0.10]
+            self.assertEqual(far, [], f"tank {tank}: {ratios}")
+
+    def test_the_ratio_is_of_wet_constants_and_not_of_spans(self):
+        """US 4,349,882, Veeder Industries' own predecessor: the
+        microcomputer "calculates and stores 'wet' constant ratios" and uses
+        one to carry a recalculated wet constant up to the interface
+        segment. A wet constant, not a wet-minus-dry span."""
+        c, _h = self.a_site()
+        factory = c.probe_calibration(3, wet=True, updated=False)
+        now = c.probe_calibration(3, wet=True, updated=True)
+        want = [0.0] + [n / f for n, f in zip(now[1:], factory[1:])]
+        for got, wanted in zip(c.probe_ratios(3), want):
+            self.assertAlmostEqual(got, wanted, places=9)
 
     def test_a07_is_a_mag_command_and_says_so_to_a_cap(self):
         """"Probe types 01=CAP0 and 02=CAP1 are not supported by this
@@ -1305,7 +1372,17 @@ class TheDeliveryReportsOwnColumns(unittest.TestCase):
             row = [r for r in rows if r.strip().startswith(label)][0]
             self.assertEqual(row.index(label) + len(label), 10, label)
         end = [r for r in rows if r.strip().startswith("END:")][0]
-        self.assertEqual(end.index("SEP"), 11)
+        # Where the STAMP starts, which is what this test is about. It used
+        # to probe the column with `end.index("SEP")`, so eleven months of
+        # the year it raised `ValueError: substring not found` from inside
+        # `index` -- not an assertion failure, and a message naming neither
+        # the column nor the month. See FIDELITY V9.
+        # The whole stamp shape, not a month name: the day is SPACE PADDED
+        # (`APR  6, 2027`, W27's rule), so anything narrower than this misses
+        # every single-digit day as well as every month but one.
+        stamp = re.search(r"[A-Z]{3}\s+\d{1,2}, \d{4}", end)
+        self.assertIsNotNone(stamp, end)
+        self.assertEqual(stamp.start(), 11, end)
 
     def test_i215_keeps_its_own_columns_and_they_are_not_i202_s(self):
         c = self.a_delivery()

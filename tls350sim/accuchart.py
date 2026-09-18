@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """AccuChart: the console teaching itself the shape of the tank.
 
 "AccuChart is a patented, automatic tank calibration process which reduces
@@ -369,8 +372,14 @@ class AccuChart:
         if hours <= 0:
             return
         dropped = seen - volume
+        # A SNAPSHOT, not the live dict. `tick()` runs on the GUI's poll
+        # thread and on every tunnel connection's thread, while the meter
+        # map is cleared and rewritten from any other connection -- `S79E`
+        # and `S7B1` both reach it. Iterating a dict another thread resizes
+        # is a RuntimeError, and the sum below is a generator that holds the
+        # iteration open for its whole run. Six items: the copy is free.
         metered = sum(self.c.meter_flow.get(m, 0.0) * hours
-                      for m, where in (self.c.meters or {}).items()
+                      for m, where in list((self.c.meters or {}).items())
                       if int(where) == tank)
         if metered <= 0 or dropped <= 0:
             return
@@ -696,22 +705,32 @@ class AccuChart:
     def calibration_status_rows(self, tanks):
         """I@B600, ACCU-CHART DIAGNOSTICS - CALIBRATION STATUS.
 
-        The columns are the fitting routine's own working, and the patent
-        this algorithm comes from, US5665895, is what names them: MSSE is the
-        merit function, "the minimum sum of the squares of residuals (SSR)
-        between the first and the second sets of data"; SUMWT is the total of
-        the weight factors it assigns each point, because "the earlier
-        acquired points ... are less reliable ... As lore data points are
-        acquired, the weight factor increases"; SIGMA is the "standard
-        deviation of residuals" it draws the outlier bounds from; and MINht
+        The columns are the fitting routine's own working. 576013-818
+        p.12-18 names the COLUMNS and the patent this algorithm comes from,
+        US5665895, describes the QUANTITIES behind them -- it never uses the
+        words MSSE, SUMWT or SIGMA. MSSE is the merit function, "the minimum
+        sum of the squares of residuals (SSR) between the first and the
+        second sets of data" (col. 9); SUMWT is read as the total of the
+        weight factors it assigns each point, because "the earlier acquired
+        points ... are less reliable ... As lore data points are acquired,
+        the weight factor increases" (col. 8, the OCR's "lore" included),
+        though the patent never sums them; SIGMA is the "standard deviation
+        of residuals" it draws the outlier bounds from (col. 9); and MINht
         and MAXht are the height range the data covers, which is the thing
         the guide tells you to check, "If it is a small range and the
         calibration is complete or almost complete, the tank was not
         adequately exercised."
 
-        The five CALIBRATION columns are the parameters in the order the
-        patent fits them, "ranked in ascending order of height range required
-        to fit a parameter": length, probe offset, end shape, diameter, tilt.
+        The CALIBRATION columns follow the order the patent fits its
+        parameters in, "ranked in ascending order of height range required
+        to fit a parameter as follows: 1) length, 2) probe offset, 3) end
+        shape, 4) diameter, and 5) tilt" (col. 8) -- but the mapping is not
+        one to one. CAP is the first, CAP_O_E is the guide's "COE (capacity,
+        offset, end shape)" and takes the next two, DIAM and TILT are the
+        last two, and SLICE is not a parameter at all: it is the patent's
+        decimation of the data "into a limited amount of segments (or
+        slices) taken along the tank height" (col. 7), which is why
+        `calibration_counts` leaves it at zero. See UNKNOWNS A8.
         """
         out = ["ACCU-CHART DIAGNOSTICS - CALIBRATION STATUS", ""]
         for tank in tanks:
@@ -744,10 +763,30 @@ class AccuChart:
             out.append("")
         return out
 
+    # What SIGMA is per unit of MSSE, measured off the only worked pair on
+    # this shelf rather than chosen. See FIDELITY X14.
+    SIGMA_PER_MSSE = 7.1
+
     @staticmethod
     def sigma(entry):
-        """"standard deviation of residuals", which the outlier bounds use."""
-        return round(entry.chart.fitness * 7.1 + 0.4, 2)
+        """"standard deviation of residuals", which the outlier bounds use.
+
+        **Measured, not chosen.** 576013-818 Rev AA p.12-18 prints one
+        worked `I@B601` row -- `MSSE 0.56  SUMWT 3372  SIGMA 3.98` -- and
+        `0.56 x 7.1 = 3.976`, which is the page's `3.98` at the printed
+        precision. That is where the 7.1 came from.
+
+        This used to read `fitness * 7.1 + 0.4`, and the offset was nobody's:
+        it makes the manual's own row come out `4.38`, ten per cent high on
+        the one value anybody can check. **The all-zero `I@B600` sample on
+        the same shelf rules it out independently** -- `MSSE 0.00` prints
+        `SIGMA 0.00`, and an offset makes that `0.40`.
+
+        *One row cannot distinguish `7.1` from the `7.1071` the row's own
+        ratio implies, so the constant stays as it was; what the two rows
+        settle between them is that there is no constant term.*
+        """
+        return round(entry.chart.fitness * AccuChart.SIGMA_PER_MSSE, 2)
 
     @staticmethod
     def calibration_counts(entry):

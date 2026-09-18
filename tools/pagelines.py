@@ -8,11 +8,14 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Read a manual page as it is LAID OUT, not as it extracts.
 
 `../UNKNOWNS.md` section D records the trap this exists for: a two-column
 table or a flow-chart figure comes out of a plain text extraction with its
-columns interleaved, and this project has made **five** wrong readings that
+columns interleaved, and this project has made five wrong readings that
 way -- one of which reached the console as a regression rather than as a
 wrong note (FIDELITY D4).
 

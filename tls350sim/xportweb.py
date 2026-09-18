@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The card's web manager: the same settings pages, served over HTTP.
 
 The device server inside the TCP/IP Interface Module has a small web manager
@@ -37,12 +40,13 @@ over HTTP expects those element names, and `setup.cgi` accepts a post of
 base64 records the same way.
 """
 import base64
-import socket
+import hmac
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from . import exposed
 from . import xportrec as R
 
 PRODUCT = "TCP/IP Interface Module"
@@ -106,8 +110,16 @@ NAV = [
 
 
 def esc(text):
+    # The apostrophe is escaped too. Every attribute in this file is
+    # double-quoted today, so leaving it out was survivable -- but values an
+    # unauthenticated stranger can POST (terminal name, domain name, the
+    # e-mail recipients, the trigger message) are stored VERBATIM in the
+    # records and only made safe by this function at render time. One
+    # single-quoted attribute added later would turn all of them into
+    # stored XSS, with nothing in the diff to show it.
     return (str(text).replace("&", "&amp;").replace("<", "&lt;")
-            .replace(">", "&gt;").replace('"', "&quot;"))
+            .replace(">", "&gt;").replace('"', "&quot;")
+            .replace("'", "&#39;"))
 
 
 def _opt(value, label, current):
@@ -202,11 +214,42 @@ class WebState:
     OK stores, Apply Settings commits -- is the same.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, capture=None):
         self.config = config
+        self.capture = capture
         self.pending = None
         self.lock = threading.Lock()
         self.rebooting_until = 0.0
+        # What an exposed card was asked to become and did not. A stranger
+        # reprogramming the card is the single most interesting thing that
+        # can happen to a honeypot, so it is kept rather than dropped.
+        self.attempts = []
+
+    def _deflect(self, what, detail=None):
+        """Look like the card obeyed, change nothing, remember everything.
+
+        The freeze in `XPortConfig.save` stops the write to disk, and that
+        is not enough by itself. `commit()` also moves `config.ip` and
+        `config.port` IN MEMORY, and `CardNetwork` watches exactly those
+        two: a stranger who posts a new address to this form makes the
+        supervisor tear every listener down and bring it back up somewhere
+        unreachable. The honeypot goes dark, no disk write required.
+
+        So an exposed card does not apply the change at all. It could
+        REFUSE -- but a card that refuses its own Apply Settings is not a
+        card, and the refusal is a better fingerprint than anything else on
+        the wire. Instead the page says "saved" and the unit "reboots" on
+        schedule, and the settings underneath never moved. Deception is the
+        one thing a honeypot is allowed to do that the rest of this
+        simulator is not.
+        """
+        self.attempts.append((time.time(), what, detail))
+        del self.attempts[:-100]
+        self.discard()
+        self.rebooting_until = time.monotonic() + 3.0
+        if self.capture is not None:
+            self.capture.event("deflected", proto="web",
+                               note="%s: not applied (exposed)" % what)
 
     def edit(self):
         """The working copy, created from the live records on first use."""
@@ -222,6 +265,12 @@ class WebState:
         self.pending = None
 
     def commit(self):
+        if exposed.writes_frozen():
+            e = self.pending
+            self._deflect("Apply Settings",
+                          {"ip": getattr(e, "ip", None),
+                           "port": getattr(e, "port", None)} if e else None)
+            return
         e = self.edit()
         for num, data in e.recs.as_dict().items():
             self.config.recs.put(num, data)
@@ -234,6 +283,9 @@ class WebState:
         self.rebooting_until = time.monotonic() + 3.0
 
     def defaults(self):
+        if exposed.writes_frozen():
+            self._deflect("factory defaults")
+            return
         self.config.factory_defaults()
         self.discard()
         self.rebooting_until = time.monotonic() + 3.0
@@ -691,6 +743,12 @@ def disabled_page():
 # the request handler
 
 
+# The most of a request body the web manager reads. None of the values its
+# forms post can be stored past 49 bytes (`xportrec` R1EM_OFF), so every
+# form fits in this many times over. See CLOSED Z4.
+LONGEST_FORM = 65536
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "Lantronix"
     sys_version = ""
@@ -741,6 +799,13 @@ class _Handler(BaseHTTPRequestHandler):
         The card ships with no password, and then any credentials -- including
         the empty pair a browser sends first -- are accepted. Once a password
         is set it is checked, and the user name is ignored, as on the card.
+
+        Compared with `hmac.compare_digest`. The secret is four characters
+        and the network path is noisy, so a timing oracle here was never the
+        realistic way in -- but the comparison is the one line in this file
+        that is a credential check, `xportmenu` was given a constant-time
+        one when it learned to challenge at all, and leaving the two
+        different would only invite a reader to wonder which is right.
         """
         want = self.cfg.telnet_password or ""
         if not want:
@@ -753,16 +818,60 @@ class _Handler(BaseHTTPRequestHandler):
         except (ValueError, TypeError):
             return False
         _, _, given = raw.partition(":")
-        return given == want
+        return hmac.compare_digest(given, want)
 
     # -- routing ----------------------------------------------------------
 
+    # -- the capture ------------------------------------------------------
+
+    def _seen(self, what, body=b"", **kw):
+        cap = getattr(self.server, "capture", None)
+        if cap is None:
+            return
+        ip = self.client_address[0] if self.client_address else None
+        port = (self.client_address[1] if self.client_address
+                and len(self.client_address) > 1 else None)
+        cap.record(what, body, peer=ip, port=port, proto="web", **kw)
+
+    def _seen_request(self, body=b""):
+        """The request line and headers, as they arrived.
+
+        Rebuilt rather than captured raw because `BaseHTTPRequestHandler`
+        has already consumed and parsed them by the time any handler runs.
+        It is a faithful rebuild of what was parsed, which is the thing that
+        decided what the card did -- and for a scan, the request line and
+        the User-Agent are the whole of what is worth keeping anyway.
+        """
+        crlf = chr(13) + chr(10)
+        head = ("%s %s %s%s" % (self.command, self.path,
+                                self.request_version, crlf))
+        for k, v in self.headers.items():
+            head += "%s: %s%s" % (k, v, crlf)
+        raw = head.encode("latin-1", "replace") + crlf.encode() + body
+        self._seen("in", raw,
+                   cmd="%s %s" % (self.command, urlparse(self.path).path))
+
     def do_GET(self):
+        self._seen_request()
         self._route(self._query())
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length") or 0)
+        # A length that is not a count raised out of the handler with no
+        # answer at all, and a negative one read to EOF with no timeout and
+        # held the thread. Refused in the shape the card's own 404 takes.
+        # FIDELITY Z3.
+        given = (self.headers.get("Content-Length") or "0").strip()
+        if not given.isdigit():
+            self._send(b"ERROR 400\r\n", 400, "text/plain")
+            return
+        length = int(given)
+        if length > LONGEST_FORM:
+            # `rfile.read` sets aside the whole count before it reads a
+            # byte, so one header could ask for gigabytes. CLOSED Z4.
+            self._send(b"ERROR 400\r\n", 400, "text/plain")
+            return
         raw = self.rfile.read(length).decode("latin-1") if length else ""
+        self._seen_request(raw.encode("latin-1", "replace"))
         fields = parse_qs(raw, keep_blank_values=True)
         fields.update(self._query())
         self._route(fields, post=True)
@@ -815,6 +924,22 @@ class _Handler(BaseHTTPRequestHandler):
         if name in ("welcome.htm", ""):
             self._send(welcome_page(self.cfg))
             return
+        # `setup.cgi` and `apply.htm` CHANGE the card, and both answered a
+        # GET: `post` was computed and then never consulted on either
+        # branch, so a bare `<img src="http://card/secure/apply.htm">` in a
+        # page the owner opened was enough to commit a configuration, and
+        # `setup.cgi?rec0=<base64>` rewrote record 0 -- the address, the
+        # tunnel port and the four-byte setup password -- from a URL alone.
+        #
+        # POST-only is also the FAITHFUL answer, not a hardening deviation:
+        # `reference/lantronix_xport_capture.md` line 442 records the real
+        # endpoint as `POST /secure/setup.cgi`, and every form the card
+        # serves is `method="post"`. What the hardware answers to a GET on
+        # these two is not in the capture, so the card's own 404 body is
+        # used rather than a 405 the firmware is not known to send.
+        if name in ("setup.cgi", "apply.htm") and not post:
+            self._not_found()
+            return
         if name == "setup.cgi":
             self._setup_cgi(fields)
             return
@@ -848,6 +973,23 @@ class _Handler(BaseHTTPRequestHandler):
         if fields.get("def", ["0"])[0] == "1":
             self.state.defaults()
             self._send(defaults_page())
+            return
+        # This endpoint writes the records STRAIGHT into the live config,
+        # around `WebState` and around `commit()`, so it needs the same
+        # deflection and cannot borrow it. The posted records are parsed
+        # into a throwaway config first, so the capture records what was
+        # attempted without any of it reaching the card.
+        if exposed.writes_frozen():
+            from . import xport as _xp
+            scratch = _xp.XPortConfig(records=self.cfg.recs.as_dict(),
+                                      mac=self.cfg.mac)
+            try:
+                scratch.recs.load_posted({k: v[0] for k, v in fields.items()})
+                detail = {"ip": scratch.ip, "port": scratch.port}
+            except (ValueError, TypeError, KeyError):
+                detail = {"fields": sorted(fields)}
+            self.state._deflect("setup.cgi record post", detail)
+            self._send(apply_page(self.state))
             return
         changed = self.cfg.recs.load_posted(
             {k: v[0] for k, v in fields.items()})
@@ -1011,23 +1153,55 @@ class _Server(HTTPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, addr, config, logfn=None):
+    def __init__(self, addr, config, logfn=None, capture=None, policy=None,
+                 gate=None):
         HTTPServer.__init__(self, addr, _Handler)
         self.config = config
-        self.state = WebState(config)
+        self.capture = capture
+        self.policy = policy
+        self.gate = gate
+        self.state = WebState(config, capture=capture)
         self.logfn = logfn
 
     def process_request(self, request, client_address):
+        # The gate, which this server stored and never asked. Every other
+        # listener on the card runs its connections past `exposed.Gate`;
+        # the web manager took one, put it on an attribute and then served
+        # every connection that arrived, so the per-source cap, the total
+        # and the rate did not apply to tcp/80 at all -- the one listener
+        # that spawns a thread per request. Refused here, before the
+        # thread exists, which is the only place refusing is worth
+        # anything.
+        gate = getattr(self, "gate", None)
+        ip = client_address[0] if client_address else None
+        if gate is not None and not gate.admit(ip):
+            try:
+                request.close()
+            except OSError:
+                pass
+            return
+        policy = getattr(self, "policy", None)
+        if policy is not None and policy.idle_timeout:
+            # A request that opens and never finishes its headers held a
+            # thread for ever; `BaseHTTPRequestHandler` has no timeout of
+            # its own beyond `timeout`, which is not set by default.
+            try:
+                request.settimeout(policy.idle_timeout)
+            except OSError:
+                pass
         t = threading.Thread(target=self._handle,
-                             args=(request, client_address), daemon=True)
+                             args=(request, client_address, ip), daemon=True)
         t.start()
 
-    def _handle(self, request, client_address):
+    def _handle(self, request, client_address, ip=None):
         try:
             self.finish_request(request, client_address)
         except OSError:
             pass
         finally:
+            gate = getattr(self, "gate", None)
+            if gate is not None:
+                gate.release(ip)
             try:
                 self.shutdown_request(request)
             except OSError:
@@ -1035,7 +1209,7 @@ class _Server(HTTPServer):
 
 
 def serve_web(config, host="0.0.0.0", log=None, powered=None, port=None,
-              on_server=None):
+              on_server=None, capture=None, policy=None, gate=None):
     """Serve the web manager, on the card's configured HTTP port.
 
     `on_server` is handed the server, so the card's network supervisor can
@@ -1044,7 +1218,8 @@ def serve_web(config, host="0.0.0.0", log=None, powered=None, port=None,
     powered = powered or (lambda: True)
     port = port or config.http_port
     try:
-        srv = _Server((host, port), config, log)
+        srv = _Server((host, port), config, log, capture=capture,
+                      policy=policy, gate=gate)
     except OSError as e:
         if log:
             log("-- XPort web manager not listening on %d: %s" % (port, e))

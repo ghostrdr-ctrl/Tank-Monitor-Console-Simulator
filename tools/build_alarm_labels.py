@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Read the alarm labels the console SHOWS off 576013-623 Rev AN Table 5-1.
 
 The table's columns are headed "Alarm Category | Display/print Alarm Label |
@@ -27,7 +30,7 @@ which is Table 5-1's spelling, not the legend's. The widths say the same
 thing: every one of Table 5-1's labels fits the 24 column display and 41 of
 the console's did not, up to 33 characters.
 
-**Why this table can be read from the text extraction and others cannot.**
+Why this table can be read from the text extraction and others cannot.
 `../UNKNOWNS.md` section D records five wrong readings caused by two-column
 tables whose columns drift apart in every extraction tried. This one does
 not have that shape: each row carries its label and its Type/Num on ONE
@@ -60,7 +63,7 @@ NUM = re.compile(r"\d\d/\d\d")
 # ---------------------------------------------------------------------------
 # Where Table 5-1 is wrong about itself, and the second reading that says so.
 #
-# **Table 6-2 is this table's own second printing.** 576013-623 Rev AN
+# Table 6-2 is this table's own second printing. 576013-623 Rev AN
 # p.5-20 says the five functions that assign alarms -- "Autodial, Output
 # Relay, WPLLD, PLLD, and VLLD line disable setups" -- use "the Autodial
 # Alarm Label column of Table 5-1", and Table 6-2 on pp.6-21 to 6-26 is that
@@ -93,6 +96,14 @@ DIAL_FIXES = {
     # between ANN PUMP and PRESS WARN.
     "06/22": ("ANNLSELF", "ANN PSELF"),
 }
+
+
+# The DIM block's two rows, each printed once for categories 18 and 19:
+# the display label, the type, and the autodial label, as p.5-24 prints them.
+SIDE_ROWS = (
+    ("DISABLED DIM ALARM", "02", "DISABLED"),
+    ("COMMUNICATION ALARM", "03", "COMM ERROR"),
+)
 
 
 def _table(lines):
@@ -160,6 +171,23 @@ def main():
         raise SystemExit("the two parses disagree about %d labels: %s"
                          % (len(clash), [(k, fields[k], doubled[k])
                                          for k in clash]))
+
+    # Two rows the page prints ONCE for two categories. p.5-24's DIM block
+    # is headed "Power Side DIM (MDIM) (18) or Communication Side DIM
+    # (EDIM/BDIM) (19)", and its Type/Num cells read "(for type, see alarm
+    # category)/02" and "ditto/03": the category is which side the DIM sits
+    # on and the type is which alarm it is. Neither parse can read a number
+    # out of prose, so the four rows are written from the two the page
+    # prints -- and only while the page still prints them that way.
+    text = "\n".join(lines)
+    if "category)/" not in text or "ditto/03" not in text:
+        raise SystemExit("Table 5-1's DIM block no longer reads '(for type, "
+                         "see alarm category)/02' and 'ditto/03' -- re-read "
+                         "the page before writing SIDE_ROWS")
+    for label, num, word in SIDE_ROWS:
+        for category in ("18", "19"):
+            fields.setdefault(f"{category}/{num}", label)
+            dial.setdefault(f"{category}/{num}", word)
 
     for code, (printed, right) in DIAL_FIXES.items():
         # A correction that no longer corrects anything is a correction

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The two lines a setup screen draws, without a window around them.
 
 The panel grew this logic first, because the panel is where you watch a
@@ -35,7 +38,10 @@ from .console import DEVICE_LABEL_CODE, DEVICE_WORD, FIELDS
 # The console's display is twenty-four characters. Every line here is cut to
 # it, which is also why the printed report is twenty-four wide: it is this
 # screen on paper.
-COLS = 24
+COLS = 24                 # 577013-369 Rev B s.3.1.B: "a two-line
+                          # 24-character liquid crystal display". See
+                          # UNKNOWNS A52, and B27 for the one document that
+                          # says 20.
 
 # A second line that asks for a key rather than showing a value.
 KEYPRESS = re.compile(r"^PRESS <[A-Z/]+>")
@@ -86,8 +92,34 @@ def second(label, value, gap=" "):
     if gap == ">":
         # 576013-623 Rev AN p.128 sets the value hard against the right
         # of the display rather than one space after its label
+        value = _unpadded(value, len(label) + len(value) - COLS)
         return f"{label}{value.rjust(COLS - len(label))}"[:COLS]
+    value = _unpadded(value, len(label) + len(gap) + len(value) - COLS)
     return f"{label}{gap}{value}".rstrip()
+
+
+def _unpadded(value, over):
+    """`value` with up to `over` of its LEADING ZEROS given up.
+
+    A setup line that overruns the glass is clipped from the right, and for
+    most of them that loses a word or a unit and looks cut. For a masked
+    NUMBER it loses a decade and looks like a number: `S62501` holding 25
+    gallons drew `SUDDEN LOSS LIMIT: 00002`, which a technician reads as
+    two. The console proves a 24-column spelling of the same fact exists on
+    its own paper, at the same instant -- `SUDDEN LOSS LIMIT:    25` -- so
+    the usual answer, that shortening the line would be inventing console
+    text, does not apply here.
+
+    A leading zero is the one thing on such a line that can go without
+    anything being lost, and only as many of them go as the overrun needs,
+    so the field keeps as much of the manual's own mask as the glass has
+    room for. A value that is not a zero-padded whole number is left alone
+    and clipped as before, which is A52's standing rule. FIDELITY F16.
+    """
+    if over <= 0 or not re.fullmatch(r"0+[0-9]+", value):
+        return value
+    zeros = len(value) - len(value.lstrip("0"))
+    return value[min(over, zeros):]
 
 
 def device_code(function_name):
@@ -154,8 +186,8 @@ def named_head(console, head, device, letter):
             head = head.replace(placeholder, label)
         # 577013-800 Rev P Figure 7 draws the air flow meter's screen as
         # "LABEL: (AFM label)": the parenthetical is the label the site
-        # programmes, and a console shows it rather than the word. **It is
-        # the SMART SENSOR's label**, S722, because that is what an air
+        # programmes, and a console shows it rather than the word. It is
+        # the SMART SENSOR's label, S722, because that is what an air
         # flow meter and a vapour pressure sensor are -- SMART SENSOR SETUP
         # names the device and this screen reads the name. Two settings of
         # their own used to stand in for it, written by nothing and so
@@ -252,7 +284,7 @@ def stored(console, step, device, field=None):
     code = code_for(console, step, device)
     if not code:
         return ""
-    raw = console.values.get(code.upper())
+    raw = console.stored(code)
     if raw is None:
         return ""
     f = field if field is not None else field_of(console, step, device)
@@ -316,7 +348,7 @@ def shown(console, field, held):
             # word: an unset baud rate is "01200" in the field and 1200 on
             # the display.
             #
-            # **Off `choices_of`, not off `f["choices"]`.** A field whose
+            # Off `choices_of`, not off `f["choices"]`. A field whose
             # list belongs to the CONSOLE rather than to the field --
             # `choices_from` -- has no `choices` to walk, so its default
             # fell through and the raw wire value reached the glass:
@@ -513,7 +545,13 @@ def setup_lines(console, function, step, device=1, chart_open=True):
             return [f"T{device}: {branch}"[:COLS], "PRESS <ENTER>"]
         if step["point"] == "height":
             return [head[:COLS], "HEIGHT : " + masks.apply("000000", "0")]
-        return [head[:COLS], "0.00 INCH VOL: " + masks.apply("000000", "0")]
+        # `88.32 INCH VOL : 000000`, 576013-623 Rev AN p.7-8, which draws the
+        # ADD screen with the space before the colon five times on the page.
+        # The VIEW screen on p.7-9 is flush -- `92.16 INCH VOL: 009800` -- and
+        # that flush spelling is what this line used to carry, which is the
+        # prefix collision M4 named. The height is the panel's, so away from
+        # the panel there is none and the field heads at 0.00. FIDELITY F15.
+        return [head[:COLS], "0.00 INCH VOL : " + masks.apply("000000", "0")]
 
     if step.get("profile"):
         from .console import Console as _C

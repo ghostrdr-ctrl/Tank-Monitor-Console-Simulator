@@ -55,6 +55,12 @@
    "page": 52,
    "seen": "1 = 162262 2 = 20131"
   },
+  "# DEG F": {
+   "how": "exact",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 12,
+   "seen": "75.05 DEG F"
+  },
   "# DIAG PRESS <PRINT>": {
    "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
@@ -101,7 +107,7 @@
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 88,
-   "seen": " 20.368 IN        61.0 F"
+   "seen": " 12.000 IN        61.0 F"
   },
   "# IN DIAM. LEN: #": {
    "how": "exact",
@@ -109,11 +115,17 @@
    "page": 131,
    "seen": "1.5 IN DIAM. LEN: 000"
   },
-  "# INCH VOL: #": {
+  "# INCH VOL : #": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 98,
-   "seen": "0.00 INCH VOL: 000000"
+   "page": 99,
+   "seen": "0.00 INCH VOL : 000000"
+  },
+  "# LB/KGAL": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "0.05 LB/KGAL"
   },
   "# PERCENT": {
    "how": "exact",
@@ -173,7 +185,7 @@
    "how": "table",
    "manual": "576013-623_AN_SystemSetup",
    "page": 96,
-   "seen": "75% VOLUME: 0"
+   "seen": "75% VOLUME: 000000"
   },
   "#, #, #, #, #": {
    "how": "exact",
@@ -469,12 +481,6 @@
    "page": 48,
    "seen": "ANN: NO TEST DATA AVAILA"
   },
-  "ARCHIVE": {
-   "how": "exact",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 38,
-   "seen": "ARCHIVE"
-  },
   "ARCHIVE DIAGNOSTIC": {
    "how": "suffix",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
@@ -492,6 +498,12 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 64,
    "seen": "ARE YOU SURE? : YES"
+  },
+  "ARE YOU SURE? NO": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 212,
+   "seen": "ARE YOU SURE? NO"
   },
   "ARE YOU SURE?: NO": {
    "how": "exact",
@@ -833,7 +845,7 @@
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 45,
-   "seen": "BEGIN INVENTORY: 2500"
+   "seen": "BEGIN INVENTORY: 0"
   },
   "BIR DIAGNOSTICS": {
    "how": "exact",
@@ -869,7 +881,7 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 60,
-   "seen": "BOARD TEMP  67.8 DEG F"
+   "seen": "BOARD TEMP  71.8 DEG F"
   },
   "BOL": {
    "how": "exact",
@@ -937,6 +949,12 @@
    "page": 103,
    "seen": "CAL UPDATE: IMMEDIATE"
   },
+  "CALB STATUS: FAIL": {
+   "how": "label",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "CALB STATUS: FAIL"
+  },
   "CALCULATED INVNTRY: #": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -948,6 +966,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 101,
    "seen": "CALCULATED INVNTRY: NO D"
+  },
+  "CALIBRATE SMARTSENSOR": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 51,
+   "seen": "CALIBRATE SMARTSENSOR"
   },
   "CATEGORY: OTHER SENSORS": {
    "how": "exact",
@@ -1363,6 +1387,12 @@
    "page": 118,
    "seen": "CURRENT SHFT ADJ VOL: 0"
   },
+  "CURRENT: CLOSED": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "CURRENT: CLOSED"
+  },
   "CUSTOM ALARM LABELS": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -1429,12 +1459,6 @@
    "page": 37,
    "seen": "DATE: 06/15/2026"
   },
-  "DAY OPEN: MMM #, #": {
-   "how": "placeholder",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 102,
-   "seen": "DAY OPEN: JUN 15, 2026"
-  },
   "DAYLIGHT SAVINGS TIME": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -1452,6 +1476,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 42,
    "seen": "DAYS FUEL REMAINING: 2.0"
+  },
+  "DDD OPEN: MMM #, #": {
+   "how": "placeholder",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 102,
+   "seen": "MON OPEN: JUN 15, 2026"
   },
   "DELAY MINUTES: #": {
    "how": "exact",
@@ -1541,7 +1571,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 74,
-   "seen": "DIAL RETRY DELAY: 00"
+   "seen": "DIAL RETRY DELAY: 03"
   },
   "DIAL RETRY NUMBER: #": {
    "how": "exact",
@@ -1621,18 +1651,6 @@
    "page": 56,
    "seen": "E 1: ALARM HISTORY"
   },
-  "E#: DIM ROM CKSUM = PASS": {
-   "how": "state",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "E1: DIM ROM CKSUM = PASS"
-  },
-  "E#: SWARE##": {
-   "how": "state",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "E1: SWARE#330273-002-C"
-  },
   "EDIM ##:": {
    "how": "label",
    "manual": "576013-623_AN_SystemSetup",
@@ -1663,6 +1681,12 @@
    "page": 36,
    "seen": "EDIT/VIEW OR INSERT"
   },
+  "EFFLUENT EMISSIONS": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "EFFLUENT EMISSIONS"
+  },
   "ENABLE: NO": {
    "how": "label",
    "manual": "576013-623_AN_SystemSetup",
@@ -1681,6 +1705,12 @@
    "page": 50,
    "seen": "END DATE"
   },
+  "END EVENT: # GALS": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 57,
+   "seen": "END EVENT: 12 GALS"
+  },
   "END FACTOR: NONE": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -1691,7 +1721,7 @@
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 45,
-   "seen": "END INVENTORY: 2500"
+   "seen": "END INVENTORY: 0"
   },
   "END TIME": {
    "how": "exact",
@@ -1801,11 +1831,29 @@
    "page": 152,
    "seen": "ENTER SERVICE CODE LABEL"
   },
+  "ENTER SERVICE ID": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 41,
+   "seen": "ENTER SERVICE ID"
+  },
+  "ENTER SERVICE ID LABEL": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 41,
+   "seen": "ENTER SERVICE ID LABEL"
+  },
   "ENTER SMARTSENSOR LABEL": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 27,
    "seen": "ENTER SMARTSENSOR LABEL"
+  },
+  "ENTER SPAN REFERENCE": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "ENTER SPAN REFERENCE"
   },
   "ENTER STATION HEADER": {
    "how": "exact",
@@ -1813,11 +1861,11 @@
    "page": 38,
    "seen": "ENTER STATION HEADER"
   },
-  "ENTER TICKET VOLUME": {
+  "ENTER ZERO REFERENCE": {
    "how": "exact",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 23,
-   "seen": "ENTER TICKET VOLUME"
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "ENTER ZERO REFERENCE"
   },
   "ERROR COUNTER: #": {
    "how": "exact",
@@ -1907,7 +1955,13 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 60,
-   "seen": "FLUID TEMP  57.0 DEG F"
+   "seen": "FLUID TEMP  61.0 DEG F"
+  },
+  "FP: #": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 57,
+   "seen": "FP: 01"
   },
   "FP: # M: # =T #": {
    "how": "exact",
@@ -2507,7 +2561,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 109,
-   "seen": "LEAK ALARM LIMIT: 00"
+   "seen": "LEAK ALARM LIMIT: 99"
   },
   "LEAK MIN ANNUAL: #%": {
    "how": "exact",
@@ -2671,6 +2725,12 @@
    "page": 26,
    "seen": "LO 32768.00 HI  8192.00"
   },
+  "LOAD: #%": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "LOAD:       24.9%"
+  },
   "LOCKOUT SCHEDULE": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -2706,6 +2766,24 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 56,
    "seen": "M 1: ALARM HISTORY"
+  },
+  "M#: DIM ROM CKSUM = PASS": {
+   "how": "clip",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": "M1: DIM ROM CKSUM = PASS"
+  },
+  "M#: SWARE##": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": "M1: SWARE#330273-002-C"
+  },
+  "MAG SENSOR": {
+   "how": "exact",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 146,
+   "seen": "MAG SENSOR"
   },
   "MAG SUMP LEAK TEST": {
    "how": "exact",
@@ -2947,29 +3025,23 @@
    "page": 160,
    "seen": "MON DD YYYY HH:MM:SS xM"
   },
+  "NO ACTIVE TANKS": {
+   "how": "photographed",
+   "manual": "photographed 2026-09-10",
+   "page": "a real TLS-350",
+   "seen": "NO ACTIVE TANKS"
+  },
   "NO RESULTS AVAILABLE": {
    "how": "suffix",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 97,
    "seen": "NO RESULTS AVAILABLE"
   },
-  "NO TEST DATA": {
-   "how": "prefix",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 85,
-   "seen": "NO TEST DATA"
-  },
   "NO TEST DATA AVAILABLE": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 85,
    "seen": "NO TEST DATA AVAILABLE"
-  },
-  "NO TEST DATA AVALIABLE": {
-   "how": "exact",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 86,
-   "seen": "NO TEST DATA AVALIABLE"
   },
   "NO VAC TIME: #": {
    "how": "exact",
@@ -3169,11 +3241,11 @@
    "page": 44,
    "seen": "PASS LINE TEST"
   },
-  "PASSIVE # GPH: DISABL": {
-   "how": "label",
+  "PASSIVE # GPH: NO": {
+   "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 133,
-   "seen": "PASSIVE 0.10 GPH: DISABL"
+   "seen": "PASSIVE 0.10 GPH: NO"
   },
   "PC COMM ERRORS = #": {
    "how": "exact",
@@ -3281,7 +3353,7 @@
    "how": "exact",
    "manual": "577013-937_RevJ_ISD_ISO",
    "page": 57,
-   "seen": "PMC VERSION: 01.00"
+   "seen": "PMC VERSION: 01.03"
   },
   "POR= # C= #": {
    "how": "exact",
@@ -3306,6 +3378,12 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 58,
    "seen": "POWER DIAGNOSTIC"
+  },
+  "POWER SIDE DIM ALM: NO": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 83,
+   "seen": "POWER SIDE DIM ALM: NO"
   },
   "PRECISION TEST DURATION": {
    "how": "exact",
@@ -3433,6 +3511,18 @@
    "page": 20,
    "seen": "PRESSURE SENSOR SELECT"
   },
+  "PRESSURE: +#": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "PRESSURE: +00.000"
+  },
+  "PRESSURE: -#": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "PRESSURE: -00.105"
+  },
   "PREVIOUS SHFT ADJ VOL: #": {
    "how": "placeholder",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -3468,12 +3558,6 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 47,
    "seen": "PRINT TC VOLUMES"
-  },
-  "PRIOR DLVY FOR TANK": {
-   "how": "prefix",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 23,
-   "seen": "PRIOR DLVY FOR TANK"
   },
   "PROBE OFFSET: +#": {
    "how": "exact",
@@ -3619,12 +3703,6 @@
    "page": 139,
    "seen": "Q 1: BLEND PARTNERS"
   },
-  "Q #: LINE #": {
-   "how": "label",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 51,
-   "seen": "Q 1: LINE 1"
-  },
   "Q #: PLLD ##": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -3648,6 +3726,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 51,
    "seen": "Q 1:        PSI PUMP OFF"
+  },
+  "Q #: RELAY (IN): ON": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 51,
+   "seen": "Q 1: RELAY (IN): ON"
   },
   "Q #: SNS CNTS #": {
    "how": "exact",
@@ -3703,6 +3787,12 @@
    "page": 56,
    "seen": "r 1: ALARM HISTORY"
   },
+  "R #: PUMP (OUT): OFF": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 51,
+   "seen": "r 1: PUMP (OUT): OFF"
+  },
   "R #: PUMP RELAY #": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -3714,6 +3804,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 81,
    "seen": "R 1: RELAY 1"
+  },
+  "R #: STUCK RELAY: # SE": {
+   "how": "clip",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 51,
+   "seen": "r 1: STUCK RELAY:   0 SE"
   },
   "R #:SELECT ORIENTATION": {
    "how": "exact",
@@ -3762,6 +3858,18 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 50,
    "seen": "RE-DIRECT LOCAL PRINTOUT"
+  },
+  "READ SPAN VALUE": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "READ SPAN VALUE"
+  },
+  "READ ZERO VALUE": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "READ ZERO VALUE"
   },
   "RECON ALM LIMIT:#": {
    "how": "exact",
@@ -3901,6 +4009,12 @@
    "page": 101,
    "seen": "REPORT TYPE: SHIFT"
   },
+  "REQUESTED: CLOSED": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "REQUESTED: CLOSED"
+  },
   "RESET ACCUCHART NO": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
@@ -3947,7 +4061,7 @@
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 82,
-   "seen": "s 1: 6-15-26     12:00PM"
+   "seen": "s 1: 6-15-26      9:10AM"
   },
   "S #: #-#-# # #": {
    "how": "exact",
@@ -4020,6 +4134,12 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 62,
    "seen": "s 1: VACUUM OK"
+  },
+  "S #: VAPOR PRESSURE": {
+   "how": "exact",
+   "manual": "577013-800_RevP_ISD_ISO",
+   "page": 52,
+   "seen": "s 1: VAPOR PRESSURE"
   },
   "S #: WATER ALARM": {
    "how": "exact",
@@ -4201,6 +4321,12 @@
    "page": 136,
    "seen": "SENSOR: NON-VENTED"
   },
+  "SENSORS NOT CONFIGURED": {
+   "how": "photographed",
+   "manual": "photographed 2026-09-10",
+   "page": "a real TLS-350",
+   "seen": "SENSORS NOT CONFIGURED"
+  },
   "SERIAL NUMBER #": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
@@ -4381,6 +4507,12 @@
    "page": 39,
    "seen": "SLOT 9 LINE LEAK"
   },
+  "SLOT # MDIM": {
+   "how": "cage",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": "SLOT 15 MDIM"
+  },
   "SLOT # PUMP RELAY": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
@@ -4391,7 +4523,7 @@
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 15 UNUSED"
+   "seen": "SLOT 16 UNUSED"
   },
   "SLOT # WPLLD AC INT": {
    "how": "cage",
@@ -4465,11 +4597,11 @@
    "page": 22,
    "seen": "SMART SENSOR STATUS"
   },
-  "SN#: DISABLED": {
+  "SN#: #HC# DISABLED": {
    "how": "label",
    "manual": "577013-800_RevP_ISD_ISO",
    "page": 20,
-   "seen": "SN#:            DISABLED"
+   "seen": "SN#: 36463HC001 DISABLED"
   },
   "SOFTWARE # #": {
    "how": "exact",
@@ -4536,6 +4668,12 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 62,
    "seen": "START EVAC HOLD: ALL"
+  },
+  "START EVENT": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 57,
+   "seen": "START EVENT"
   },
   "START IN-TANK LEAK TEST": {
    "how": "exact",
@@ -4793,7 +4931,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 109,
-   "seen": "SUDDEN LOSS LIMIT: 00000"
+   "seen": "SUDDEN LOSS LIMIT: 00009"
   },
   "SYSTEM ALARM HISTORY": {
    "how": "exact",
@@ -4914,6 +5052,18 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 31,
    "seen": "T 1: REGULAR UNLEADED"
+  },
+  "T #: SHIFT TIME #": {
+   "how": "exact",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 45,
+   "seen": "T 1: SHIFT TIME 1"
+  },
+  "T #:MMM #, # #": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:JUN 15, 2026 12:00PM"
   },
   "T#: #": {
    "how": "exact",
@@ -5053,11 +5203,11 @@
    "page": 110,
    "seen": "TANK TILT: +000.00"
   },
-  "TANK#: #": {
+  "TANK#: NONE": {
    "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 148,
-   "seen": "TANK#: 0"
+   "seen": "TANK#: NONE"
   },
   "TANKER LOAD REPORT": {
    "how": "exact",
@@ -5088,6 +5238,12 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 21,
    "seen": "TEMP COMPENSATION"
+  },
+  "TEMPERATURE SENSOR": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "TEMPERATURE SENSOR"
   },
   "TEST ALL TANK:": {
    "how": "exact",
@@ -5178,6 +5334,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 22,
    "seen": "TEST OUTPUT RELAYS"
+  },
+  "TEST PASSED": {
+   "how": "exact",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 82,
+   "seen": "TEST PASSED"
   },
   "TEST RATE: # GAL/HR": {
    "how": "exact",
@@ -5291,7 +5453,7 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 60,
-   "seen": "TOTAL HT      3.6 IN."
+   "seen": "TOTAL HT      13.2 IN."
   },
   "TOTAL MESSAGE: #": {
    "how": "exact",
@@ -5394,12 +5556,6 @@
    "manual": "577013-750_AK_SensorAppGuide",
    "page": 51,
    "seen": "ULTRA/Z-1"
-  },
-  "UNKNOWN": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 209,
-   "seen": "UNKNOWN"
   },
   "V #: ALARM HISTORY": {
    "how": "exact",
@@ -5527,6 +5683,12 @@
    "page": 19,
    "seen": "VAPOR VAC"
   },
+  "VAPOR VALVE POSITION": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 67,
+   "seen": "VAPOR VALVE POSITION"
+  },
   "VARIANCE: # GALS": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -5538,6 +5700,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 101,
    "seen": "VARIANCE: NO DATA AVAILA"
+  },
+  "VEEDER-ROOT POLISHER": {
+   "how": "exact",
+   "manual": "577013-937_RevJ_ISD_ISO",
+   "page": 25,
+   "seen": "VEEDER-ROOT POLISHER"
   },
   "VERSION #": {
    "how": "exact",
@@ -5623,29 +5791,29 @@
    "page": 56,
    "seen": "W 1: LAST READ=19.878 PS"
   },
-  "W #: LINE #": {
-   "how": "label",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 56,
-   "seen": "W 1: LINE 1"
-  },
   "W #: MID TEST (#)": {
    "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 30,
    "seen": "W 1: MID TEST    (--:--)"
   },
-  "W #: P# H# S: TEST COMP": {
-   "how": "label",
+  "W #: P# H# S: PENDING": {
+   "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 33,
-   "seen": "W 1: P1 H0  S: TEST COMP"
+   "seen": "W 1: P0 H0  S: PENDING"
   },
-  "W #: PSI PUMP OFF": {
+  "W #: PUMP OFF": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 56,
-   "seen": "W 1:        PSI PUMP OFF"
+   "seen": "W 1:            PUMP OFF"
+  },
+  "W #: WPLLD ##": {
+   "how": "exact",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 56,
+   "seen": "W 1: WPLLD #1"
   },
   "W #: WPLLD LINE #": {
    "how": "label",
@@ -5753,7 +5921,7 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 60,
-   "seen": "WATER HT      2.4 IN."
+   "seen": "WATER HT      12.0 IN."
   },
   "WATER HT > #": {
    "how": "exact",
@@ -5858,8 +6026,8 @@
    "seen": "WPLLD LINE RESULTS"
   }
  },
- "lines": 976,
- "options": 639,
+ "lines": 1004,
+ "options": 641,
  "options_cited": {
   "S50600=DISABLED": {
    "manual": "576013-610_RevAC_OperatorManual",
@@ -7009,13 +7177,13 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 23
   },
-  "S77E01=DISABLED": {
+  "S77E01=NO": {
    "manual": "576013-610_RevAC_OperatorManual",
-   "page": 17
+   "page": 1
   },
-  "S77E01=ENABLED": {
+  "S77E01=YES": {
    "manual": "576013-610_RevAC_OperatorManual",
-   "page": 20
+   "page": 23
   },
   "S78301=AUTO": {
    "manual": "576013-610_RevAC_OperatorManual",
@@ -7482,6 +7650,14 @@
    "page": 66
   },
   "S88501=US ROBOTICS (UK)": {
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 66
+  },
+  "S88501=VR TLS ANALOG MOD": {
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 66
+  },
+  "S88501=VR TLS GSM MODEM": {
    "manual": "576013-623_AN_SystemSetup",
    "page": 66
   },
@@ -8419,6 +8595,6 @@
   }
  },
  "options_uncited": [],
- "screens": 1055,
+ "screens": 1083,
  "uncited": {}
 }

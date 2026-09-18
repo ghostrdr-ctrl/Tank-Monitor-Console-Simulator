@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The RS-232 interface card, as 576013-635 describes it.
 
 Not the protocol -- that is tested to the last function code elsewhere --
@@ -125,6 +128,58 @@ class CardPresence(unittest.TestCase):
         c.modules = {"probe": 1, "modem": 1}
         h = Handler(c, verbose=False)
         self.assertNotEqual(send(h, b"", b"I10100"), b"")
+
+
+class ADefectIsARefusalNotAHangUp(unittest.TestCase):
+    """`_session` caught `OSError` only, so anything a malformed command made
+    raise inside the handler took the TCP connection down with it, and the
+    tool's next send got `ConnectionAbortedError`."""
+
+    def test_malformed_commands_are_refused(self):
+        h = Handler(Console(), verbose=False)
+        for cmd in ("I21300AB", "I21B00xx", "s68301A100"):
+            self.assertIn(b"9999FF1B", h.handle(SOH + cmd.encode()), cmd)
+
+    def test_the_chart_of_no_tank_is_an_empty_one(self):
+        """A probe card and no tank programmed: `tanks[0]` raised."""
+        out = Handler(Console(), verbose=False).handle(SOH + b"i63B00")
+        self.assertTrue(out.startswith(SOH + b"i63B00"), out)
+
+    def test_the_session_survives_a_handler_that_raises(self):
+        import socket
+        import threading
+        import time
+        from unittest import mock
+        from tls350sim import wire
+        got = []
+        threading.Thread(target=wire.serve,
+                         args=(Console(), "127.0.0.1", 0, False, None),
+                         kwargs={"on_socket": got.append},
+                         daemon=True).start()
+        deadline = time.time() + 5.0
+        while not got and time.time() < deadline:
+            time.sleep(0.01)
+        self.addCleanup(got[0].close)
+        conn = socket.create_connection(
+            ("127.0.0.1", got[0].getsockname()[1]), timeout=5.0)
+        self.addCleanup(conn.close)
+
+        def ask(cmd):
+            conn.sendall(SOH + cmd + chr(13).encode())
+            buf = b""
+            while ETX not in buf.replace(wire.PROBE, b""):
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            return buf.replace(wire.PROBE, b"")
+
+        with mock.patch.object(Handler, "inquire",
+                               side_effect=ZeroDivisionError):
+            first = ask(b"I20100")
+        second = ask(b"I20100")
+        self.assertIn(b"9999FF1B", first)
+        self.assertIn(b"I20100", second)
 
 
 if __name__ == "__main__":

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Ask GitHub whether there is a newer release, and install it if asked to.
 
 Nothing here happens without the user saying so. The check is a single HTTPS
@@ -39,6 +42,8 @@ import urllib.error
 import urllib.request
 
 from . import APP_NAME, __version__
+from . import atomicfile
+from . import exposed
 from . import paths
 
 # The public repository releases are published to. This is the ONE string to
@@ -227,7 +232,18 @@ def download(release, progress=None):
     expected = published_checksum(release)
 
     d = tempfile.mkdtemp(prefix="tmcs-update-")
-    dest = os.path.join(d, release.installer_name)
+    # `installer_name` is whatever the releases API called the asset, and
+    # `os.path.join` obeys it: a name of "..\\..\\evil.exe" walks out of the
+    # temp directory, and an ABSOLUTE name discards `d` altogether and
+    # writes wherever it says. That needs the release to be hostile, which
+    # is a bigger problem than this -- but the difference between "our
+    # release account was compromised" and "our release account was
+    # compromised AND it could write anywhere the user can" is worth one
+    # line. The basename is all this ever wanted.
+    safe = os.path.basename(release.installer_name or "").strip() or "update"
+    if safe in (".", ".."):
+        safe = "update"
+    dest = os.path.join(d, safe)
     try:
         with _open(release.installer_url) as r:
             total = int(r.headers.get("Content-Length") or release.size or 0)
@@ -305,8 +321,10 @@ def _load_settings():
 
 
 def _save_settings(s):
+    if exposed.refused("updater settings"):
+        return
     try:
-        with open(paths.settings_file(), "w", encoding="utf-8") as f:
+        with atomicfile.replacing(paths.settings_file()) as f:
             json.dump(s, f, indent=2)
     except OSError:
         pass                                    # a preference is not worth a crash
@@ -315,10 +333,18 @@ def _save_settings(s):
 def check_on_startup():
     """Whether to look for updates when the program opens. Off by default.
 
+    Always off while exposed, whatever the setting says. The updater
+    fetches over the network and `download()` writes an executable to disk;
+    neither is a thing an unattended honeypot on a public address should be
+    doing on its own, and an exposed instance that reached out on a
+    schedule would also be announcing itself to anyone watching its egress.
+
     Off, because a training tool that phones out on launch without being
     asked is a thing a site's IT department is entitled to be annoyed about.
     The Help menu turns it on.
     """
+    if exposed.writes_frozen():
+        return False
     return bool(_load_settings().get("check_on_startup", False))
 
 

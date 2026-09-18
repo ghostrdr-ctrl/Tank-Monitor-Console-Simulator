@@ -1,9 +1,23 @@
+# Tank Monitor Console Simulator -- a training simulator for TLS-350
+# compatible tank monitor consoles.
+# Copyright (C) 2026 Verbose Software
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Discrete sales: a nozzle lifted, N gallons through one meter, a nozzle
 hung up -- and the alarm a DIM that has stopped reporting them earns.
 
 `meter_flow` is a RATE, gallons an hour, and everything downstream of it
-was written for one: BIR's `_dispense` draws the tank down and books the
-sale, `note_reported` stamps the meter, CSLD's `busy` reads it. A sale is
+was written for one: `draw` takes the fuel out of the tank, BIR's
+`_dispense` books what it took, `note_reported` stamps the meter, CSLD's
+`busy` reads it. A sale is
 the same rate switched on for exactly as long as N gallons take, so it goes
 through the same door and leaves the same records -- a start event, an end
 event with what went out, a stamp on the meter -- and the rate goes back to
@@ -17,7 +31,7 @@ disable this feature." The delay was stored and reached nothing (FIDELITY
 N3a) because nothing was a transaction. A DIM that once reported and has
 been silent for the delay is the condition. BENCH.md D3.
 
-**A sale lifts the line's handle**, which it did not used to. A nozzle is a
+A sale lifts the line's handle, which it did not used to. A nozzle is a
 request to the pump -- 576013-344 Rev H p.5: "If a dispense request occurs
 during any test, the test is aborted and the pump is turned On to commence
 dispensing. The testing will restart from the beginning once dispensing
@@ -120,6 +134,9 @@ class Sales:
         # running fast enough
         self.served = MeterDict()
         self._serving = set()
+        # meter -> gallons that actually LEFT its tank this interval, which
+        # is what `draw` took and what BIR books. See `draw`.
+        self.drawn = MeterDict()
 
     # how far back the spans are worth keeping: CSLD asks about the last
     # twenty-four hours and nothing asks about more
@@ -349,6 +366,47 @@ class Sales:
                 self._serving.discard(meter)
         for meter, gallons in passed.items():
             self.c.meter_flow[meter] = gallons / hours if gallons > 0 else 0.0
+
+    # ---- the fuel itself -------------------------------------------------------
+    def draw(self, hours):
+        """Take this interval's fuel out of the tanks the nozzles are on.
+
+        A dispenser dispenses whether or not the console can account for
+        it. The handle asks the STP for fuel, the probe watches the level
+        fall, and the line test follows the hang-up -- none of which asks
+        whether the BIR key is fitted or a DIM is in the cage. Those decide
+        whether the metered transaction REACHES the console, which is
+        `Bir._dispense`'s business, and it reads what this left in `drawn`
+        rather than moving any fuel of its own.
+
+        This used to live inside BIR, so a console without the key, or
+        without a DIM, moved nothing: the generator sent no car, no handle
+        went up, no pump ran, no gross test followed and the tank never
+        left its number -- on a bench whose whole point is watching those
+        four things happen.
+
+        What CAN stop the fuel is physical: an ISD shutdown has the
+        dispensers off, a line the console shut down has its STP
+        de-energized, and a relay wired to the tank that has dropped out
+        has done the same through the contactor. And a dry tank sells what
+        it has.
+        """
+        self.drawn = MeterDict()
+        if hours <= 0:
+            return
+        shutdown = self.c.isd_shutdown_active()
+        for meter, rate in sorted(self.c.meter_flow.items()):
+            if not rate or shutdown or self.c.dispensing_blocked(meter):
+                continue
+            tank = self.c.meters.get(meter)
+            st = self.c.tank_level.get(tank) if tank else None
+            if st is None:
+                continue
+            gallons = min(rate * hours, st.get("volume", 0.0))
+            if gallons <= 0:
+                continue
+            st["volume"] = max(0.0, st["volume"] - gallons)
+            self.drawn[meter] = gallons
 
     def settle(self):
         """Hang up every nozzle whose gallons are through.

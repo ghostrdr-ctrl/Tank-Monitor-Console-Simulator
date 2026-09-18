@@ -33,7 +33,9 @@
    },
    {
     "text": "DELIVERY",
-    "live": "delivery"
+    "live": "delivery",
+    "print_scope": "device",
+    "print_kind": "increase"
    },
    {
     "text": "DENSITY",
@@ -100,9 +102,16 @@
     "sel_label": "SELECT"
    },
    {
+    "text": "SELECT",
+    "live": null,
+    "dlv": "tank",
+    "print_scope": "device"
+   },
+   {
     "text": "TICKET VOLUME",
     "live": null,
     "dlv": "ticket",
+    "print_scope": "device",
     "when": {
      "sel": "dlv_mode",
      "is": [
@@ -115,17 +124,6 @@
     "live": null,
     "dlv": "bol",
     "print_scope": "device",
-    "when": {
-     "sel": "dlv_mode",
-     "is": [
-      "EDIT/VIEW"
-     ]
-    }
-   },
-   {
-    "text": "PRIOR DLVY FOR TANK",
-    "live": null,
-    "dlv": "prior",
     "when": {
      "sel": "dlv_mode",
      "is": [
@@ -179,7 +177,11 @@
    }
   ],
   "when": {
-   "software": "bir"
+   "software": "bir",
+   "code": "S51C00",
+   "is": [
+    "1"
+   ]
   },
   "print": "deliveries"
  },
@@ -282,17 +284,21 @@
    {
     "text": "BEGINNING INVENTORY",
     "live": "shift_opening",
+    "head": "shift",
     "print_scope": "device",
     "reading": "BEGIN INVENTORY: {}"
    },
    {
     "text": "ENDING INVENTORY",
     "live": "shift_physical",
+    "head": "shift",
     "reading": "END INVENTORY: {}"
    },
    {
     "text": "DELIVERY ADJUSTMENT",
     "live": "shift_deliveries",
+    "head": "shift",
+    "shift_adjust": true,
     "reading": "DLVY ADJUSTMENT: {}",
     "when": {
      "code": "S51C00",
@@ -305,6 +311,7 @@
    {
     "text": "GROSS CHANGE",
     "live": "shift_gross",
+    "head": "shift",
     "reading": "GROSS CHANGE: {}"
    },
    {
@@ -316,9 +323,9 @@
    }
   ],
   "when": {
-   "software": "bir"
+   "shift_times": true
   },
-  "print": "shift"
+  "print": "last_shift"
  },
  {
   "function": "IN-TANK TEST RESULTS",
@@ -387,12 +394,12 @@
    {
     "text": "0.2 gph (0.76 lph) TEST",
     "live": "result_plld_periodic",
-    "head": "Q %d: PLLD #%d"
+    "head": "Q %d: PLLD NUMBER %d"
    },
    {
     "text": "0.1 gph (0.38 lph) TEST",
     "live": "result_plld_annual",
-    "head": "Q %d: PLLD #%d"
+    "head": "Q %d: PLLD NUMBER %d"
    },
    {
     "text": "PRESS PRINT FOR HISTORY",
@@ -411,15 +418,13 @@
     "text": "SELECT LINE",
     "live": null,
     "sel": "line_scope",
-    "choices": [
-     "ALL LINES",
-     "SINGLE LINE"
-    ]
+    "choices_from": "lines"
    },
    {
     "text": "SELECT TEST TYPE",
     "live": null,
     "sel": "line_rate",
+    "rate_gate": true,
     "choices": [
      [
       "3.0 GPH",
@@ -453,10 +458,8 @@
     "text": "SELECT LINE",
     "live": null,
     "sel": "line_scope",
-    "choices": [
-     "ALL LINES",
-     "SINGLE LINE"
-    ]
+    "choices_from": "lines",
+    "enter_steps": true
    },
    {
     "text": "STOP LINE TEST",
@@ -476,7 +479,7 @@
     "text": "3.0 gph (11.3 lph) TEST",
     "live": "result_wplld_gross",
     "print_scope": "device",
-    "head": "W %d: WPLLD NUMBER %d"
+    "head": "W %d: WPLLD #%d"
    },
    {
     "text": "0.2 gph (0.76 lph) TEST",
@@ -505,15 +508,13 @@
     "text": "SELECT LINE",
     "live": null,
     "sel": "line_scope",
-    "choices": [
-     "ALL LINES",
-     "SINGLE LINE"
-    ]
+    "choices_from": "lines"
    },
    {
     "text": "SELECT TEST TYPE",
     "live": null,
     "sel": "line_rate",
+    "rate_gate": true,
     "choices": [
      [
       "3.0 GPH",
@@ -547,10 +548,8 @@
     "text": "SELECT LINE",
     "live": null,
     "sel": "line_scope",
-    "choices": [
-     "ALL LINES",
-     "SINGLE LINE"
-    ]
+    "choices_from": "lines",
+    "enter_steps": true
    },
    {
     "text": "STOP LEAK TEST",
@@ -826,6 +825,9 @@
  {
   "function": "MAG SUMP LK TEST RESULTS",
   "requires": "smart",
+  "when": {
+   "mag_sensor": true
+  },
   "steps": [
    {
     "text": "LAST PASSED TEST",
@@ -841,26 +843,32 @@
     "print_scope": "device"
    }
   ],
-  "print": "sensors:smart"
+  "print": "sump_passed"
  },
  {
   "function": "MAG SUMP LEAK TEST",
   "requires": "smart",
+  "when": {
+   "mag_sensor": true
+  },
   "steps": [
    {
     "text": "HEIGHT AND TEMPERATURE",
     "live": "sump_ht_temp",
-    "head": "device"
+    "head": "device",
+    "print_scope": "device"
    },
    {
     "text": "TEMP RATE",
     "live": "sump_rates",
-    "head": "device"
+    "head": "device",
+    "print_scope": "device"
    },
    {
     "text": "TEST STATUS",
     "live": "sump_status",
-    "head": "device"
+    "head": "device",
+    "print_scope": "device"
    },
    {
     "text": "START MAG SUMP LEAK TEST",
@@ -878,7 +886,7 @@
     "action": "sump:stop"
    }
   ],
-  "print": "sensors:smart"
+  "print": "sump_test"
  },
  {
   "function": "SMART SENSOR STATUS",

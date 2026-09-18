@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The front panel, driven by its own key handlers.
 
 Needs a display, so it skips itself where there is none.
@@ -19,6 +22,7 @@ import struct
 import sys
 import time
 import unittest
+import unittest.mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -359,12 +363,19 @@ class Panel(unittest.TestCase):
         PRESS <STEP> TO CONTINUE, which is why this asserts the pair rather
         than a literal: Operating Mode draws some of them bare ("SINGLE
         TANK", "3.0 GPH") and Reconciliation Mode words its own ("SELECT
+        TANK") and Reconciliation Mode words its own ("SELECT
         SHIFT: CURRENT").
+
+        **Except on the two pressure STOP walks, where the page says ENTER
+        goes on**: "press ENTER or STEP. When you press ENTER or STEP, the
+        system displays the message: STOP LINE TEST: ALL LINES", 576013-610
+        Rev AC p.11-4, and p.12-4 for WPLLD. Those land on the next step.
+        FIDELITY O24.
         """
         from tls350sim.ui import CONT_STEP, MODES
         self.app.mode = MODES.index("NORMAL")
         self.app._entered = True
-        seen = 0
+        seen = onward = 0
         for i, fn in enumerate(self.app.functions()):
             self.app.func = i
             for j, st in enumerate(self.app.steps()):
@@ -375,10 +386,16 @@ class Panel(unittest.TestCase):
                 self.app._render()
                 shown = self.app._lines()[1]
                 self.app.k_enter()
+                if st.get("enter_steps"):
+                    self.assertEqual(self.app.step, j + 1, fn["function"])
+                    self.assertIsNone(self.app.confirm, fn["function"])
+                    onward += 1
+                    continue
                 self.assertEqual(self.app._lines(), [shown, CONT_STEP],
                                  f"{fn['function']} / {st['text']}")
                 seen += 1
         self.assertGreater(seen, 5)
+        self.assertEqual(onward, 2)
 
     def test_a_typed_duration_is_confirmed_the_same_way(self):
         """p.20-2 confirms it as `DURATION: (Time)` over PRESS <STEP> TO
@@ -694,6 +711,202 @@ class Panel(unittest.TestCase):
         self.app.k_enter()
         self.assertEqual(self.app._lines()[1], "PRESS <STEP> TO CONTINUE")
         self.assertTrue(self.app._lines()[0].startswith("Q "))
+
+    def _line_walk(self, function):
+        """Stand on a line test function's own screen in Operating Mode."""
+        from tls350sim.ui import MODES, HEADER
+        self.app.msg = None
+        self.app.confirm = None
+        self.app.mode = MODES.index("NORMAL")
+        self.app._entered = True
+        names = [f["function"] for f in self.app.functions()]
+        self.app.func = names.index(function)
+        self.app.step = HEADER
+        self.app._render()
+        return self.app
+
+    def test_select_line_offers_the_site_s_lines(self):
+        """576013-610 Rev AC p.11-5: "When you press CHANGE, the system
+        displays the message: SELECT LINE / Q#: PLLD #X. Press ENTER. To
+        select a different line, press CHANGE until you display the line you
+        want to select".
+
+        It offered ALL LINES and SINGLE LINE -- chapter 13's VLLD words --
+        and took the line from TANK/SENSOR, which walked on to a sixth line
+        on a two-line site. The operating-mode audit's OP13; FIDELITY O24.
+        """
+        self._program_two_lines()
+        for function in ("START PRESSURE LINE TEST",
+                         "STOP PRESSURE LINE TEST"):
+            app = self._line_walk(function)
+            app.sel["line_scope"] = "ALL LINES"
+            app.k_step()
+            seen = []
+            for _ in range(3):
+                app.k_change()
+                seen.append(app._lines())
+            self.assertEqual(seen, [["SELECT LINE", "Q 1: PLLD #1"],
+                                    ["SELECT LINE", "Q 2: PLLD #2"],
+                                    ["SELECT LINE", "ALL LINES"]], function)
+
+    def test_the_wireless_walk_picks_its_own_lines(self):
+        """p.12-5 draws `SELECT LINE / W#:WPLLD #X`, and then `STOP LEAK
+        TEST: LINE(#)`."""
+        for n in (1, 2):
+            self.c.values[f"S7A1{n:02d}"] = f"{n:02d}1"
+        app = self._line_walk("STOP WPLLD LINE TEST")
+        app.k_step()
+        app.k_change()
+        self.assertEqual(app._lines(), ["SELECT LINE", "W 1: WPLLD #1"])
+        app.k_enter()
+        self.assertEqual(app._lines(), ["STOP LEAK TEST: LINE 1",
+                                        "PRESS <ENTER>"])
+
+    def test_enter_on_the_stop_picker_goes_on_to_the_stop_screen(self):
+        """p.11-4: "To stop PLLD tests on all lines, press ENTER or STEP.
+        When you press ENTER or STEP, the system displays the message: STOP
+        LINE TEST: ALL LINES / PRESS <ENTER>", and p.11-5 the same once a
+        line is picked. ENTER drew an acknowledgement no stop page has."""
+        self._program_two_lines()
+        app = self._line_walk("STOP PRESSURE LINE TEST")
+        app.k_step()
+        app.k_enter()
+        self.assertEqual(app._lines(), ["STOP LINE TEST: ALL LINE",
+                                        "PRESS <ENTER>"])
+        app = self._line_walk("STOP PRESSURE LINE TEST")
+        app.k_step()
+        app.k_change()
+        app.k_change()
+        app.k_enter()
+        self.assertEqual(app._lines(), ["STOP LINE TEST: LINE 2",
+                                        "PRESS <ENTER>"])
+
+    def test_a_picked_line_is_the_only_line_started(self):
+        """The START walk keeps its acknowledgement -- "CHANGE, then ENTER to
+        select a single line, then press STEP", p.11-3 -- and starts the line
+        it names."""
+        self._program_two_lines()
+        app = self._line_walk("START PRESSURE LINE TEST")
+        app.k_step()
+        app.k_change()
+        app.k_change()
+        app.k_enter()
+        self.assertEqual(app._lines(), ["Q 2: PLLD #2",
+                                        "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        app.k_step()
+        self.assertEqual(app._lines(), ["START LINE TEST: LINE 2",
+                                        "PRESS <ENTER>"])
+        app.k_enter()
+        self.assertEqual(app._lines()[0], "Q 2: RUNNING PUMP")
+        self.assertEqual([n for n in range(1, 7)
+                          if self.c.lines.line("plld", n).running()], [2])
+
+    def test_stopping_one_line_leaves_select_line_on_the_next_in_test(self):
+        """p.11-5: "Press ENTER to stop the PLLD test on the selected line.
+        The system stops the test and advances to the next line in test." """
+        self._program_two_lines()
+        self.assertTrue(self._to_line_test_enter())
+        self.app.k_enter()
+        app = self._line_walk("STOP PRESSURE LINE TEST")
+        app.k_step()
+        app.k_change()
+        app.k_enter()
+        app.k_enter()
+        self.assertEqual(app._lines(), ["Q 1: TEST ABORTED",
+                                        "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        self.assertEqual(app._lines(), ["SELECT LINE", "Q 2: PLLD #2"])
+        self.assertFalse(self.c.lines.line("plld", 1).running())
+        self.assertTrue(self.c.lines.line("plld", 2).running())
+
+    def test_tank_sensor_on_a_stop_walk_stays_on_the_site(self):
+        """`STOP LINE TEST: LINE 6` on a site with two lines: the six START
+        and STOP walks were missing from `CONFIG_OF`, so TANK/SENSOR went
+        round every position the card has. OP13."""
+        self._program_two_lines()
+        app = self._line_walk("STOP PRESSURE LINE TEST")
+        app.k_step()
+        app.k_change()
+        app.k_enter()
+        heads = []
+        for _ in range(3):
+            app.k_tank()
+            heads.append(app._lines()[0])
+        self.assertEqual(heads, ["STOP LINE TEST: LINE 2",
+                                 "STOP LINE TEST: LINE 1",
+                                 "STOP LINE TEST: LINE 2"])
+
+    def test_a_rate_nothing_enables_is_not_offered(self):
+        """p.11-3: "If your system does not have 0.2 or 0.1 gph test
+        options, you will not see these selections", and a rate Disabled in
+        the line's test schedule "you can not start ... manually".
+        576013-623 Rev AN p.10-4: "Disabled is the default setting". All
+        three were offered on every console. FIDELITY O24."""
+        self._program_two_lines()
+
+        def offered():
+            app = self._line_walk("START PRESSURE LINE TEST")
+            app.k_step()
+            app.k_step()
+            seen = [app._lines()[1]]
+            for _ in range(3):
+                app.k_change()
+                seen.append(app._lines()[1])
+            return sorted(set(seen))
+        self.assertEqual(offered(), ["3.0 GPH"])
+        self.c.values["S78C01"] = "013"      # 0.20 GPH TEST: MANUAL
+        self.c.values["S78301"] = "012"      # 0.10 GPH TEST: AUTO
+        self.assertEqual(offered(), ["0.1 GPH", "0.2 GPH", "3.0 GPH"])
+        self.c.software["plld010"] = False
+        self.assertEqual(offered(), ["0.2 GPH", "3.0 GPH"])
+
+    def test_all_lines_starts_a_rate_only_where_it_is_enabled(self):
+        """ALL LINES offers 0.2 GPH when one of its lines allows it, and
+        starts it on that one."""
+        self._program_two_lines()
+        self.c.values["S78C01"] = "013"
+        app = self._line_walk("START PRESSURE LINE TEST")
+        app.k_step()
+        app.k_step()
+        app.k_change()
+        self.assertEqual(app._lines(), ["SELECT TEST TYPE", "0.2 GPH"])
+        app.k_enter()
+        app.k_step()
+        app.k_enter()
+        self.assertEqual(self.c.lines.line("plld", 1).rate_key, "periodic")
+        self.assertFalse(self.c.lines.line("plld", 2).running())
+
+    def test_a_console_with_no_tank_says_so_on_the_function_s_screen(self):
+        """Photographed on a real TLS-350 with its cards fitted and nothing
+        programmed: `IN-TANK INVENTORY` over `NO ACTIVE TANKS`. This drew
+        PRESS <STEP> TO CONTINUE and then walked four tanks nobody had
+        programmed. CLOSED U18."""
+        self.c.tank_level.clear()
+        for code in ("S60201", "S60A01"):
+            self.c.values.pop(code, None)
+        app = self._line_walk("IN-TANK INVENTORY")
+        self.assertEqual(app._lines(), ["IN-TANK INVENTORY", "NO ACTIVE TANKS"])
+        app.k_step()
+        self.assertEqual(app._lines(), ["IN-TANK INVENTORY", "NO ACTIVE TANKS"])
+        self.c.values["S60101"] = "011"
+        app._render()
+        self.assertEqual(app._lines()[1], "PRESS <STEP> TO CONTINUE")
+
+    def test_a_console_with_no_pressure_line_says_so(self):
+        """The same glass: `PRESSURE LINE RESULTS`, `START PRESSURE LINE
+        TEST` and `STOP PRESSURE LINE TEST`, each over `SENSORS NOT
+        CONFIGURED`, on a console with a PLLD card and no line. CLOSED U18."""
+        for function in ("PRESSURE LINE RESULTS", "START PRESSURE LINE TEST",
+                         "STOP PRESSURE LINE TEST"):
+            app = self._line_walk(function)
+            self.assertEqual(app._lines(), [function, "SENSORS NOT CONFIGURED"])
+            app.k_step()
+            self.assertEqual(app._lines(), [function, "SENSORS NOT CONFIGURED"],
+                             function)
+        self._program_two_lines()
+        app = self._line_walk("PRESSURE LINE RESULTS")
+        self.assertEqual(app._lines()[1], "PRESS <STEP> TO CONTINUE")
 
     def test_a_short_date_is_refused_and_not_reinterpreted(self):
         """Reported from the bench: entering a date put the year's digits
@@ -2841,6 +3054,16 @@ class Panel(unittest.TestCase):
                     except Exception as exc:
                         crashed.append(f'{f["function"]} step {step}: {exc}')
                         continue
+                    if lines is None:
+                        # "If none exist, there will be no printout":
+                        # Figure 6-3, of SERVICE REPORT's own screen with an
+                        # empty service log, and of nothing else. FIDELITY
+                        # D24.
+                        if (f["function"], step) != ("SERVICE REPORT",
+                                                     HEADER):
+                            crashed.append(f'{f["function"]} step {step}: '
+                                           'printed nothing')
+                        continue
                     body = chr(10).join(str(l) for l in lines)
                     if "SYSTEM STATUS REPORT" in body:
                         wrong.append(f'{f["function"]} step {step}')
@@ -3048,6 +3271,9 @@ class Panel(unittest.TestCase):
         # {the literal on the glass: the page that draws it}
         DRAWN = {
             "INVALID INSERT": "576013-610 Rev AC p.5-2",
+            # TANK/SENSOR once no tank test is left running: "If all active
+            # tests are stopped, the system displays the message"
+            "LEAK TEST NOT ACTIVE": "576013-610 Rev AC p.21-1, p.21-2",
             # the OTHER of the two error messages the manuals name,
             # on the same page and in the same sentence shape: "the
             # error message, 'DATE IS OUT OF RANGE,' will appear"
@@ -4543,6 +4769,9 @@ class Panel(unittest.TestCase):
         were reading -- on hardware, from a screen that cannot do it, and a
         3.0 gph failure shuts a pump down. FIDELITY O15.
         """
+        # a line to read, or the function's own screen is `SENSORS NOT
+        # CONFIGURED` and there is nothing behind it (CLOSED U18)
+        self._program_two_lines()
         app = self._operating("PRESSURE LINE RESULTS")
         app.k_step()
         before = app._lines()
@@ -4588,6 +4817,7 @@ class Panel(unittest.TestCase):
         own status: p.11-4 `Q #: RUNNING PUMP` / `PRESS <STEP> TO
         CONTINUE`. Different chapters, different cards, different answers
         -- so the VLLD exception above must not reach these."""
+        self._program_two_lines()        # CLOSED U18
         for function, want in (("START PRESSURE LINE TEST",
                                 "Q 1: RUNNING PUMP"),
                                ("START WPLLD LINE TEST", "W 1: TEST PENDING")):
@@ -4798,18 +5028,16 @@ class Panel(unittest.TestCase):
             self.assertEqual(app._lines(), [want, "PRESS <ENTER>"], want)
 
 
-if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    # ---- a ticket reaches the book -------------------------------------------
+    # A ticket typed at DELIVERY MAINTENANCE wrote `record.ticket` and never
+    # told BIR, so the reconciliation's TICKETED column stayed at zero however
+    # many tickets were entered. BENCH.md T3.
+    #
+    # These two were a class of their own, `TheTicketReachesTheBook(Panel)`,
+    # which inherited every one of Panel's 214 tests and ran them all a second
+    # time. A test that wants the shared window is a method of Panel.
 
-
-@unittest.skipUnless(HAVE_TK, "no display")
-@unittest.skipUnless(HAVE_TK, "no display")
-class TheTicketReachesTheBook(Panel):
-    """A ticket typed at DELIVERY MAINTENANCE wrote `record.ticket` and
-    never told BIR, so the reconciliation's TICKETED column stayed at zero
-    however many tickets were entered. BENCH.md T3."""
-
-    def a_drop(self):
+    def _a_ticketed_drop(self):
         c = self.c
         c.values["S61001"] = "0101"
         c.values["S51C00"] = "1"
@@ -4827,7 +5055,7 @@ class TheTicketReachesTheBook(Panel):
         return record
 
     def test_the_ticket_is_booked_and_a_correction_corrects(self):
-        record = self.a_drop()
+        record = self._a_ticketed_drop()
         app = self.app
         app.device = 1
         app.buf, app.editing = "3050", True
@@ -4838,6 +5066,1303 @@ class TheTicketReachesTheBook(Panel):
         app._enter_delivery({"dlv": "ticket"})
         self.assertEqual(record.ticket, 3000.0)
         self.assertEqual(self.c.bir.current(1)["ticketed"], 3000.0)
+
+    # ---- 2026-09-14: what three review agents found on the panel ------------
+    def test_an_abandoned_archive_confirmation_runs_on_no_later_step(self):
+        """BACKUP off `ARE YOU SURE? : YES` left the job armed, and the next
+        STEP off ANY confirmation ran it; `armed` and `sure` stayed too, so
+        the other archive step opened already answered YES twice."""
+        from tls350sim.ui import CONT_STEP
+        ran = []
+        self.app._run_archive = lambda what: ran.append(what)
+        try:
+            app = self._setup_step("ARCHIVE UTILITY", "Save Setup Data")
+            app.k_change()
+            app.k_enter()
+            app.k_step()
+            app.k_change()
+            app.k_enter()                    # ARE YOU SURE? : YES
+            self.assertTrue(app._archive_pending)
+            app.k_backup()
+            self.assertIsNone(app._archive_pending)
+            self.assertFalse(app.armed or app.sure)
+            app.confirm = ["T 1: REGULAR UNLEADED", CONT_STEP]
+            app.k_step()
+            self.assertEqual(ran, [])
+        finally:
+            del self.app._run_archive
+
+    def test_a_key_with_no_character_types_nothing(self):
+        """Shift, Ctrl, the arrows, Home and End have an empty `char`, and
+        `"" in "-. /:"` is True: each typed nothing over the character under
+        the cursor, and the arrows below could never be reached."""
+        from types import SimpleNamespace
+        app = self.app
+        app.editing, app.buf, app.cur = True, "REGULAR UNLEADED", 0
+        for sym in ("Shift_L", "Control_L"):
+            app._on_key(SimpleNamespace(char="", keysym=sym))
+        self.assertEqual(app.buf, "REGULAR UNLEADED")
+        app._on_key(SimpleNamespace(char="", keysym="Right"))
+        app._on_key(SimpleNamespace(char="", keysym="Right"))
+        self.assertEqual((app.buf, app.cur), ("REGULAR UNLEADED", 2))
+        app._on_key(SimpleNamespace(char="", keysym="Home"))
+        self.assertEqual(app.cur, 0)
+
+    def test_a_letter_in_the_meter_map_is_refused_not_raised(self):
+        """`_enter_map` unpacked the five cells with int()."""
+        app = self.app
+        app.editing, app.buf = True, "3 1 Q 1 1"
+        app._enter_map()
+        self.assertTrue(app.editing)
+
+    def test_the_isd_override_is_left_by_a_key_that_is_not_its_own(self):
+        """ALARM/TEST three times opens it, and MODE, STEP, FUNCTION,
+        BACKUP, TANK/SENSOR and PRINT then did nothing at all."""
+        app = self.app
+        for key, state in ((app.k_mode, "enter"), (app.k_step, "no"),
+                           (app.k_function, "yes"), (app.k_backup, "enter"),
+                           (app.k_tank, "no"), (app.k_print, "enter")):
+            app.isd_override = state
+            key()
+            self.assertIsNone(app.isd_override, key.__name__)
+
+    def test_the_tracker_log_in_is_left_by_mode_and_function(self):
+        """The hint says any key leaves; MODE changed the mode underneath and
+        left `MAINTENANCE TRACKER / DISABLED` on the glass."""
+        app = self.app
+        for key in (app.k_mode, app.k_function):
+            mode = app.mode
+            app.mt_login = "prompt"
+            key()
+            self.assertIsNone(app.mt_login, key.__name__)
+            self.assertEqual(app.mode, mode, key.__name__)
+
+    def test_a_changed_cage_leaves_no_branch_standing(self):
+        """The bench reset `func` and `step` and not `subs`, so STEP stood on
+        a path with no screens under it."""
+        app = self.app
+        app.subs = [0, 1]
+        app.module_vars["vapor"].set(str(self.c.fitted("vapor")))
+        app._set_module("vapor")
+        self.assertEqual(app.subs, [])
+        app.subs = [0, 1]
+        app.software_vars["csld"].set(True)
+        app._set_software("csld")
+        self.assertEqual(app.subs, [])
+        app.subs = [0, 1]
+        app.smart_press_var.set(False)
+        app._set_smart_press()
+        self.assertEqual(app.subs, [])
+
+    def test_any_key_takes_the_maintenance_report_screen_down(self):
+        """`_keyed` cleared `maint_report` and left its two lines in
+        `confirm`, so the glass went on saying PRESS <PRINT> -- in Setup,
+        where the screen underneath draws `confirm`. The resting screen
+        never does, which is why this stands in Setup: on the resting
+        screen the old code passed it too."""
+        from tls350sim.ui import HEADER, MODES
+        app = self.app
+        app.mode = MODES.index("SETUP")
+        app.func, app.step, app._entered = 0, HEADER, True
+        app.maint_report = True
+        app.confirm = ["MAINTENANCE REPORT", "PRESS <PRINT>"]
+        app.k_paper()
+        self.assertNotEqual(app._lines()[:1], ["MAINTENANCE REPORT"])
+
+    def test_the_diagnostic_dump_draws_its_screens_under_a_confirmation(self):
+        """RESET ACCUCHART, CHANGE, ENTER, PRINT gave a header and END:
+        `_lines` drew the confirmation for every step of the walk."""
+        from tls350sim.ui import CONT_STEP, MODES
+        app = self.app
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        if "ACCU_CHART DIAGNOSTICS" not in names:
+            self.skipTest("no AccuChart diagnostics on this console")
+        app.func = names.index("ACCU_CHART DIAGNOSTICS")
+        app.step = 0
+        clean = app._diag_screen_dump("ACCU_CHART DIAGNOSTICS")
+        app.confirm = ["RESET ACCUCHART: YES", CONT_STEP]
+        held = app._diag_screen_dump("ACCU_CHART DIAGNOSTICS")
+        self.assertGreater(len(clean), 6)
+        self.assertEqual(len(held), len(clean))
+        self.assertEqual(app.confirm, ["RESET ACCUCHART: YES", CONT_STEP])
+
+    def test_the_held_lamp_test_outlasts_the_next_poll(self):
+        """`_poll` put the lamps back within 700 ms of the test lighting
+        them, so its 1.2 seconds lasted 0.7 at most."""
+        app = self.app
+        app._lamp_test()
+        app._poll()
+        pending = getattr(app, "_poll_id", None)
+        if pending:
+            app.after_cancel(pending)
+        for key in ("alarm", "warn", "power"):
+            cv, oval, colour = app.led[key]
+            self.assertEqual(cv.itemcget(oval, "fill"), colour, key)
+
+    def test_print_with_the_lever_down_logs_no_print(self):
+        app = self.app
+        self.c.printer_lever_open = True
+        app.logbox.delete("1.0", "end")
+        app.k_print()
+        logged = app.logbox.get("1.0", "end")
+        self.assertIn("feed release lever is down", logged)
+        self.assertNotIn("-- PRINT:", logged)
+
+    def test_backup_into_a_guarded_mode_asks_for_the_code(self):
+        """FIDELITY O20. MODE asked for the code; BACKUP walked in without."""
+        from tls350sim.ui import MODES
+        self.c.values["S50400"] = "123456"
+        app = self.app
+        seen = set()
+        for _ in range(len(MODES) + 1):
+            app.k_backup()
+            name = MODES[app.mode]
+            if name in ("SETUP", "DIAGNOSTIC"):
+                seen.add(name)
+                self.assertTrue(app.locked, name)
+                self.assertEqual(app._lines()[0], "SYSTEM SECURITY")
+            else:
+                self.assertFalse(app.locked, name)
+        self.assertTrue(seen)
+
+    def test_nothing_behind_the_security_prompt_answers_but_the_code(self):
+        """FIDELITY O20. Only ENTER checked `locked`: FUNCTION and STEP
+        walked the functions under the prompt and CHANGE saved a setting."""
+        from tls350sim.ui import MODES
+        self.c.values["S50400"] = "123456"
+        app = self.app
+        for _ in range(len(MODES)):
+            if MODES[app.mode] == "SETUP":
+                break
+            app.k_mode()
+        self.assertTrue(app.locked)
+        where = (app.func, app.step, dict(self.c.values))
+        app.k_function()
+        for _ in range(5):
+            app.k_step()
+        app.k_change()
+        app.k_tank()
+        self.assertTrue(app.locked)
+        self.assertEqual((app.func, app.step, dict(self.c.values)), where)
+
+    def test_the_idle_return_leaves_no_security_prompt(self):
+        """FIDELITY O20. The fifteen-minute return reset the mode and left
+        `locked`, so Operating Mode asked for the code."""
+        import time
+        from tls350sim.ui import MODES
+        self.c.values["S50400"] = "123456"
+        app = self.app
+        app.mode = MODES.index("SETUP")
+        app._guard_mode()
+        self.assertTrue(app.locked)
+        app._last_key = time.time() - 1000.0
+        app._poll()
+        pending = getattr(app, "_poll_id", None)
+        if pending:
+            app.after_cancel(pending)
+        self.assertEqual(MODES[app.mode], "NORMAL")
+        self.assertFalse(app.locked)
+
+    def test_a_warm_boot_lands_on_the_status_display(self):
+        """FIDELITY O21. 576013-637 p.16: after the warm boot screens the
+        display reads the date over ALL FUNCTIONS NORMAL. It went back to
+        the edit it was in when the breaker opened."""
+        from tls350sim.ui import MODES
+        app = self.app
+        app.mode = MODES.index("SETUP")
+        app.editing, app.buf = True, "REGULAR"
+        try:
+            app._boot_sequence("warm")
+            self.assertEqual(MODES[app.mode], "NORMAL")
+            self.assertFalse(app.editing)
+        finally:
+            app._cancel_boot()
+
+    def test_opening_the_breaker_stops_the_boot(self):
+        """FIDELITY O21. The boot was a chain of `after` callbacks nothing
+        cancelled, so `*** SYSTEM RESET ***` printed on a dark console."""
+        app = self.app
+        app._boot_sequence("cold")
+        pending = app._boot_id
+        self.assertTrue(pending)
+        app._sw_breaker.set(False)
+        try:
+            app._set_breaker()
+            self.assertIsNone(app._boot_id)
+            self.assertNotIn(pending, app.tk.call("after", "info"))
+            self.assertFalse(self.c.booting)
+        finally:
+            app._cancel_boot()
+            app._sw_breaker.set(True)
+            self.c.powered = True
+
+    def _mag_sump(self, action=None):
+        """A Mag sensor with twelve inches of water in its sump, and the
+        panel on MAG SUMP LEAK TEST's step for `action`."""
+        self.c.values["S72301"] = "0103"
+        self.c.values["S72201"] = "01SUMP 1".ljust(22)
+        self.c.sumps.pour(1, 12.0)
+        self.operating("MAG SUMP LEAK TEST")
+        if action:
+            self.app.step = [i for i, s in enumerate(self.app.steps())
+                             if s.get("action") == action][0]
+
+    def test_a_mag_sump_test_picks_its_sensor_before_it_runs(self):
+        """576013-610 Rev AC p.24-4: "Press ENTER to test all sensors, or
+        press CHANGE until the desired sensor is displayed: Press ENTER to
+        confirm selection: Press ENTER to begin test". ENTER ran the test on
+        whichever device the panel was on, with no sensor asked for. See
+        FIDELITY U1b."""
+        self._mag_sump("sump:start")
+        self.assertEqual(self.app._lines(),
+                         ["START MAG SUMP LEAK TEST", "PRESS <ENTER>"])
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["SELECT MAG SENSOR", "ALL MAG SENSORS"])
+        self.assertEqual(self.c.sumps.status(1), "00")
+        self.app.k_change()
+        self.assertEqual(self.app._lines(), ["SELECT MAG SENSOR", "s1: SUMP 1"])
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["START LEAK TEST: s 1", "PRESS <ENTER>"])
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["s 1:FILL SUMP", "PRESS <STEP> TO CONTINUE"])
+        self.assertEqual(self.c.sumps.status(1), "02")
+
+    def test_stopping_a_mag_sump_test_that_is_not_running(self):
+        """p.21-1's words for the same key on a tank, where chapter 24 draws
+        none. UNKNOWNS A53."""
+        self._mag_sump("sump:stop")
+        for _press in range(3):
+            self.app.k_enter()
+        self.assertEqual(self.app._lines()[0], "LEAK TEST NOT ACTIVE")
+        self.assertEqual(self.c.sumps.status(1), "00")
+
+    def test_step_leaves_the_sensor_walk_without_running_it(self):
+        self._mag_sump("sump:start")
+        self.app.k_enter()
+        self.app.k_step()
+        self.assertIsNone(self.app.sumpflow)
+        self.assertEqual(self.c.sumps.status(1), "00")
+
+    def test_print_on_the_sump_status_prints_the_test_in_progress(self):
+        """"Press PRINT to printout the status of the current test, if in
+        progress, or the last completed test", p.24-5. All six of the
+        function's screens printed the smart sensor status report."""
+        self._mag_sump()
+        self.c.sumps.start(1)
+        self.app.step = [i for i, s in enumerate(self.app.steps())
+                         if s.get("live") == "sump_status"][0]
+        self.app.k_print()
+        paper = self.app.paper.get("1.0", "end").splitlines()
+        self.assertIn("IN PROGRESS", paper)
+        self.assertIn("STATUS:FILL SUMP", paper)
+
+    def _tank_test_site(self, scope="ALL TANKS", stop_mode="TIMED DURATION"):
+        """Two tanks, and START IN-TANK LEAK TEST on its ENTER step."""
+        from tls350sim import presets
+        presets.load(self.c, "Two-tank retail site")
+        self.c.tick()
+        self.operating("START IN-TANK LEAK TEST")
+        self.app.sel["scope"], self.app.sel["stop_mode"] = scope, stop_mode
+        self.app.step = [i for i, s in enumerate(self.app.steps())
+                         if s.get("action") == "start:tank"][0]
+
+    def test_a_timed_tank_test_confirms_it_is_in_progress(self):
+        """576013-610 Rev AC p.20-2: ENTER, `START IN-TANK LEAK TEST` / `PRESS
+        <STEP> TO CONTINUE`; "Press STEP to continue. The system confirms
+        that the test has started:" `TEST CONTROL: ALL TANKS` / `LEAK TEST
+        IN PROGRESS`. It drew the tank's status line and STEP went to the
+        top of the function. FIDELITY U11."""
+        self._tank_test_site()
+        self.app.k_enter()
+        self.assertTrue(self.c.leaks.active("tank", 1))
+        self.assertEqual(self.app._lines(),
+                         ["START IN-TANK LEAK TEST", "PRESS <STEP> TO CONTINUE"])
+        self.app.k_step()
+        self.assertEqual(self.app._lines(),
+                         ["TEST CONTROL: ALL TANKS", "LEAK TEST IN PROGRESS"])
+
+    def test_a_manual_all_tanks_start_draws_nothing_new(self):
+        """p.20-3: "Press ENTER. The system starts the test and prints a
+        report indicating that the test has started. Press FUNCTION to
+        exit." """
+        self._tank_test_site(stop_mode="MANUAL STOP")
+        before = self.app._lines()
+        self.app.k_enter()
+        self.assertTrue(self.c.leaks.active("tank", 1))
+        self.assertEqual(self.app._lines(), before)
+
+    def test_single_tank_starts_confirm_or_move_on(self):
+        """p.20-5, both halves: a timed test confirms `TEST CONTROL: TANK #`
+        / `TIMED DURATION`; a manual one "will automatically advance to the
+        next tank, displaying the TEST CONTROL: TANK (#) message"."""
+        self._tank_test_site(scope="SINGLE TANK")
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["TEST CONTROL: TANK 1", "TIMED DURATION"])
+        self.c.leaks.stop("tank", 1)
+        self._tank_test_site(scope="SINGLE TANK", stop_mode="MANUAL STOP")
+        self.app.k_enter()
+        self.assertTrue(self.c.leaks.active("tank", 1))
+        self.assertEqual(self.app.device, 2)
+        self.assertEqual(self.app._lines(),
+                         ["TEST CONTROL: TANK 2", "MANUAL STOP"])
+
+    def test_stopping_all_tanks_confirms_the_stop(self):
+        """p.21-1: "The system confirms that the test has stopped:" `LEAK
+        TEST NOT ACTIVE` / `PRESS <FUNCTION> TO CONTINUE`. A stop that
+        worked drew the tank's result, NO TEST DATA AVAILABLE. FIDELITY U9."""
+        self._tank_test_site()
+        self.c.leaks.start("tank", 1, "periodic", 2.0)
+        self.operating("STOP IN-TANK LEAK TEST")
+        self.app.step = len(self.app.steps()) - 1
+        self.app.k_enter()
+        self.assertFalse(self.c.leaks.active("tank", 1))
+        self.assertEqual(self.app._lines()[0], "LEAK TEST NOT ACTIVE")
+
+    def test_stopping_single_tanks_one_at_a_time(self):
+        """p.21-2: `STOP LEAK TEST: TANK #` / `LEAK TEST NOT ACTIVE`, then
+        TANK/SENSOR to the next, and once none is left `LEAK TEST NOT
+        ACTIVE` / `PRESS <FUNCTION> TO CONTINUE`."""
+        self._tank_test_site()
+        self.c.leaks.start("tank", 1, "periodic", 2.0)
+        self.c.leaks.start("tank", 2, "periodic", 2.0)
+        self.operating("STOP IN-TANK LEAK TEST")
+        self.app.sel["scope"] = "SINGLE TANK"
+        self.app.step = len(self.app.steps()) - 1
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["STOP LEAK TEST: TANK 1", "LEAK TEST NOT ACTIVE"])
+        self.assertTrue(self.c.leaks.active("tank", 2))
+        self.app.k_tank()
+        self.assertEqual(self.app._lines(),
+                         ["STOP LEAK TEST: TANK 2", "PRESS <ENTER>"])
+        self.app.k_enter()
+        self.assertEqual(self.app._lines(),
+                         ["STOP LEAK TEST: TANK 2", "LEAK TEST NOT ACTIVE"])
+        self.app.k_tank()
+        self.assertEqual(self.app._lines()[0], "LEAK TEST NOT ACTIVE")
+
+    def test_a_delivery_insert_names_the_tank_it_is_for(self):
+        """576013-610 Rev AC p.5-2: after `SELECT: INSERT` / `PRESS <STEP> TO
+        CONTINUE`, STEP draws `SELECT: INSERT` / `T 1: UNLEADED GASOLINE`,
+        and TANK/SENSOR picks another tank. No screen in the branch named a
+        tank, so date, time, ticket and BOL were all entered blind; the
+        ticket's own screen is headed with the tank and the date too.
+        FIDELITY U7."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self.c.tick()
+        app = self._operating("DELIVERY MAINTENANCE")
+        app.step = 0
+        app._render()
+        app.k_change()                                  # INSERT
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["SELECT: INSERT", "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        label = self.c.text("602", 1) or ""
+        self.assertEqual(app._lines(),
+                         ["SELECT: INSERT", f"T 1: {label}".rstrip()[:24]])
+        app.k_tank()
+        self.assertTrue(app._lines()[1].startswith("T 2:"), app._lines())
+        app.k_step()
+        self.assertEqual(app._lines()[0], "ENTER DELIVERY DATE")
+        app.step = [i for i, s in enumerate(app.steps())
+                    if s.get("dlv") == "insert"][0]
+        app._render()
+        self.assertTrue(app._lines()[0].startswith("T 2:"), app._lines())
+        self.assertEqual(len(app._lines()[0]), 24, app._lines())
+        self.assertEqual(app._lines()[1], "TICKET VOLUME: 0")
+
+    def _two_days_of_deliveries(self):
+        import time as _time
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self.c.tick()
+        now = _time.mktime(self.c.now())
+        self.c.deliveries.records = {}
+        older = self.c.deliveries.insert(1, now - 2 * 86400, 1111.0,
+                                         "BOLOLDER")
+        newer = self.c.deliveries.insert(1, now - 86400, 2222.0, "BOLNEWER")
+        self.c.deliveries.insert(2, now - 86400, 3333.0, "BOLTANKTWO")
+        return older, newer
+
+    def test_step_off_a_delivery_s_bol_is_the_delivery_before_it(self):
+        """576013-610 Rev AC p.5-2, after a delivery's BOL: "Press STEP to
+        view the previous delivery for this tank", drawn as the ticket
+        screen again. A screen stood between them reading `PRIOR DLVY FOR
+        TANK` -- the sentence, drawn as a message -- and ENTER on it did
+        the stepping. FIDELITY O7."""
+        older, newer = self._two_days_of_deliveries()
+        app = self._operating("DELIVERY MAINTENANCE")
+        app.k_step()                              # EDIT/VIEW OR INSERT
+        app.k_step()                              # SELECT: EDIT/VIEW / T 1
+        seen = []
+        for _ in range(5):
+            app.k_step()
+            seen.append(app._lines())
+        new = f"T 1:{app._delivery_stamp(newer.end['at'])}"
+        old = f"T 1:{app._delivery_stamp(older.end['at'])}"
+        self.assertEqual(seen[:4], [[new, "TICKET VOLUME: 2222"],
+                                    [new, "BOL: BOLNEWER"],
+                                    [old, "TICKET VOLUME: 1111"],
+                                    [old, "BOL: BOLOLDER"]])
+        # off the oldest one's BOL, round to the function's first screen,
+        # and the next walk starts at the newest again
+        self.assertEqual(seen[4][0], "EDIT/VIEW OR INSERT")
+        app.k_step()
+        app.k_step()
+        self.assertEqual(app._lines(), [new, "TICKET VOLUME: 2222"])
+
+    def test_print_on_delivery_maintenance_follows_the_screen(self):
+        """p.5-3 gives PRINT three scopes on three screens: every tank on
+        the function's own, "all deliveries for the tank shown" on
+        `SELECT: EDIT/VIEW`, and "all deliveries for the day and tank
+        shown" on a delivery's own. It printed a DELIVERY REPORT no page
+        draws, for every tank, wherever it was pressed. FIDELITY O7."""
+        self._two_days_of_deliveries()
+        app = self._operating("DELIVERY MAINTENANCE")
+
+        def printed():
+            _title, lines = app._report()
+            return lines, chr(10).join(lines)
+
+        lines, text = printed()
+        self.assertEqual(lines.count("TICKETED DELIVERY REPORT"),
+                         len(self.c.tank_level))
+        for bol in ("BOLOLDER", "BOLNEWER", "BOLTANKTWO"):
+            self.assertIn(bol, text)
+        app.k_step()
+        app.k_step()                              # the tank shown
+        lines, text = printed()
+        self.assertEqual(lines.count("TICKETED DELIVERY REPORT"), 1)
+        self.assertIn("BOLOLDER", text)
+        self.assertNotIn("BOLTANKTWO", text)
+        app.k_step()                              # the newest delivery
+        lines, text = printed()
+        self.assertIn("BOLNEWER", text)
+        self.assertNotIn("BOLOLDER", text)
+
+    def _two_shifts_run(self):
+        """The truck stop's 06:00 shift and a 14:00 one, the first closed at
+        9,000 gallons in and 8,000 out, and ticketed delivery off so DLVY
+        ADJUSTMENT is on the panel."""
+        import time as _time
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self.c.values["S50202"] = "1400"
+        self.c.values["S51C00"] = "0"
+        self.c.tick()
+        now = _time.mktime(self.c.now())
+        self.c.tank_level[1]["volume"] = 9000.0
+        self.c.shifts.begin(1, now - 7200)
+        self.c.tank_level[1]["volume"] = 8000.0
+        self.c.shifts.begin(2, now - 3600)
+
+    def test_last_shift_inventory_walks_the_shifts(self):
+        """576013-610 Rev AC p.8-1 heads each reading `T #: SHIFT TIME #`,
+        and STEP goes on to "the BEGIN INVENTORY message for the next
+        shift". The head was the tank and its product, over BIR's one
+        shift, and GROSS CHANGE was end less beginning. FIDELITY O2, O22."""
+        self._two_shifts_run()
+        app = self._operating("LAST-SHIFT INVENTORY")
+        seen = []
+        for _ in range(9):
+            app.k_step()
+            seen.append(app._lines())
+        head = "T 1: SHIFT TIME 1"
+        self.assertEqual(seen[0], [head, "BEGIN INVENTORY: 9000"])
+        self.assertEqual(seen[1], [head, "END INVENTORY: 8000"])
+        self.assertEqual(seen[2], [head, "DLVY ADJUSTMENT: 0"])
+        self.assertEqual(seen[3], [head, "GROSS CHANGE: 1000"])
+        self.assertEqual([s[0] for s in seen[4:8]],
+                         ["T 1: SHIFT TIME 2"] * 4)
+        self.assertEqual(seen[8], ["CLOSE CURRENT SHIFT", "CLOSE NOW: NO"])
+
+    def test_a_delivery_adjustment_can_be_typed(self):
+        """p.8-2: "Press CHANGE, then enter the amount of the delivery
+        indicated on the slip ... Press ENTER." It was drawn as a reading
+        and CHANGE did nothing. FIDELITY O2."""
+        self._two_shifts_run()
+        app = self._operating("LAST-SHIFT INVENTORY")
+        for _ in range(3):
+            app.k_step()                          # shift 1's DLVY ADJUSTMENT
+        app.k_change()
+        for ch in "2500":
+            app.k_alnum(ch)
+        app.k_enter()
+        self.assertEqual(app._lines(), ["DLVY ADJUSTMENT: 2500",
+                                        "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        # "the beginning shift inventory, minus the end shift inventory,
+        # plus any ticketed deliveries made during that shift"
+        self.assertEqual(app._lines(), ["T 1: SHIFT TIME 1",
+                                        "GROSS CHANGE: 3500"])
+
+    def test_print_on_last_shift_inventory_is_chapter_eight_s_report(self):
+        """p.8-1: "Press PRINT to print a Last-Shift Inventory Report." It
+        printed SHIFT RECONCILIATION, which is Reconciliation Mode's. The
+        operating-mode audit's OP7; FIDELITY O22."""
+        self._two_shifts_run()
+        app = self._operating("LAST-SHIFT INVENTORY")
+        _title, lines = app._report()
+        self.assertIn("SHIFT STARTING INV #1", lines)
+        self.assertNotIn("SHIFT RECONCILIATION", lines)
+
+    def test_close_current_shift_needs_no_bir_key(self):
+        """p.8-2: "A shift inventory report is printed and the next shift
+        automatically begins when you manually close a shift." It closed
+        BIR's shift instead, and refused on a console without the key."""
+        self._two_shifts_run()
+        self.c.software["bir"] = False
+        app = self._operating("LAST-SHIFT INVENTORY")
+        app.step = [i for i, s in enumerate(app.steps())
+                    if s.get("action") == "close:shift"][0]
+        app._render()
+        app.k_change()
+        app.k_enter()
+        self.assertEqual(self.c.shifts.open["shift"], 1)
+
+    def test_a_line_s_heads_are_the_ones_its_pages_draw(self):
+        """576013-610 Rev AC p.11-1 heads the 3.0 gph result `Q #: PLLD #X`,
+        and p.11-2 heads the 0.2 and 0.1 gph results and the history prompt
+        `Q #: PLLD NUMBER #`. The walk drew `PLLD #` three times and then the
+        line's label, so one line had three names. The operating-mode
+        audit's OP4; FIDELITY O23."""
+        self.c.values["S78201"] = "01" + "LANE 1".ljust(20)
+        app = self._operating("PRESSURE LINE RESULTS")
+        heads = []
+        for _ in range(4):
+            app.k_step()
+            heads.append(app._lines()[0])
+        self.assertEqual(heads, ["Q 1: PLLD #1"] + ["Q 1: PLLD NUMBER 1"] * 3)
+
+    def test_a_wplld_line_s_heads_are_p_12_1_s_and_p_12_2_s(self):
+        """p.12-1 draws the 3.0 gph WPLLD result `W #:WPLLD #X`, and p.12-2
+        the other two and the history prompt `W #: WPLLD NUMBER #`. CLOSED O8
+        read p.12-2 for all three results, so the 3.0 gph head moved with
+        two screens it does not share a page with. FIDELITY O23."""
+        app = self._operating("WPLLD LINE RESULTS")
+        heads = []
+        for _ in range(4):
+            app.k_step()
+            heads.append(app._lines()[0])
+        self.assertEqual(heads,
+                         ["W 1: WPLLD #1"] + ["W 1: WPLLD NUMBER 1"] * 3)
+
+    def test_print_on_delivery_is_the_tank_s_inventory_increase(self):
+        """576013-610 Rev AC p.4-4, on `T 1: (PRODUCT NAME)` / `DELIVERY =
+        XXXXX (UNITS)`: "To print an inventory increase report for the
+        selected tank, press PRINT." It printed the four-tank INVENTORY
+        REPORT. The operating-mode audit's OP10; FIDELITY O23."""
+        import time as _time
+        from tls350sim import delivery
+        now = _time.mktime(self.c.now())
+        run = delivery.Delivery(1, delivery.snapshot(self.c, 1, now - 900))
+        self.c.tank_level[1]["volume"] += 3000.0
+        run.end = delivery.snapshot(self.c, 1, now)
+        self.c.deliveries.records[1] = [run]
+        app = self._operating("IN-TANK INVENTORY")
+        app.step = [i for i, s in enumerate(app.steps())
+                    if s.get("live") == "delivery"][0]
+        app._render()
+        _title, lines = app._report()
+        self.assertIn("INVENTORY INCREASE", lines)
+        self.assertNotIn("INVENTORY REPORT", lines)
+
+    def test_fuel_management_prints_every_product_from_its_own_screen(self):
+        """576013-610 Rev AC p.7-1: "Press PRINT to print a Fuel Management
+        report for all products", and a Short Report is "for all tanks".
+        Both printed the product the panel happened to be on. The
+        operating-mode audit's OP8; FIDELITY O23."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self.c.tick()
+        app = self._operating("FUEL MANAGEMENT")
+        app.device = 1
+
+        def tank_heads(lines):
+            return [l for l in lines if l.startswith("T ") and ":" in l[:5]]
+
+        _title, lines = app._report()
+        self.assertEqual(len(tank_heads(lines)), 4, lines)
+        # one set of seven average-sales rows per product, under its tanks
+        self.assertEqual(len([l for l in lines
+                              if l.startswith("AVG SALES-SUN")]),
+                         len(self.c.fuel_products()))
+        app.k_step()                            # PRINT SHORT REPORT
+        _title, lines = app._report()
+        self.assertEqual(len(tank_heads(lines)), 4, lines)
+        self.assertFalse([l for l in lines if l.startswith("AVG SALES")])
+
+    def test_delivery_maintenance_wants_ticketed_delivery_on(self):
+        """576013-610 Rev AC p.5-1: "Before you use this function, Ticketed
+        Delivery must be enabled in the Setup Mode." It stayed on FUNCTION
+        with the flag off, beside LAST-SHIFT INVENTORY's DLVY ADJUSTMENT,
+        which p.8-2 offers only then -- two ways to record one delivery. The
+        operating-mode audit's OP15; FIDELITY O23."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+
+        def names():
+            return [f["function"] for f in self.c.available_operating()]
+
+        self.assertIn("DELIVERY MAINTENANCE", names())
+        self.c.values["S51C00"] = "0"
+        self.assertNotIn("DELIVERY MAINTENANCE", names())
+
+    def test_calibrating_a_pressure_sensor_on_the_panel(self):
+        """577013-937 Rev J Figure 46, key by key: ENTER into the walk, a
+        typed zero and span, STEP to take each reading, and the status the
+        four values earn. The walk was not there. FIDELITY I11."""
+        from tls350sim.ui import MODES
+        self.c.values["S72301"] = "0102"
+        self.c.values["S72201"] = "01VP: FP1-2".ljust(22)
+        app = self.app
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("SMART SENSOR DIAGNOSTIC")
+        app.step = [i for i, s in enumerate(app.steps())
+                    if s["text"] == "CALIBRATE SMARTSENSOR"][0]
+        self.assertEqual(app._lines(),
+                         ["CALIBRATE SMARTSENSOR", "PRESS <ENTER>"])
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["CALIBRATE SMARTSENSOR",
+                          "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        self.assertEqual(app._lines()[0], "s 1: VAPOR PRESSURE")
+        app.k_step()
+        self.assertEqual(app._lines(),
+                         ["ENTER ZERO REFERENCE", "PRESSURE: +00.000"])
+        app.k_change()
+        app.k_alnum("0")
+        app.k_enter()
+        app.k_step()
+        self.assertEqual(app._lines()[0], "READ ZERO VALUE")
+        app.k_step()                                  # takes the zero
+        self.assertEqual(app._lines()[0], "ENTER SPAN REFERENCE")
+        app.k_change()
+        app.k_alnum("2")
+        app.k_enter()
+        self.assertEqual(app._lines()[1], "PRESSURE: +02.000")
+        app.k_step()
+        self.assertEqual(app._lines()[0], "READ SPAN VALUE")
+        app.k_step()                                  # takes the span
+        self.assertEqual(app._lines(),
+                         ["CALB STATUS: PASS", "PRESS <STEP> TO CONTINUE"])
+        self.assertEqual(len(self.c.calibration_history("smart", 1, 5)), 2)
+
+    def test_an_isd_sensor_prints_its_own_three_diagnostics(self):
+        """577013-800 Rev P p.20-44: PRINT on COMM DATA, CONSTANTS and
+        CHANNELS gives SS COMM DIAG, SS CONSTANTS DIAG and SS CHANNEL DIAG.
+        All three printed the generic sensor status report. FIDELITY I11."""
+        from tls350sim.ui import MODES
+        self.c.values["S72301"] = "0102"
+        self.c.values["S72201"] = "01AFM1   FP1-2".ljust(22)
+        app = self.app
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("SMART SENSOR DIAGNOSTIC")
+        for said, title in (("COMM DATA", "SS COMM DIAG"),
+                            ("CONSTANTS", "SS CONSTANTS DIAG"),
+                            ("CHANNELS", "SS CHANNEL DIAG")):
+            app.step = [i for i, s in enumerate(app.steps())
+                        if (s.get("l2") or "").startswith(said)][-1]
+            app.paper.delete("1.0", "end")
+            app.k_print()
+            self.assertIn(title, app.paper.get("1.0", "end"), said)
+
+    def test_a_third_fueling_point_on_one_afm_has_no_space(self):
+        """577013-937 Rev J Figure 11's third auto-map error, `AFMx No Space
+        for FP` -- "You cannot map more than 2 fueling points (and related
+        hoses) to one AFM" -- and its S arrow back to SELECT HOSE. The flow
+        is painted straight onto the canvas, so the glass is read there
+        rather than off `_lines()`. FIDELITY I11."""
+        app, c = self.app, self.c
+        for _ in range(3):                         # FP 01, 02 and 03
+            hose = c.isd_add_hose()
+            c.set_setting("evr_afm_id", "03001401", hose)
+        c.isd_hose_map.update({1: 1, 2: 2})
+        app.isdflow = {"state": "select", "meter": 3, "idx": 2}   # hose 3
+        app.k_enter()
+        glass = [app.lcd.itemcget(rid, "text").rstrip()
+                 for rid in app._text_ids]
+        self.assertEqual(glass, ["AFM No Space for FP", ""])
+        self.assertNotIn(3, c.isd_hose_map, "mapped anyway")
+        app.k_step()
+        self.assertEqual(app.isdflow["state"], "select")
+
+    def test_print_on_the_repair_menu_is_test_fail_clear_dates(self):
+        """577013-819 Rev F p.35 puts P on CLEAR TEST AFTER REPAIR, "See
+        example printout at right": TEST FAIL CLEAR DATES. FIDELITY I11."""
+        from tls350sim.ui import MODES
+        self.c.set_board("E6")
+        self.c.software["isd"] = True
+        self.c.modules["smart"] = 1
+        app = self.app
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("ISD DIAGNOSTIC")
+        app.step = 0
+        app.paper.delete("1.0", "end")
+        app.k_print()
+        self.assertIn("TEST FAIL CLEAR DATES", app.paper.get("1.0", "end"))
+
+    def test_print_on_pmc_diagnostic_is_the_pmc_diagnostics_report(self):
+        """577013-937 Rev J Figures 48 and 49: "Prints out a copy of the PMC
+        Diagnostic report". It printed the function's screens. FIDELITY I11."""
+        from tls350sim.ui import MODES
+        self.c.set_board("E6")
+        self.c.software["isd"] = True
+        self.c.modules["smart"] = 1
+        self.c.values["SV4000"] = "01"
+        app = self.app
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("PMC DIAGNOSTIC")
+        app.step = 0
+        app.paper.delete("1.0", "end")
+        app.k_print()
+        text = app.paper.get("1.0", "end")
+        self.assertIn("PMC DIAGNOSTICS", text)
+        self.assertIn("VP STATE OFF", text)
+
+    def _pmc_walk(self, processor):
+        from tls350sim.ui import MODES
+        self.c.set_board("E6")
+        self.c.software["isd"] = True
+        self.c.modules["smart"] = 1
+        self.c.values["SV4000"] = processor
+        app = self.app
+        app.reset_panel()
+        app.mode = MODES.index("DIAGNOSTIC")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("PMC DIAGNOSTIC")
+        app.step = 0
+        return app
+
+    def test_a_polishers_pmc_menu_is_figure_49s(self):
+        """577013-937 Rev J Figure 49: the load and the effluent, then the
+        mode, the valve's CURRENT before REQUESTED, the temperature, and a
+        CLEAR TEST AFTER REPAIR branch of its own. FIDELITY I11."""
+        app = self._pmc_walk("05")
+        steps = app.steps()
+        self.assertEqual([s.get("text") for s in steps], [
+            "PMC VERSION: 01.03", "VAPOR PRESSURE", "VEEDER-ROOT POLISHER",
+            "EFFLUENT EMISSIONS", "VAPOR PROCESSOR MODE",
+            "VAPOR VALVE POSITION", "VAPOR VALVE POSITION",
+            "TEMPERATURE SENSOR", "CLEAR TEST AFTER REPAIR"])
+        self.assertEqual([s.get("l2") for s in steps[5:7]],
+                         ["CURRENT: CLOSED", "REQUESTED: CLOSED"])
+        app.step = len(steps) - 1
+        app.k_enter()
+        self.assertEqual(app._lines()[0], "PROCESSOR STATUS TEST")
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["CLEAR TEST AFTER REPAIR", "ARE YOU SURE? NO"])
+        app.k_change()
+        self.assertEqual(app._lines()[1], "ARE YOU SURE? YES")
+        app.k_enter()
+        self.assertEqual(self.c.isd_clears[0]["test"], "03")
+
+    def test_a_membranes_pmc_menu_is_figure_48s(self):
+        """Figure 48: MODE, STATE and HYDROCARBON SENSOR, and no repair
+        branch -- the polisher's screens are not on it."""
+        app = self._pmc_walk("01")
+        texts = [s.get("text") for s in app.steps()]
+        self.assertEqual(texts, ["PMC VERSION: 01.03", "VAPOR PRESSURE",
+                                 "VAPOR PROCESSOR MODE",
+                                 "VAPOR PROCESSOR STATE",
+                                 "HYDROCARBON SENSOR"])
+
+
+    # ---- the diagnostic-mode audit, 576013-818 Rev AB chapter 6 ----------
+    def _stand_in_diag(self, function, step=0):
+        """Stand in Diagnostic Mode on that function's step, or its
+        function screen when `step` is HEADER."""
+        from tls350sim.ui import MODES
+        self.app.mode = MODES.index("DIAGNOSTIC")
+        self.app._entered = True
+        self.app.confirm = None
+        names = [f["function"] for f in self.app.functions()]
+        self.app.func = names.index(function)
+        self.app.step = step
+        self.app.sub = None
+        self.app._render()
+        return self.app
+
+    def test_a_diagnostic_walks_the_lines_the_results_screen_walks(self):
+        """576013-818 Rev AB p.6-1: "Your system will display only the
+        diagnostic functions of installed and configured modules and
+        options." The truck stop programs four lines on a six-input card;
+        PRESSURE LINE RESULTS walked four and PRESSURE LINE LEAK DIAG six,
+        one keypress apart. FIDELITY D21."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self._stand_in_diag("PRESSURE LINE LEAK DIAG")
+        diag = self.app._devices()
+        self.operating("PRESSURE LINE RESULTS")
+        self.assertEqual(diag, self.app._devices())
+        self.assertEqual(diag, [1, 2, 3, 4])
+
+    def test_the_csld_month_is_one_screen_that_change_turns(self):
+        """576013-610 Rev AC p.27-3: "Press CHANGE, then ENTER to access
+        the previous month's report", drawn as `SELECT: PREVIOUS MONTH`
+        over `PRESS <STEP> TO CONTINUE`, and STEP to `T #: (Product Label)`
+        over `PRV CSLD MONTHLY <PRINT>`. CHANGE did nothing, the two months
+        were STEP screens, `T #:` reached the glass and PRINT printed CSLD
+        TEST RESULTS for every tank. FIDELITY D23."""
+        from tls350sim import presets
+        presets.load(self.c, "Compliance site, CSLD and sensors")
+        app = self._stand_in_diag("CSLD DIAGNOSTICS")
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["CSLD MONTHLY REPORT", "SELECT: CURRENT MONTH"])
+        app.k_change()
+        self.assertEqual(app._lines(),
+                         ["CSLD MONTHLY REPORT", "SELECT: PREVIOUS MONTH"])
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["SELECT: PREVIOUS MONTH", "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        self.assertEqual(app._lines(),
+                         [f"T 1: {self.c.text('602', 1)}"[:24],
+                          "PRV CSLD MONTHLY <PRINT>"])
+        app.k_print()
+        paper = app.paper.get("1.0", "end")
+        self.assertIn("PREVIOUS MONTH", paper)
+        self.assertNotIn("CSLD TEST RESULTS", paper)
+        app.k_tank()
+        self.assertEqual(app._lines()[0], f"T 2: {self.c.text('602', 2)}"[:24])
+
+    def test_the_service_report_screen_prints_the_log_or_nothing(self):
+        """576013-818 Rev AB Figure 6-3, on the function's own screen:
+        "Press Print to printout a list of the 25 most recent services
+        codes entered. If none exist, there will be no printout." It printed
+        the whole service code catalogue. FIDELITY D24."""
+        from tls350sim.ui import HEADER
+        app = self._stand_in_diag("SERVICE REPORT", HEADER)
+        app.k_print()
+        self.assertEqual(app.paper.get("1.0", "end").strip(), "")
+        self.c.service_entries.append({"at": "2609151130", "id": "A12345",
+                                       "code": "0101"})
+        app.k_print()
+        paper = app.paper.get("1.0", "end")
+        self.assertIn("SERVICE REPORT", paper)
+        self.assertIn("A12345", paper)
+        self.assertNotIn("SERVICE CODE LIST", paper)
+        app.paper.delete("1.0", "end")
+        app.step = 0                      # SERVICE CODE LIST / PRESS <PRINT>
+        app.k_print()
+        self.assertIn("SERVICE CODE LIST", app.paper.get("1.0", "end"))
+
+    def test_the_pump_sensor_screen_reads_its_input(self):
+        """Figure 6-15: `S 1: TANK # NONE` over `PUMP OFF`, "NONE = No tank
+        assigned, or (TANK LABEL) = Tank assigned". Every input on every
+        site read NONE and OFF. FIDELITY D25."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        app = self._stand_in_diag("PUMP SENSOR DIAGNOSTIC")
+        tank = self.c.pump_tank(1)
+        self.assertEqual(app._lines(),
+                         [f"S 1: TANK # {self.c.text('602', tank)}"[:24],
+                          "PUMP OFF"])
+        meter = next(m for m, t in self.c.meters.items() if t == tank)
+        self.c.meter_flow[meter] = 8.0
+        self.assertEqual(app._lines()[1], "PUMP ON")
+        self.c.values["S77201"] = "0100"
+        self.assertEqual(app._lines()[0], "S 1: TANK # NONE")
+
+
+    def test_a_smart_sensor_walks_the_figure_for_its_own_type(self):
+        """576013-818 Rev AB Figures 6-28, 6-29 to 6-31 and 6-32 are picked
+        by the sensor, not walked in a row: a sensor programmed as a Vac
+        sensor was also a Mag and an ATMP sensor under STEP, and the ATMP
+        figure sat behind an ENTER on a PRESS <PRINT> screen. FIDELITY D26."""
+        self.c.values["S72301"] = "0104"
+        app = self._stand_in_diag("SMART SENSOR DIAGNOSTIC")
+        seen = []
+        for _ in range(len(app.steps())):
+            seen.append(app._lines()[1])
+            app.k_step()
+        self.assertEqual(seen[0], "TYPE: VAC SENSOR")
+        self.assertNotIn("TYPE: MAG SENSOR", seen)
+        self.assertEqual(seen[-4:], ["COMM DATA PRESS <PRINT>",
+                                     "CONSTANTS PRESS <PRINT>",
+                                     "CHANNELS PRESS <PRINT>",
+                                     "PRESS <PRINT>"])
+        app.step = seen.index("CONSTANTS PRESS <PRINT>")
+        app.k_print()
+        self.assertIn("SS CONSTANTS DIAG", app.paper.get("1.0", "end"))
+        self.c.values["S72301"] = "0105"
+        app = self._stand_in_diag("SMART SENSOR DIAGNOSTIC")
+        self.assertEqual(app._lines()[1], "TYPE: ATMP SENSOR")
+        app.k_step()
+        app.k_step()
+        self.assertEqual(app._lines()[0], "ATM P SENSOR DIAGS")
+        app.k_enter()
+        self.assertTrue(app._lines()[1].startswith("ATM PRESSURE:"))
+
+
+    def test_the_modem_auto_config_is_asked_and_not_walked(self):
+        """576013-818 Rev AB Figure 6-27. STEP alone used to walk
+        `AUTO CONFIG MODEM: YES`, `ARE YOU SURE? : YES` and both of their
+        confirmations, and CHANGE and ENTER did nothing on any screen; the
+        figure reaches the branch with C, E, S, E, S. FIDELITY D27.
+
+        Programmed to a GSM modem, because that is the console the figure
+        draws: every screen in it reads VR TLS GSM MODEM, and the RSSI
+        screen between the first two is annotated "Only displayed if modem
+        type is VR TLS GSM MODEM". This walked that screen on a console
+        with the default NETCOMM set, which is the one console the figure
+        is not about. FIDELITY D10."""
+        from tls350sim import presets
+        presets.load(self.c, "Truck stop, four tanks and BIR")
+        self.c.values["S88501"] = "03"
+        app = self._stand_in_diag("COMMUNICATION DIAGNOSTIC")
+        seen = []
+        for _ in range(len(app.steps())):
+            seen.append(tuple(app._lines()))
+            app.k_step()
+        self.assertEqual([l2 for _l1, l2 in seen][-1], "AUTO CONFIG MODEM: NO")
+        self.assertNotIn(("AUTO CONFIG MODEM: YES", "ARE YOU SURE? : YES"),
+                         seen)
+        app = self._stand_in_diag("COMMUNICATION DIAGNOSTIC", 3)
+        app.k_change()
+        self.assertEqual(app._lines()[1], "AUTO CONFIG MODEM: YES")
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["AUTO CONFIG MODEM: YES", "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        self.assertEqual(app._lines(),
+                         ["AUTO CONFIG MODEM: YES", "ARE YOU SURE? : YES"])
+        app.k_enter()
+        self.assertEqual(app._lines(),
+                         ["ARE YOU SURE? : YES", "PRESS <STEP> TO CONTINUE"])
+        app.k_step()
+        self.assertEqual(app._lines(), ["WORKING", "* * * * * * * *"])
+        app.k_step()
+        self.assertEqual(app._lines()[1], "MODEM: VR TLS GSM MODEM")
+        self.assertEqual(len(app.steps()), 4)
+        # and a branch half answered is over once the function is left
+        app = self._stand_in_diag("COMMUNICATION DIAGNOSTIC", 3)
+        app.k_change()
+        app.k_enter()
+        app.k_function()
+        self.assertNotIn("modem_config", app.sel)
+
+
+    def test_one_vac_sensor_is_selected_and_tested_on_its_own(self):
+        """576013-818 Rev AB Figure 6-29, key by key: E, E, E to SELECT VAC
+        SENSOR, C "TO SELECT INDIVIDUAL VAC SENSORS", E to `START MANUAL
+        TEST: sX`, E to `sX: MANUAL TEST STARTED`. CHANGE did nothing on
+        SELECT VAC SENSOR and every screen was one STEP level. FIDELITY D28.
+        """
+        self.c.values["S72301"] = "0104"
+        self.c.values["S72302"] = "0204"
+        app = self._stand_in_diag("SMART SENSOR DIAGNOSTIC")
+        app.step = [s["text"] for s in app.steps()].index("VAC SENSOR DIAGS")
+        app.k_enter()
+        self.assertEqual(app._lines()[0], "VAC SENSOR MANUAL TEST")
+        app.k_enter()
+        self.assertEqual(app._lines()[0], "START MANUAL TEST")
+        app.k_enter()
+        self.assertEqual(app._lines(), ["SELECT VAC SENSOR", "ALL VAC SENSORS"])
+        app.k_change()
+        app.k_change()
+        self.assertTrue(app._lines()[1].startswith("s2 "), app._lines())
+        app.k_enter()
+        self.assertEqual(app._lines(), ["START MANUAL TEST: s2",
+                                        "PRESS <ENTER>"])
+        app.k_enter()
+        self.assertEqual(app._lines(), ["s 2: MANUAL TEST STARTED",
+                                        "PRESS <STEP> TO CONTINUE"])
+        self.assertIn(2, self.c.vac_running)
+        self.assertNotIn(1, self.c.vac_running)
+
+
+    def test_an_adjustment_goes_to_the_shift_the_panel_names(self):
+        """576013-610 Rev AC p.28-19: "To make an adjustment to a previous
+        shift, press CHANGE, then press ENTER, then press STEP." It went into
+        the shift that was running. FIDELITY Q1."""
+        self.recon("MANUAL ADJUSTMENTS")
+        self.c.bir.close("shift")
+        self.app.step = 1
+        self.app.k_change()
+        self.assertIn("PREVIOUS", self.app._lines()[1])
+        self.app.step = 2
+        self.app.k_change()
+        for ch in "40":
+            self.app.k_alnum(ch)
+        self.app.k_enter()
+        # `PREVIOUS SHFT ADJ VOL: 40` is twenty-five columns: p.28-19's
+        # `(Selected) SHFT ADJ VOL: XXXXXX` does not fit the glass either,
+        # which is O14's shape and not this entry's.
+        self.assertTrue(self.app._lines()[0].startswith(
+            "PREVIOUS SHFT ADJ VOL: "), self.app._lines())
+        self.assertEqual(self.c.bir.last(1, "shift")["adjust"], 40.0)
+        self.assertEqual(self.c.bir.current(1, "shift")["adjust"], 0.0)
+
+    def test_an_adjustment_goes_to_the_closing_date_typed(self):
+        """p.28-20: "To select a different date, press CHANGE. Enter the
+        desired closing date for the adjustment, then press ENTER." The
+        machinery to type a date was there for the daily report and this
+        screen still toggled. FIDELITY Q1."""
+        self.recon("MANUAL ADJUSTMENTS")
+        self.c.bir.close("daily")
+        closed = self.c.bir.last(1, "daily")
+        self.c.clock_offset += 86400.0
+        self.app.step = 0
+        self.app.k_change()                        # ADJUSTMENT TYPE: DAILY
+        self.app.step = 1
+        self.app.k_change()                        # CHANGE opens the date
+        for ch in time.strftime("%m%d%Y", time.localtime(closed["closed"])):
+            self.app.k_alnum(ch)
+        self.app.k_enter()
+        self.app.k_step()                          # "Press STEP to continue"
+        self.assertTrue(self.app._lines()[1].endswith("ADJ VOL: 0"),
+                        self.app._lines())
+        self.app.k_change()
+        for ch in "25":
+            self.app.k_alnum(ch)
+        self.app.k_enter()
+        self.assertEqual(closed["adjust"], 25.0)
+        self.assertEqual(self.c.bir.current(1, "daily")["adjust"], 0.0)
+
+
+    def test_print_beside_a_mag_sensor_s_walk_is_the_figure_s_paper(self):
+        """576013-818 Rev AB Figure 6-28: P beside MAG SENSOR DIAGS gives
+        SMART SENSOR DIAGNOSTIC with the six readings, and P on the install
+        log gives SMART SENSOR INSTALL LOG. Both gave the sensor status
+        report. FIDELITY D30."""
+        self.c.values["S72301"] = "0103"
+        app = self._stand_in_diag("SMART SENSOR DIAGNOSTIC")
+        texts = [s["text"] for s in app.steps()]
+        app.step = texts.index("s 1: MAG SENSOR DIAGS")
+        app.k_print()
+        paper = app.paper.get("1.0", "end")
+        self.assertIn("SMART SENSOR DIAGNOSTIC", paper)
+        self.assertIn("TOTAL HT", paper)
+        self.assertNotIn("SMART SENSOR STATUS", paper)
+        app.paper.delete("1.0", "end")
+        app.step = texts.index("SMART SENSOR INSTALL LOG")
+        app.k_print()
+        self.assertIn("s1 MAG SENSOR", app.paper.get("1.0", "end"))
+
+    def test_the_ground_temperature_walk_is_one_thermistor(self):
+        """FIDELITY M4. "When using volumetric line leak detection (VLLD),
+        only one ground temperature thermistor is needed per site and the
+        thermistor must be wired to thermistor position number 1 (positions
+        2 - 4 are not used)", 576013-879 Rev W p.60, and Figure 6-22 draws
+        one screen headed `g 1:`.
+
+        The screen is gated on the VLLD card, and the flat rule is "as many
+        devices as the cards fitted carry between them" -- so the panel
+        walked `capacity("vlld")`, four positions, where `IB2100` answered
+        for position 1 alone. The glass offered three thermistors the port
+        would not report and the site cannot have."""
+        self.c.set_module("vlld", 1)
+        try:
+            app = self._stand_in_diag("GROUND TEMP DIAGNOSTIC")
+            self.assertEqual(app._device_count(), 1)
+            self.assertEqual(app._devices(), [1])
+            self.assertTrue(app._lines()[0].startswith("g 1:"),
+                            app._lines())
+        finally:
+            self.c.set_module("vlld", 0)
+
+    def test_the_thermistor_card_reads_as_itself_on_the_slot_walk(self):
+        """FIDELITY M4. 576013-818 Rev AB Figure 6-2 draws the screen with
+        this card in slot 1: `SLOT 1 4 PROBE/ G. T.` over `POR=  XXXXXX
+        C=  XXXXXX`. The console drew a PREFIX of it, `SLOT 1 4 PROBE`,
+        because it had only the plain card -- and the citation audit took
+        the prefix, which is how it went unnoticed."""
+        self.c.probe_gt = True
+        try:
+            app = self._stand_in_diag("SYSTEM DIAGNOSTIC")
+            rows = [l1 for l1, _l2 in self.c.slot_report()]
+            self.assertIn("SLOT 1 4 PROBE/ G. T.", rows)
+            self.assertEqual(len("SLOT 1 4 PROBE/ G. T."), 21)
+            del app
+        finally:
+            self.c.probe_gt = False
+
+    def test_print_beside_a_vac_sensor_s_walk_is_the_figure_s_paper(self):
+        """576013-818 Rev AB Figure 6-29 hangs its P off the sensor's own
+        `TYPE: VAC SENSOR` head rather than off the DIAGS gate the other two
+        figures mark, so the dispatch matches on the second line. This gave
+        the sensor status report. FIDELITY D30, which waited on L18."""
+        self.c.values["S72301"] = "0104"
+        self.c.vac_leak[1] = 1.5
+        self.c.start_vac_test(1)
+        self.c.finish_vac_tests()
+        app = self._stand_in_diag("SMART SENSOR DIAGNOSTIC")
+        steps = app.steps()
+        app.step = [s["l2"] for s in steps].index("TYPE: VAC SENSOR")
+        app.k_print()
+        paper = app.paper.get("1.0", "end")
+        self.assertIn("SMART SENSOR DIAGNOSTIC", paper)
+        self.assertIn("UNCOMPENSATED PRESSURE:", paper)
+        self.assertIn("LEAK RATE:    1.500 GPH", paper)
+        self.assertNotIn("SMART SENSOR STATUS", paper)
+
+    # ---- what the console draws AFTER ENTER, FIDELITY U50 -----------------
+    #
+    # `allscreens._lines()` clears `app.confirm`, so no acknowledgement the
+    # console draws had ever been compared to a page, and `walked_onto`
+    # below presses CHANGE forty times per step and never ENTER. These stand
+    # on the one chapter that walks its confirmations screen by screen:
+    # 576013-623 Rev AN chapter 8, In-Tank Leak Tests.
+
+    def _in_tank_leak(self, text_starts):
+        """Stand on a step of IN-TANK LEAK TEST SETUP by its own name."""
+        from tls350sim.ui import MODES
+        app = self.app
+        app.mode = MODES.index("SETUP")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("IN-TANK LEAK TEST SETUP")
+        app.device = 1
+        for i, step in enumerate(app.steps()):
+            if step.get("text", "").startswith(text_starts):
+                app.step = i
+                return app
+        self.fail(f"no step {text_starts!r} is visible")
+
+    def _confirm(self, text_starts, typed=None, changes=1):
+        app = self._in_tank_leak(text_starts)
+        app.confirm, app.editing, app.buf = None, False, ""
+        for _ in range(changes):
+            app.k_change()
+        if typed is not None:
+            app.buf = typed
+        app.k_enter()
+        lines = [str(r) for r in app._lines()[:2]]
+        app.confirm, app.editing, app.buf = None, False, ""
+        return lines
+
+    def test_the_date_confirms_under_its_own_label_not_the_next_step_s(self):
+        """576013-623 Rev AN p.8-2, the FIRST walk in chapter 8: "Press ENTER
+        to confirm the date" over `DATE: XX/XX/XXXX` / `PRESS <STEP> TO
+        CONTINUE`.
+
+        `k_enter` re-read `cur_step()` AFTER `console.save()`, and writing
+        S61101 makes Test Start Time visible -- so the index the
+        confirmation was built from had moved one step on and the date came
+        back under `TIME:`, the label of the step the write had just created.
+        """
+        self.assertEqual(self._confirm("Test Date", typed="06152026"),
+                         ["DATE: 06/15/2026", "PRESS <STEP> TO CONTINUE"])
+
+    def test_a_scoped_step_with_no_label_confirms_the_word_alone(self):
+        """p.8-5 draws `AUTOMATIC` over PRESS <STEP> TO CONTINUE, the bare
+        chosen word. The generic path invented a label from the step's
+        DEVELOPER text -- `TEST FREQUENCY: AUTOMATI`, 25 columns, cut
+        mid-word."""
+        first = self._confirm("Test Frequency")
+        self.assertEqual(first[1], "PRESS <STEP> TO CONTINUE")
+        self.assertEqual(first[0], "ANNUALLY")
+        self.assertNotIn(":", first[0])
+
+    def test_a_scoped_step_with_a_label_keeps_it(self):
+        """p.8-8 draws `DURATION: XX` over PRESS <STEP> TO CONTINUE, so the
+        fix for the one above is not "drop the label" -- it is "do not
+        invent one"."""
+        self.assertEqual(self._confirm("Test Duration", typed="03"),
+                         ["DURATION: 03", "PRESS <STEP> TO CONTINUE"])
+
+    def test_the_rate_confirms_with_a_label_its_own_screen_does_not_use(self):
+        """p.8-8 again: the screen rests as `TEST RATE: ALL TANK` over a
+        bare `0.20 GAL/HR`, and confirms as `TEST RATE: 0.10 GAL/HR`. The
+        label is the scope PREFIX, used nowhere else -- and the same screen
+        in chapter 13 confirms `X.X GAL/HR` bare, so it is one screen's
+        spelling rather than a rule. It is written down on the step."""
+        self.assertEqual(self._confirm("Leak Test Rate"),
+                         ["TEST RATE: 0.10 GAL/HR", "PRESS <STEP> TO CONTINUE"])
+
+    def test_early_stop_s_acknowledgement_is_its_own_screen(self):
+        """p.8-8: "To enable Leak Test Early Stop, press CHANGE and then
+        ENTER and the system displays:" -- `TST EARLY STOP: ALL TANKS` over
+        `ENABLED`, and there is no PRESS <STEP> TO CONTINUE on the page. The
+        console drew `LEAK TEST EARLY STOP: EN` over CONT_STEP: a label off
+        the developer text, clipped, and a second line the manual denies."""
+        lines = self._confirm("Leak Test Early Stop")
+        self.assertEqual(lines, ["TST EARLY STOP: ALL TANK", "ENABLED"])
+
+    def test_every_confirmation_in_chapter_8_fits_the_glass(self):
+        """The shape all four defects had in common."""
+        for text in ("Test Date", "Test Duration", "Test Frequency",
+                     "Leak Test Rate", "Leak Test Early Stop"):
+            typed = {"Test Date": "06152026", "Test Duration": "03"}.get(text)
+            for row in self._confirm(text, typed=typed):
+                self.assertLessEqual(len(row), 24, f"{text}: {row!r}")
+
+    # ---- the 50 point chart's own two screens, FIDELITY F15 and U50 -------
+
+    def _chart_point(self):
+        from tls350sim.ui import MODES
+        app = self.app
+        self.c.tank_profiles[1] = "04"
+        app.mode = MODES.index("SETUP")
+        names = [f["function"] for f in app.functions()]
+        app.func = names.index("IN-TANK SETUP")
+        app.device = 1
+        at = {st["point"]: i for i, st in enumerate(app.steps())
+              if st.get("point")}
+        return app, at
+
+    def test_the_volume_field_carries_the_height_just_entered(self):
+        """576013-623 Rev AN p.7-8 draws the pair: `HEIGHT : 88.32`, then
+        `88.32 INCH VOL : 000000`. The console hardcoded `0.00`, so the one
+        thing on the screen saying WHICH of the fifty points is being
+        strapped was zero through all fifty of them. FIDELITY F15."""
+        app, at = self._chart_point()
+        app.step = at["height"]
+        app.k_change()
+        app.buf = "88.32"
+        app.k_enter()
+        self.assertEqual([str(r) for r in app._lines()[:2]],
+                         ["HEIGHT : 88.32", "PRESS <STEP> TO CONTINUE"])
+        app.confirm = None
+        app.step = at["volume"]
+        self.assertEqual(str(app._lines()[1]), "88.32 INCH VOL : 000000")
+
+    def test_and_the_space_before_the_colon_is_the_add_screen_s(self):
+        """p.7-8 draws `88.32 INCH VOL : 000000` with the space, five times.
+        The flush spelling the console carried is p.7-9's VIEW screen -- a
+        real manual line, for the other screen. A prefix collision."""
+        from tls350sim import screens
+        app, at = self._chart_point()
+        app.step = at["volume"]
+        app.confirm, app.editing, app.buf = None, False, ""
+        self.assertEqual(str(app._lines()[1]), "0.00 INCH VOL : 000000")
+        step = app.steps()[at["volume"]]
+        self.assertIn("INCH VOL : ",
+                      screens.setup_lines(self.c, app.cur_function(), step,
+                                          1, chart_open=True)[1])
+
+    def test_the_point_is_acknowledged_the_way_everything_else_is(self):
+        """`OF 50 POINTS` was in no manual, no citation and no register: it
+        existed at one line of `ui.py`. p.7-8 confirms `88.32 INCH VOL : 9200`
+        over PRESS <STEP> TO CONTINUE, the same shape as the HEIGHT
+        confirmation one step earlier. FIDELITY U50."""
+        app, at = self._chart_point()
+        app.step = at["height"]
+        app.k_change()
+        app.buf = "88.32"
+        app.k_enter()
+        app.confirm = None
+        app.step = at["volume"]
+        app.k_change()
+        app.buf = "9200"
+        app.k_enter()
+        self.assertEqual([str(r) for r in app._lines()[:2]],
+                         ["88.32 INCH VOL : 9200", "PRESS <STEP> TO CONTINUE"])
+        self.assertEqual(self.c.chart_points(1)[0][1], 9200.0)
 
 
 class TheTwoPowerUpSequences(unittest.TestCase):
@@ -4937,6 +6462,7 @@ class NoScreenIsCutMidWord(unittest.TestCase):
     """
 
     DIGITS = re.compile(r"\d")
+    ZEROS = re.compile(r"0+(?=\d)")
 
     CUT = {
         # the manual's own, wider than the glass
@@ -4977,7 +6503,11 @@ class NoScreenIsCutMidWord(unittest.TestCase):
         # it, and a line cut there was indistinguishable from one that fit.
         "CLIMATE FACTOR: ALL TANKS",
         "DUAL FLOAT DISCRIMINATING",
-        "SUDDEN LOSS LIMIT: ######",
+        # `SUDDEN LOSS LIMIT: ######` came off on 2026-09-18. It was the one
+        # shape on this list whose clip landed on DIGITS -- 25 gallons drew
+        # `SUDDEN LOSS LIMIT: 00002`, which reads as two -- and a masked
+        # number can give up a leading zero to fit where a word cannot.
+        # FIDELITY F16.
         "TNK TST SIPHON BREAK: OFF",
         "TST EARLY STOP: ALL TANKS",
     }
@@ -4992,7 +6522,8 @@ class NoScreenIsCutMidWord(unittest.TestCase):
     WALKED = {
         "#.## GPH TEST: REPETITIVE",
         "CUR PERI OPEN: NO DATA AVAILABLE",
-        "DAY OPEN: NO DATA AVAILABLE",
+        # the weekday of PINNED, because `(Day) OPEN` substitutes one
+        "MON OPEN: NO DATA AVAILABLE",
         "ENTER PRESSURE LINE LABEL",
         "LOW PRESSURE SHUTOFF: YES",
         "PIPE TYPE: #-WALL FIBERGLASS",
@@ -5107,9 +6638,17 @@ class NoScreenIsCutMidWord(unittest.TestCase):
                 # Collapsed, because a right-aligned value pads to the
                 # display width: `AVG SALES FRI:` puts its value in column
                 # 200 when the display is 200 wide, and that difference is
-                # padding rather than a cut.
-                if (self.SPACES.sub(" ", full)
-                        != self.SPACES.sub(" ", short.rstrip())
+                # padding rather than a cut. And LEADING ZEROS, because a
+                # masked number gives one up to fit rather than losing a
+                # digit off its right -- `SUDDEN LOSS LIMIT: 00099` for a
+                # limit of 99 says what the console holds where
+                # `SUDDEN LOSS LIMIT: 00002` for 25 does not. A truncated
+                # number still differs by more than its leading zeros and
+                # is still a cut. See FIDELITY F16 and `screens._unpadded`.
+                if (self.ZEROS.sub("", self.SPACES.sub(" ", full))
+                        != self.ZEROS.sub("",
+                                          self.SPACES.sub(" ",
+                                                          short.rstrip()))
                         and len(full) > 24):
                     found[self.DIGITS.sub("#", full)] = (key, full)
         return found
@@ -5180,25 +6719,44 @@ class NoScreenIsCutMidWord(unittest.TestCase):
         if type(self)._cut is None:
             from tls350sim import presets
             seen = {}
-            for name in list(presets.PRESETS) + [None]:
-                console = a_console()
-                if name:
-                    presets.load(console, name)
-                console.tick()
-                seen.update(self.cuts(console))
+            # Pinned for the same reason `walked_shapes` is, and it was not:
+            # RECONCILIATION's DISPLAY AND PRINT draws a MONTH, so two of the
+            # shapes below are `CLOSING DATE: SEP ##, ####` and
+            # `CUR SHFT OPEN: SEP ##, ####` and they matched only while it
+            # was September. Run on 1 October this failed with "a NEW panel
+            # line is being cut mid-word" -- naming a change nobody had made
+            # -- and for the other eleven months of the year it was not
+            # checking those two lines at all. See FIDELITY V9.
+            with unittest.mock.patch("time.time", lambda: self.PINNED):
+                for name in list(presets.PRESETS) + [None]:
+                    console = a_console()
+                    if name:
+                        presets.load(console, name)
+                    console.tick()
+                    seen.update(self.cuts(console))
             type(self)._cut = seen
         return type(self)._cut
+
+    # A Monday, 2026-09-14 09:00 local, and both walks are pinned to it.
+    # One screen's LABEL is a weekday -- `(Day) OPEN`, see UNKNOWNS A46 --
+    # and another's is a month, so without this the expected shape set
+    # changes seven times a week and again every month, and the ratchet
+    # fires on a Tuesday, or in October, for no reason. `held_clock` is not
+    # enough for that: it holds the clock STILL, at whatever instant the run
+    # started, which is a different failure mode.
+    PINNED = 1789398000.0
 
     def walked_shapes(self):
         if type(self)._walked is None:
             from tls350sim import presets
             seen = set()
-            for name in list(presets.PRESETS) + [None]:
-                console = a_console()
-                if name:
-                    presets.load(console, name)
-                console.tick()
-                seen |= self.walked_onto(console)
+            with unittest.mock.patch("time.time", lambda: self.PINNED):
+                for name in list(presets.PRESETS) + [None]:
+                    console = a_console()
+                    if name:
+                        presets.load(console, name)
+                    console.tick()
+                    seen |= self.walked_onto(console)
             type(self)._walked = seen - self.CUT
         return type(self)._walked
 
@@ -5235,3 +6793,7 @@ class NoScreenIsCutMidWord(unittest.TestCase):
         """The other direction, so WALKED is a ratchet like CUT."""
         self.assertEqual(sorted(self.WALKED - self.walked_shapes()), [],
                          "a shape on WALKED now fits: take it out")
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

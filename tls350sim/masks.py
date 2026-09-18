@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Fixed-width value masks, which is how a console draws a number.
 
 A real TLS-350 does not print `OVERFILL LIMIT: 0`. It prints
@@ -118,5 +121,10 @@ def whole(value, width=0):
     try:
         n = int(float(value))
     except (TypeError, ValueError):
+        n = 0
+    except OverflowError:
+        # `int(float('inf'))` raises this and not ValueError, so an
+        # infinity that reached here escaped the console's own formatter
+        # and refused the whole report.
         n = 0
     return f"{n:{width}d}" if width else str(n)

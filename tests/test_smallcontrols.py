@@ -1,3 +1,16 @@
+# Tank Monitor Console Simulator -- a training simulator for TLS-350
+# compatible tank monitor consoles.
+# Copyright (C) 2026 Verbose Software
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your option)
+# any later version. It is distributed WITHOUT ANY WARRANTY; without even the
+# implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+# See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Five small controls against methods that already existed: the siphon
 valve by hand, a line's thermal slope, a transducer fault, the vapour
 processor's run switch, and LOW TEMP WARNING. BENCH.md T11, L7, L10, V6, T8."""

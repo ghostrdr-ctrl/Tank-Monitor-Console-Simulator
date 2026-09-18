@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """CSLD: the test that never shuts the tank down.
 
 "Continuous Statistical Leak Detection, CSLD, is a tank leak detection method
@@ -25,6 +28,7 @@ method of CSLD, and a tank quiet enough to test.
 "Test results are provided automatically every 24 hours except when the CSLD
 Report Only feature is enabled in setup."
 """
+import math
 import time
 
 from . import readings
@@ -40,7 +44,7 @@ from .clock import clock_date
 # and the meters and the delivery watcher are asked first because they are
 # what the console actually knows.
 #
-# **This number is the simulator's own and the manual gives none**, so what
+# This number is the simulator's own and the manual gives none, so what
 # stands behind it is the reasoning above and not a page. The comment that
 # used to stand here argued the case from a behaviour the manual describes as
 # CORRECT: it said a 1.0 threshold "made CSLD blind to exactly the leaks it
@@ -226,6 +230,18 @@ RJT_WINDOW = 20
 CONTROL_MAX_MINUTES = 45.0
 
 
+def _tenth(value):
+    """Round to a tenth the way the manual's own FDBK column does.
+
+    Its steps are eighths of a minute, so half of them land on a tie, and
+    the samples break every tie upwards: C1=74 is 38.25 and prints 38.3,
+    C1=58 is 20.25 and prints 20.3, C1=70 is 33.75 and prints 33.8. Python
+    rounds a tie to even and would print the first two of those a tenth
+    short.
+    """
+    return math.floor(value * 10.0 + 0.5) / 10.0
+
+
 class CSLD:
     """One console's worth of continuous testing."""
 
@@ -233,6 +249,11 @@ class CSLD:
         self.c = console
         self.samples = {}      # tank -> [(when, rate)] newest last
         self.detail = {}       # tank -> [the whole sample], for diagnostics
+        # tank -> the rate of each of the last few tests that COMPLETED,
+        # which is a wider set than the rate table: a test whose gain is
+        # over the gate finishes and is thrown away rather than recorded,
+        # and RJT is the count of exactly those. See `_sample`.
+        self.completed = {}
         self.results = {}      # tank -> (result, when)
         self.idle_from = {}    # tank -> when the tank went quiet
         # tank -> when an IDLE PERIOD was last seen: eight minutes of quiet,
@@ -307,7 +328,7 @@ class CSLD:
         """The key, the method, and a probe rated to do it.
 
         576013-623 p.8-2, twice on two pages: "The CSLD option appears only
-        when the tank is equipped with a **0.1 gph (0.38 lph) Mag probe**,
+        when the tank is equipped with a 0.1 gph (0.38 lph) Mag probe,
         and the system has the CSLD software module key installed." This
         checked the key and the probe CARD, so a tank carrying a MAG2 -- a
         0.2 gph probe -- ran CSLD, which is a 0.2 gph test the probe cannot
@@ -354,8 +375,8 @@ class CSLD:
                 self.idle_from.pop(tank, None)
                 continue
             if tank != self.primary(tank):
-                # "**The secondary tank in manifolded sets will have empty
-                # rate tables!**", p.11-19, annotating an IA51 that prints
+                # "The secondary tank in manifolded sets will have empty
+                # rate tables!", p.11-19, annotating an IA51 that prints
                 # RATE TABLE EMPTY -- and "Tanks programmed as manifolded
                 # would have a common result", p.11-26. The set is one tank
                 # as far as a level measurement goes, so it is tested once.
@@ -483,11 +504,24 @@ class CSLD:
         return total
 
     def moving_state(self, tank):
-        """IA54's `DISPENSE STATE:` footer, off the probe table itself.
+        """IA54's `DISPENSE STATE:` footer, off the probe table and the pump.
 
         "CSLD uses this data to determine if the tank is idle or active",
-        which is the one place the manual says what the table is FOR.
+        which is the one place the manual says what the table is FOR -- and
+        it is not the only input. Figure 11-2: "Idle is determined by: 1)
+        analysis of a group of probe samples from the 30 second average
+        table, and 2) checking the pump sense module (if available)."
+
+        The pump half was missing HERE while the test sequence had it, and
+        the field's own description is the sharpest statement of it:
+        "DISPENSE STATE: ACTIVE -- tank activity. ACTIVE/IDLE. If followed
+        by an asterisk (*), CSLD is using a Pump Sense signal to determine"
+        it, 576013-818 Rev AA p.6-12. So the console printed a mark meaning
+        the pump signal decides this line beside a value the pump signal had
+        no part in. See FIDELITY K5.
         """
+        if self.c.pump_running(tank):
+            return "ACTIVE"
         rows = self.probe.get(tank) or []
         if len(rows) < 2:
             return "IDLE"
@@ -627,6 +661,28 @@ class CSLD:
         full = self.c.full_volume(tank) or 0.0
         samples = self.samples.setdefault(tank, [])
         samples.append((now, rate))
+        # Every test that gets this far has COMPLETED, which is the set RJT
+        # counts over; the rate table below is the narrower set of tests
+        # that were also RECORDED.
+        done = self.completed.setdefault(tank, [])
+        done.append(rate)
+        del done[:-RJT_WINDOW]
+        # Figure 11-2's second condition for recording a test: "Record test
+        # results in database if: ... 2) leak rate < +0.4 gph". A gain over
+        # the gate is thrown away here rather than recorded and excluded
+        # later, and the evidence that this is what a real console does is
+        # that no rate table on the shelf has a row over it -- 100 sample
+        # rows across five manuals, the largest +0.395 -- while the same
+        # figures print RJT counts of 5, 9 and 12. If the over-gate tests
+        # were recorded and filtered afterwards they would show up in the
+        # column. So RJT reads `completed` and everything else reads the
+        # table. See UNKNOWNS A63.
+        #
+        # Positive is a GAIN in the manual's sign and a NEGATIVE rate in
+        # this engine's -- see K2, and `POSITIVE_LEAK`.
+        if rate < -POSITIVE_LEAK:
+            self._age_out(tank, now)
+            return
         # Every column IA51 prints, because chapter 11's method is a walk
         # down them and Problem 1's analysis turns on the ones this used to
         # leave out. `ullage` stays as the ullage VOLUME the other reports
@@ -666,16 +722,30 @@ class CSLD:
     def feedback(self, tank):
         """IA52's `FDBK`, "Feedback control variable, range 0 to 45 minutes".
 
-        The manual gives the RANGE and not the formula, so this is the mean
-        interval of every test, clamped to it. See FIDELITY K1a. It is a
-        control variable and not only a printed one: the minimum a test has
-        to run is "15 minutes + Feedback time".
+        The manual gives the RANGE and not the formula, and the formula is
+        in its own samples: FDBK is a ramp on how full the rate table is,
+        flat at zero until the table is half full and reaching the ceiling
+        exactly as it fills.
+
+            FDBK = 45 x (C1 - 40) / 40, clamped to 0 and 45
+
+        where C1 is "Total number of tests in the rate table" and 80 is the
+        table. That fits every IA52 row on the shelf -- 100 of them, across
+        576013-818 Rev AA and Rev AB, 577013-918 Rev D and both TLS-450
+        serial manuals -- with no exceptions and no slack: C1=44 gives
+        exactly 4.5 and C1=56 exactly 18.0, and C1=80 lands on 45.0 rather
+        than being clipped there. This replaces a mean of the intervals,
+        which was the simulator's own. See UNKNOWNS A51.
+
+        It is a control variable and not only a printed one: the minimum a
+        test has to run is "15 minutes + Feedback time".
         """
         rows = self.detail.get(tank) or []
         if not rows:
             return 0.0
-        return min(CONTROL_MAX_MINUTES,
-                   sum(r["interval"] for r in rows) / len(rows))
+        half = self.TABLE_TESTS / 2.0
+        ramp = CONTROL_MAX_MINUTES * (len(rows) - half) / half
+        return _tenth(min(CONTROL_MAX_MINUTES, max(0.0, ramp)))
 
     def accept(self, tank):
         """IA52's `ACPT`, the same for the accepted tests, and the term the
@@ -693,9 +763,9 @@ class CSLD:
         p.11-30: "The dispense factor is an indication of the amount of
         dispensing that occurred during the last 24 hours. It is not as
         simple as the amount of gallons dispensed during the last 24 hours
-        **because the hourly volumes are weighted in such a way that the most
+        because the hourly volumes are weighted in such a way that the most
         recent dispensing value contributes more to the dispense factor than
-        dispensing volume that has occurred 23 hours ago.** But it can be
+        dispensing volume that has occurred 23 hours ago. But it can be
         used as a relative indication of tank activity."
 
         So the shape is stated and the weights are not. These rise linearly
@@ -884,8 +954,8 @@ class CSLD:
 
         576013-818 chapter 11's glossary is what this is built from, because
         it defines every column where the serial manual only names it. Two
-        of them are the opposite way round from the obvious reading: **LRATE
-        is the COMPENSATED rate and AVLRTE the UNCOMPENSATED one**, despite
+        of them are the opposite way round from the obvious reading: LRATE
+        is the COMPENSATED rate and AVLRTE the UNCOMPENSATED one, despite
         AVLRTE looking like an average.
         """
         rows = self.detail.get(tank) or []
@@ -920,8 +990,10 @@ class CSLD:
             "multiplier": readings.fixed(0.8, 1.2, "csldmult", tank),
             # "RJT: Of the last 20 tests completed, this is the number of
             # tests rejected due to excessive positive leak rate (>0.4 gph)"
-            "rejects": sum(1 for r in rows[-RJT_WINDOW:]
-                           if r["rate"] < -POSITIVE_LEAK),
+            # -- COMPLETED, which is not the rate table: an over-gate test
+            # never reaches it. See `_sample`.
+            "rejects": sum(1 for r in self.completed.get(tank, [])
+                           if r < -POSITIVE_LEAK),
             # "EVAP: If the Reid Vapor Pressure table has been entered, the
             # evaporation rate will be here" -- and this console has no RVP
             # table, so it is 0.000 exactly as chapter 11's own four sample
@@ -993,7 +1065,7 @@ class CSLD:
         """One line for the CSLD TEST RESULTS screen.
 
         576013-610 p.10-2 draws it `PER: (Results)` and 576013-635 p.62
-        prints one: `PER: JAN 22, 1996 PASS`. **With the year**, which every
+        prints one: `PER: JAN 22, 1996 PASS`. With the year, which every
         printed example on this shelf carries -- `PER: JUL 26, 1996 FAIL`,
         `PER: MAY 18, 2000 FAIL` -- and which this dropped. The full form is
         22 characters and the panel line is 24, so it fits on both.
@@ -1001,7 +1073,7 @@ class CSLD:
         And a console with nothing yet to say says so in the TLS-350's own
         words. `COLLECTING n TEST(S)` is not a string on this console:
         grepped across all twenty-five documents, "COLLECTING" as a status
-        appears only in 577013-950, the **TLS-450** serial manual. The
+        appears only in 577013-950, the TLS-450 serial manual. The
         TLS-350's word for the state is `NO RESULTS AVAILABLE`, which has a
         section heading of its own at p.11-11 and a result code of its own.
         See FIDELITY K7.
@@ -1047,7 +1119,7 @@ class CSLD:
         """CSLD FULLEST LAST PASS, which is not the last pass.
 
         "This display refers to the one passed test out of all passed tests
-        in the last month **in which the tank was most full**." This
+        in the last month in which the tank was most full." This
         returned the most recent result if it happened to be a pass,
         ignoring both the volume and the month -- so the screen that exists
         to find the fullest test showed whatever had just happened. And it
@@ -1077,14 +1149,14 @@ class CSLD:
                 # Incr Rate' alarms", which is both of the two this method
                 # raises, so the tank has nothing to say.
                 continue
-            # **An IDLE PERIOD, not a stored test**, and 576013-818 p.11-10
+            # An IDLE PERIOD, not a stored test, and 576013-818 p.11-10
             # says so in a parenthesis written to settle exactly this: "The
             # system has not detected an idle period in the last 24 hours.
             # All tanks must have at the very least some short idle periods
             # each day. CSLD needs to find an idle time to clear this alarm.
             # This alarm will automatically clear when the system detects
-            # that at least one idle period has occurred (**this does not
-            # require that a CSLD record get stored in the rate table**)."
+            # that at least one idle period has occurred (this does not
+            # require that a CSLD record get stored in the rate table)."
             #
             # This asked when a SAMPLE was last banked, which is a much
             # higher bar: a test needs the eight minutes and then the sample

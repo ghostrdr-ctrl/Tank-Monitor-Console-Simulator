@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Turn what you type on the keypad into what the console stores, and back.
 
 The console does not store what you see. A limit shown as 1,200 gallons is an
@@ -83,6 +86,33 @@ def _floor(field, metric=False):
     return field.get("min")
 
 
+def _range(field, metric=False, code=None, console=None):
+    """(min, max, zero) for one device's value, `zero` allowing 0 as well.
+
+    A few ranges hang off another setting of the SAME device. 576013-623 Rev
+    AN p.11-2 gives a WPLLD line's length by its pipe type -- "steel 30 to
+    500 ft (10 to 151 m), all others 10 to 500 (3 to 151 m)- except 3 inch
+    (76 mm) fiberglass which is 10 to 220 (3 to 67 m)" -- and p.11-3 adds
+    that on fiberglass "the unused size's length must be set to zero". A
+    field's `range_by` names the setting and gives a range per value of it,
+    and the panel and the wire both come through here. See FIDELITY F4.
+    """
+    lo, hi = _floor(field, metric), _ceiling(field, metric)
+    by = field.get("range_by")
+    if not (by and code and console is not None):
+        return lo, hi, False
+    dev = _dev(code)
+    if not dev.isdigit() or not int(dev):
+        return lo, hi, False
+    held = (console.text(by["code"], int(dev)) or "").strip()[-2:]
+    rule = by["ranges"].get(held, by.get("default"))
+    if not rule:
+        return lo, hi, False
+    lo = rule["min_metric"] if metric and "min_metric" in rule else rule.get("min", lo)
+    hi = rule["max_metric"] if metric and "max_metric" in rule else rule.get("max", hi)
+    return lo, hi, bool(rule.get("zero"))
+
+
 def _fit(field, value, width):
     """A part must be exactly its width, padded the way its kind is read."""
     if width is None or len(value) == width:
@@ -95,7 +125,7 @@ def _fit(field, value, width):
 
 
 def _encode_value(field, text, width=None, metric=False, console=None,
-                  panel=False):
+                  panel=False, code=None):
     """What the field itself stores, before it is placed in the data.
 
     `panel` is the keypad rather than the wire. The two are not the same
@@ -147,11 +177,12 @@ def _encode_value(field, text, width=None, metric=False, console=None,
         if not text.lstrip("-").isdigit():
             raise ValueError("NUMBERS ONLY")
         v = int(text)
-        lo, hi = _floor(field, metric), _ceiling(field, metric)
-        if lo is not None and v < lo:
-            raise ValueError(f"MIN {lo}")
-        if hi is not None and v > hi:
-            raise ValueError(f"MAX {hi}")
+        lo, hi, zero = _range(field, metric, code, console)
+        if not (zero and v == 0):
+            if lo is not None and v < lo:
+                raise ValueError(f"MIN {lo}")
+            if hi is not None and v > hi:
+                raise ValueError(f"MAX {hi}")
         n = field.get("width") or width
         return f"{v:0{n}d}" if n else f"{v:d}"
 
@@ -160,11 +191,12 @@ def _encode_value(field, text, width=None, metric=False, console=None,
             v = float(text)
         except ValueError:
             raise ValueError("NUMBERS ONLY")
-        lo, hi = _floor(field, metric), _ceiling(field, metric)
-        if lo is not None and v < lo:
-            raise ValueError(f"MIN {lo}")
-        if hi is not None and v > hi:
-            raise ValueError(f"MAX {hi}")
+        lo, hi, zero = _range(field, metric, code, console)
+        if not (zero and v == 0):
+            if lo is not None and v < lo:
+                raise ValueError(f"MIN {lo}")
+            if hi is not None and v > hi:
+                raise ValueError(f"MAX {hi}")
         return packed.hexfloat(v)
 
     if kind == "time":
@@ -201,7 +233,7 @@ def _encode_value(field, text, width=None, metric=False, console=None,
         if len(digits) == 8:
             digits = digits[6:8] + digits[0:2] + digits[2:4]
         elif panel:
-            # **A short entry at the panel is an INCOMPLETE one.**
+            # A short entry at the panel is an INCOMPLETE one.
             #
             # The template a date blanks to is eight cells, `--/--/----`,
             # and the buffer the panel hands over is the digits alone --
@@ -262,7 +294,7 @@ def _encode_value(field, text, width=None, metric=False, console=None,
     return text
 
 
-def encode_value(field, text, metric=False, console=None):
+def encode_value(field, text, metric=False, console=None, code=None):
     """Just the value, with no device prefix and no part placed.
 
     What a serial Set carries: "Display: <SOH>S60901c.cccccc" is the field on
@@ -270,7 +302,7 @@ def encode_value(field, text, metric=False, console=None):
     the keypad. Raises ValueError the same way `encode` does.
     """
     return _encode_value(field, (text or "").strip(), metric=metric,
-                         console=console)
+                         console=console, code=code)
 
 
 # The schedule a repeating leak test runs on. 576013-635 Rev AA p.260 gives
@@ -408,11 +440,11 @@ def encode(field, code, text, current=None, metric=False, console=None):
 
     if not part:
         return pfx + _encode_value(field, text, metric=metric,
-                                   console=console, panel=True)
+                                   console=console, panel=True, code=code)
 
     off, ln = part
     value = _fit(field, _encode_value(field, text, ln, metric, console,
-                                      panel=True), ln)
+                                      panel=True, code=code), ln)
     body = body_of(code, current)
     fill = field.get("blank", "0")
     if len(body) < off + ln:

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The console emulation, against a real TLS-350.
 
 Everything else in this suite checks the simulator against the manuals. This
@@ -351,11 +354,23 @@ class TheWholeBodyAndNotJustTheTitle(unittest.TestCase):
         # is two more capture differences that were never site data. See
         # CLOSED U43 and the setup-mode audit's SU31.
         #
-        # its autodial receivers: port 2 and three minutes
-        "I52500", "I52700",
-        # sudden-loss and leak limits of 99, reconciliation limits of 0
-        # and 1
-        "I62500", "I62600", "I63400", "I63500",
+        # **And three more on 2026-09-15.** `I52700`'s three-minute retry
+        # delay and `I62500` and `I62600`'s limits of 99 are defaults too,
+        # and a SECOND real console says so: the site tape prints
+        # `RETRY DELAY: 3`, `LEAK ALARM LIMIT:     99` and
+        # `SUDDEN LOSS LIMIT:    99`. A retry delay of 0 and a leak alarm
+        # limit of 0 are values their own pages will not take -- 1 to 60
+        # minutes, 1 to 99 gallons. See FIDELITY S18.
+        #
+        # its autodial receivers' port, 2 on all eight. It is not a factory
+        # number: 576013-623 Rev AN p.6-8 makes it the comm-bay slot the
+        # modem is in and draws `SELECT MODEM: 3`, and the site tape's one
+        # receiver reads `PORT  NO: 1`.
+        "I52500",
+        # reconciliation limits of 0 and 1, where 576013-623 Rev AN states
+        # "the default warning limit of 3" and "the default alarm limit of
+        # 4", each with a minimum of 1
+        "I63400", "I63500",
         # software 326.01 built in 2006, against this console's 333.02; and
         # 903's five counters, which count that console's own uptime
         "I90200", "I90300", "I90500",
@@ -381,7 +396,7 @@ class TheWholeBodyAndNotJustTheTitle(unittest.TestCase):
         cls.handler = Handler(Console(None), verbose=False)
 
     #: What matched when this was written. A floor, never a target.
-    MATCHED = 67
+    MATCHED = 70
 
     @staticmethod
     def lines(data):

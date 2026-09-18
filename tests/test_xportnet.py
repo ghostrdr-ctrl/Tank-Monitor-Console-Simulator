@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The card answering at the address it is programmed with.
 
 On a site, the address programmed into the card is the address everything
@@ -138,6 +141,43 @@ class Binding(unittest.TestCase):
         self.assertEqual(host, "0.0.0.0")
         self.assertIn("not an address on this machine", note)
 
+    def test_the_note_says_which_address_it_actually_bound(self):
+        """FIDELITY Z5. The note read "answering on every address instead"
+        whatever it had bound, and the fallback is `--host`, which defaults
+        to 127.0.0.1 -- so the commonest case said the opposite of what
+        happened. Only 0.0.0.0 is every address."""
+        cfg = xport.XPortConfig()
+        cfg.ip = "203.0.113.7"                  # TEST-NET-3, never local
+        for fallback, present, absent in (
+                ("0.0.0.0", "every address", "alone"),
+                ("127.0.0.1", "127.0.0.1 alone", "every address"),
+                ("198.51.100.4", "198.51.100.4 alone", "every address")):
+            n = xportnet.CardNetwork(None, cfg, fallback_host=fallback)
+            host, note = n.bind_host()
+            self.assertEqual(host, fallback, fallback)
+            self.assertIn(present, note, fallback)
+            self.assertNotIn(absent, note, fallback)
+
+    def test_a_loopback_fallback_says_what_to_do_about_it(self):
+        """The note is the only thing standing between a person and a
+        connection that is refused for a reason nothing on screen names."""
+        cfg = xport.XPortConfig()
+        cfg.ip = "203.0.113.7"
+        n = xportnet.CardNetwork(None, cfg, fallback_host="127.0.0.1")
+        note = n.bind_host()[1]
+        self.assertIn("nothing off this machine can reach it", note)
+        self.assertIn("--host 0.0.0.0", note)
+        self.assertIn("--claim-ip", note)
+
+    def test_an_unprogrammed_card_says_where_it_landed_too(self):
+        """The same sentence, for the other branch that falls back."""
+        cfg = xport.XPortConfig()
+        cfg.ip = "0.0.0.0"
+        n = xportnet.CardNetwork(None, cfg, fallback_host="127.0.0.1")
+        note = n.bind_host()[1]
+        self.assertIn("no address programmed yet", note)
+        self.assertIn("127.0.0.1 alone", note)
+
     def test_an_unprogrammed_card_listens_everywhere(self):
         n = self.net("0.0.0.0")
         host, note = n.bind_host()
@@ -211,6 +251,22 @@ class PresetCards(unittest.TestCase):
                 self.assertEqual(card.port, spec["port"])
                 return
         self.skipTest("every example site uses the default tunnel port")
+
+
+class ARebootDropsTheSessionsOpenOnIt(unittest.TestCase):
+    """FIDELITY Z3. `_tear_down` closed the listening sockets and nothing
+    else, so a client connected before a reboot went on being answered."""
+
+    def test_a_session_is_closed_with_the_listeners(self):
+        import socket
+        from tls350sim.console import Console
+        net = xportnet.CardNetwork(Console(), xport.XPortConfig())
+        a, b = socket.socketpair()
+        self.addCleanup(b.close)
+        net._remember_session(a)
+        net._tear_down()
+        b.settimeout(2.0)
+        self.assertEqual(b.recv(16), b"")
 
 
 if __name__ == "__main__":

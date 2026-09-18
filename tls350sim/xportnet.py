@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Putting the simulated card on the address it has been programmed with.
 
 On a real site you program a card with an address and a port, and from then
@@ -34,10 +37,12 @@ adapters. Adding one is an administrative action on every operating system.
 So this module works at two levels:
 
   * Unprivileged, it binds to the programmed address when the machine
-    already has it, and otherwise listens on every address the machine has.
-    Connecting, programming and reading inventory all work; the address
-    shown is the one to use, and it is reachable as long as it is one of
-    this machine's own.
+    already has it, and otherwise falls back to whatever `--host` gave it --
+    which is `127.0.0.1` unless somebody said otherwise, NOT every address.
+    Connecting, programming and reading inventory all work on the fallback;
+    whether anything OFF this machine can reach it depends on which fallback
+    it was, which is why `bind_host`'s note names the address it bound
+    rather than describing the fallback in general. See FIDELITY Z5.
   * Elevated, with `claim=True`, it adds the programmed address to an
     adapter for as long as the simulator is running, and removes it on the
     way out. Then the address answers ping, and other machines on the same
@@ -52,7 +57,9 @@ import subprocess
 import sys
 import threading
 import time
+import weakref
 
+from . import exposed
 from . import xport as _x
 
 # The port the arp-and-telnet procedure knocks on to hand an unaddressed
@@ -212,7 +219,7 @@ class CardNetwork:
 
     def __init__(self, console, config, log=None, powered=None,
                  claim=False, web=True, fallback_host="0.0.0.0",
-                 trace=False, direct=False):
+                 trace=False, direct=False, policy=None, capture=None):
         self.console = console
         self.config = config
         self.log = log
@@ -222,8 +229,36 @@ class CardNetwork:
         self.fallback_host = fallback_host
         self.trace = trace
         self.direct = direct
+        # One policy, one gate and one capture for every face of the card,
+        # because they are one card: a per-source connection limit that each
+        # listener counted separately would let a single address hold six
+        # times what it is allowed. Handed no policy, the card serves as it
+        # always has and nothing below does anything. See `exposed.py`.
+        self.policy = policy or exposed.Policy(exposed.BENCH)
+        self.capture = capture
+        # Always built, never conditionally: `Gate.admit` waves everything
+        # through while the policy has no limits, so a gate on a bench card
+        # costs one dictionary. Built only for a capped level, a card that
+        # started on the bench would have none -- and then changing the
+        # exposure from the bench's own dropdown would cap nothing, which
+        # is the one case the dropdown exists for.
+        self.gate = exposed.Gate(self.policy, capture=capture)
         self.claimed = None          # (ip, adapter) while an address is held
+        # The address the OPERATOR started this card on, before anything
+        # from the network could have moved it. `--claim-ip` runs `netsh`
+        # as an administrator to add an address to this machine's adapter,
+        # and the address it adds is `config.ip` -- which the setup menu
+        # and the web manager can both write. So on a network card, a
+        # stranger chose which IPv4 address an elevated process added to,
+        # and removed from, the host's default-route adapter. Not command
+        # injection -- the arguments are a list and an address is four
+        # bytes rendered as a dotted quad -- but a privileged state change
+        # driven by remote input, which is enough.
+        self._claimable = config.ip
         self._closers = []
+        # the tunnel's open sessions, weakly: one that ended on its own is
+        # not a thing to close, and should not be kept alive to be closed
+        self._sessions = weakref.WeakSet()
         self._stop = False
         self._bound = None           # (host, port, web_port) now serving
         self._lock = threading.Lock()
@@ -234,21 +269,44 @@ class CardNetwork:
         """The address and ports the card is programmed with."""
         return (self.config.ip, self.config.port, self.config.http_port)
 
+    def _fallback_note(self):
+        """What falling back to `fallback_host` actually did, in words.
+
+        The note used to read "the card is answering on every address
+        instead" whatever it had bound -- and the fallback is `--host`,
+        which DEFAULTS to 127.0.0.1, so the commonest case said the
+        opposite of what happened: one address, and the one no other
+        machine can reach. A person who read it and found the LAN address
+        refused had been told the wrong thing by the one line written to
+        stop them guessing. See FIDELITY Z5.
+        """
+        host = self.fallback_host
+        if host == "0.0.0.0":
+            return "so the card is answering on every address this machine has"
+        if host.startswith("127.") or host == "localhost":
+            return ("so the card is answering on %s alone -- nothing off this "
+                    "machine can reach it. Use --host 0.0.0.0 for the LAN, or "
+                    "--claim-ip (as administrator) to hold the card's own "
+                    "address" % host)
+        return "so the card is answering on %s alone" % host
+
     def bind_host(self):
         """The address to bind to, and why.
 
         Returns (host, note). A programmed address this machine has is used
-        as-is. One it does not have cannot be bound, so the card listens on
-        every address instead and the note says so.
+        as-is. One it does not have cannot be bound, so the card falls back
+        to whatever `--host` gave it -- and the note says WHICH, because
+        only `0.0.0.0` is "every address" and it is not the default.
         """
         ip = self.config.ip
         if not ip or ip == "0.0.0.0":
-            return self.fallback_host, "no address programmed yet"
+            return (self.fallback_host,
+                    "no address programmed yet, " + self._fallback_note())
         if is_local(ip):
             return ip, ""
         return (self.fallback_host,
-                "%s is not an address on this machine, so the card is "
-                "answering on every address instead" % ip)
+                "%s is not an address on this machine, %s"
+                % (ip, self._fallback_note()))
 
     def status(self):
         """A line a person can act on, for the window and the log."""
@@ -287,6 +345,10 @@ class CardNetwork:
         with self._lock:
             self._closers.append(sock.close)
 
+    def _remember_session(self, conn):
+        with self._lock:
+            self._sessions.add(conn)
+
     def _remember_server(self, srv):
         with self._lock:
             self._closers.append(srv.shutdown)
@@ -308,6 +370,19 @@ class CardNetwork:
         # the port-1 knock the arp-and-telnet procedure uses. This is a new
         # module out of the box, and giving it an address is the first job.
         if not cfg.assigned():
+            if self.policy.exposed:
+                # An exposed card with no address would take one from the
+                # first stranger who knocks on port 1, and then it is wherever
+                # they put it. There is no deflection to offer here -- the
+                # whole procedure IS the write -- so the port simply does not
+                # open, and an exposed card must be given its address on the
+                # command line before it is ever reachable.
+                if self.log:
+                    self.log("-- EXPOSED: the card has no address and will "
+                             "not take one from the network. Give it one "
+                             "with --card-ip before exposing it.")
+                self._start_discovery()
+                return
             if self.log:
                 self.log("-- the card has no IP address, as a new module "
                          "does. Assign one before anything else will answer:")
@@ -321,16 +396,21 @@ class CardNetwork:
             return
 
         if self.log:
+            # `status()` already ends with the note in brackets; logging it
+            # again put the same sentence on two consecutive lines, and the
+            # sentence is now long enough that the repeat reads as two
+            # different problems. See FIDELITY Z5.
             self.log("-- " + self.status())
-            if note:
-                self.log("-- " + note)
 
         # the serial tunnel: the port the card is programmed with
         threading.Thread(
             target=self._guard,
             args=("inventory tunnel", wire.serve, (self.console, host,
                                                    cfg.port, False, self.log),
-                  {"on_socket": self._remember}),
+                  {"on_socket": self._remember,
+                   "on_conn": self._remember_session,
+                   "policy": self.policy, "gate": self.gate,
+                   "capture": self.capture}),
             daemon=True).start()
 
         # the setup menu on 9999
@@ -338,7 +418,8 @@ class CardNetwork:
             target=self._guard,
             args=("setup menu", xportmenu.serve_setup,
                   (cfg, host, self.log, self.powered),
-                  {"on_socket": self._remember}),
+                  {"on_socket": self._remember, "policy": self.policy,
+                   "gate": self.gate, "capture": self.capture}),
             daemon=True).start()
 
         self._start_discovery()
@@ -349,7 +430,9 @@ class CardNetwork:
                 target=self._guard,
                 args=("web manager", xportweb.serve_web,
                       (cfg, host, self.log, self.powered, cfg.http_port),
-                      {"on_server": self._remember_server}),
+                      {"on_server": self._remember_server,
+                       "capture": self.capture, "policy": self.policy,
+                       "gate": self.gate}),
                 daemon=True).start()
 
     def _start_discovery(self):
@@ -361,7 +444,9 @@ class CardNetwork:
         DeviceInstaller can find a module you cannot yet ping.
         """
         disc = _x.Discovery(self.config, log=self.log,
-                            powered=self.powered, trace=self.trace)
+                            powered=self.powered, trace=self.trace,
+                            policy=self.policy, gate=self.gate,
+                            capture=self.capture)
         threading.Thread(target=disc.serve, args=(self.fallback_host,),
                          daemon=True).start()
         # The same protocol answers on TCP 30718, and that is where a tool
@@ -431,6 +516,12 @@ class CardNetwork:
                 continue
             if self.config.assigned():
                 continue
+            if self.policy.exposed:
+                if self.log:
+                    self.log("-- assignment knock at %s refused: an exposed "
+                             "card does not take its address from the "
+                             "network" % wanted)
+                continue
             self.config.ip = wanted
             if self.config.netmask_bits == 0:
                 self.config.netmask_bits = 8
@@ -452,6 +543,23 @@ class CardNetwork:
         if not ip or ip == "0.0.0.0":
             self._release_now()
             return
+        if self.policy.level != exposed.BENCH and ip != self._claimable:
+            # The address moved after startup, so something programmed it,
+            # and off the bench that something may have been a stranger.
+            # An elevated `netsh add address` is not a thing to do on a
+            # remote party's say-so: they could name the subnet's gateway,
+            # or an address belonging to another host.
+            #
+            # The card still MOVES -- the listeners rebind and `bind_host`
+            # falls back exactly as it does for any address this machine
+            # does not have. It simply is not claimed. Start with
+            # `--card-ip` to claim a chosen address off the bench.
+            if self.log and self.claimed:
+                self.log("-- not claiming %s: the card's address was "
+                         "changed after it started, and this is not a "
+                         "bench. Use --card-ip." % ip)
+            self._release_now()
+            return
         if self.claimed and self.claimed[0] == ip:
             return
         self._release_now()
@@ -469,6 +577,20 @@ class CardNetwork:
     def _tear_down(self):
         with self._lock:
             closers, self._closers = self._closers, []
+            sessions, self._sessions = list(self._sessions), weakref.WeakSet()
+        # The sessions go down with the listeners. This closed the listening
+        # sockets only, so a client connected before a reboot onto a new
+        # address went on being answered on the old one while new
+        # connections were refused. FIDELITY Z3.
+        for conn in sessions:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            try:
+                conn.close()
+            except OSError:
+                pass
         for close in closers:
             try:
                 close()

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Category 36, the VMC's four alarms, and the two reports that carry them.
 
 576013-610 Rev AC Table 29-23 is the VMC's own message table and it is four
@@ -194,6 +197,68 @@ class TheTwoAlarmHistoryReports(unittest.TestCase):
         c = Console()
         c.modules["rs232"] = 1
         self.assertIn("9999", self.ask(c, b"I41200"))
+
+
+class TheDeviceNumberHasACeilingWherethePagePrintsOne(unittest.TestCase):
+    """FIDELITY S28 and O27. 576013-635 Rev AA prints the same bound on five
+    codes -- 412, 8C1, 8C2, 8C3 and BB1 -- `xx - VMC Controller Number
+    (Decimal, 01-18, 00=all)`, and 576013-610 p.26-1 says it again in prose:
+    "You can generate a report for up to 18 VMC controllers."
+
+    Asked for controller 19 or 99 the console did not refuse, it INVENTED:
+    every row came back with a serial number, a status and a rate, because
+    `readings.fixed` hashes the device number. A tool walking device numbers
+    to discover a site found every one of them occupied and healthy.
+
+    *The same code was wrong in the other direction at the same time.*
+    `IBB100`, "all", answered for three controllers because the handler
+    hardcoded `range(1, 4)` where the paper had used `vmc_numbers()` all
+    along. One code, too narrow for `00` and unbounded for `xx`.
+    """
+
+    BOUNDED = ("412", "8C1", "8C2", "8C3", "BB1")
+
+    def ask(self, c, code):
+        return Handler(c, verbose=False).handle(SOH + code).decode("latin-1")
+
+    def a_cage(self, controllers=4):
+        c = Console()
+        c.modules["vmc"] = controllers
+        c.modules["rs232"] = 1
+        c.tick()
+        return c
+
+    def test_nineteen_is_refused_on_every_one_of_the_five(self):
+        c = self.a_cage()
+        for tok in self.BOUNDED:
+            self.assertIn("9999FF", self.ask(c, f"I{tok}19".encode()), tok)
+            self.assertIn("9999FF", self.ask(c, f"I{tok}99".encode()), tok)
+
+    def test_eighteen_is_not(self):
+        """The bound is inclusive: 01-18."""
+        c = self.a_cage()
+        self.assertNotIn("9999FF", self.ask(c, b"IBB118"))
+
+    def test_setting_one_past_the_bound_is_refused_too(self):
+        """It is the device number that is out of range, not the inquiry."""
+        c = self.a_cage()
+        self.assertIn("9999FF", self.ask(c, b"S8C119000123"))
+
+    def test_all_is_the_cage_s_own_count_not_three(self):
+        c = self.a_cage(controllers=4)
+        rows = [r for r in self.ask(c, b"IBB100").split("\r\n")
+                if r[:1].isdigit()]
+        self.assertEqual(len(rows), 2 * len(c.vmc_numbers()))
+        self.assertGreater(len(c.vmc_numbers()), 3)
+
+    def test_an_unbounded_code_still_answers_anything(self):
+        """Every other code's notes read `00=All` with no ceiling, and what a
+        real console does there is UNKNOWNS territory rather than a defect.
+        Asserted so a later pass cannot bound them by accident."""
+        c = self.a_cage()
+        c.modules["probe"] = 4
+        c.tick()
+        self.assertNotIn("9999FF", self.ask(c, b"I20199"))
 
 
 if __name__ == "__main__":

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The report BODIES, on a console that has sensors on it.
 
 FIDELITY L1, which is the entry every other finding in that block sat behind.
@@ -1100,6 +1103,63 @@ class OneValueUnderTwoNames(unittest.TestCase):
                 self.assertEqual(len(rows), 3, tok)
 
 
+class TheLineGeneralSetup(unittest.TestCase):
+    """780 and 7A0, the two general setup inquiries, as 576013-635 Rev AA
+    p.384 and p.419 draw them. I7A0 printed I780's rows. FIDELITY S26."""
+
+    def rows(self, h, command):
+        lines = [ln.rstrip() for ln in body(h, command).splitlines()][2:]
+        return [ln for ln in lines if ln.strip()]
+
+    def a_site(self, kind):
+        c = Console(None)
+        c.modules[kind] = 1
+        c.software.update({"plld020": True, "plld010": True})
+        c.values["S60201"] = "01" + "REGULAR UNLEADED".ljust(20)
+        return c, Handler(c, verbose=False)
+
+    def feet(self, value):
+        return struct.pack(">f", value).hex().upper()
+
+    def test_the_wireless_report_is_p419_s(self):
+        c, h = self.a_site("wplld")
+        c.values["S7A101"] = "011"
+        c.values["S7A201"] = "01" + "REGULAR UNLEADED".ljust(20)
+        c.values["S7A801"] = "0101"                   # fiberglass
+        c.values["S7A901"] = "01" + self.feet(200.0)  # 2.0 inch
+        c.values["S7AD01"] = self.feet(0.0)           # 3.0 inch, unused
+        c.values["S7A501"] = "0101"
+        self.assertEqual(self.rows(h, "I7A001"), [
+            "WPLLD LINE LEAK SETUP", "W 1:REGULAR UNLEADED",
+            "PIPE TYPE:   FIBERGLASS", "LINE LENGTH: 200 FEET",
+            "0.20 GPH TEST: ENABLED", "SHUTDOWN RATE:  3.0 GPH",
+            "T 1:REGULAR UNLEADED", "DISPENSE MODE:", "  STANDARD"])
+
+    def test_a_fiberglass_line_on_its_three_inch_size_prints_that(self):
+        c, h = self.a_site("wplld")
+        c.values["S7A101"] = "011"
+        c.values["S7A801"] = "0101"
+        c.values["S7A901"] = "01" + self.feet(0.0)
+        c.values["S7AD01"] = self.feet(350.0)
+        self.assertIn("LINE LENGTH: 350 FEET", self.rows(h, "I7A001"))
+        # and a steel line does not count a 3.0 inch size it has not got
+        c.values["S7A801"] = "0100"
+        c.values["S7A901"] = "01" + self.feet(120.0)
+        self.assertIn("LINE LENGTH: 120 FEET", self.rows(h, "I7A001"))
+
+    def test_the_pressure_report_is_p384_s(self):
+        c, h = self.a_site("plld")
+        c.values["S78101"] = "011"
+        c.values["S78201"] = "01" + "UNLEADED REGULAR".ljust(20)
+        c.values["S78801"] = "0101"
+        c.values["S78501"] = "0101"
+        self.assertEqual(self.rows(h, "I78001"), [
+            "PRESSURE LINE LEAK SETUP", "Q 1:UNLEADED REGULAR",
+            "PIPE TYPE:   FIBERGLASS", "0.10 GPH TEST: ENABLED",
+            "SHUTDOWN RATE:  3.0 GPH", "T 1:REGULAR UNLEADED",
+            "DISPENSE MODE:", "  STANDARD"])
+
+
 class TheLineDisableAlarmAssignments(unittest.TestCase):
     """787, 7A7 and 75B are 52C's payload and 52C's report, for a LINE.
 
@@ -1235,3 +1295,249 @@ class NoReportInventsATank(unittest.TestCase):
                   encoding="utf-8") as fh:
             src = fh.read()
         self.assertNotIn("sorted(c.tank_level) or [1]", src)
+
+
+def _full_site():
+    from tests.test_wirecolumns import a_full_site
+    got = a_full_site()
+    c = got if isinstance(got, Console) else next(
+        x for x in got if isinstance(x, Console))
+    return c, Handler(c, verbose=False)
+
+
+class ASetItsOwnInquiryCannotReadIsRefused(unittest.TestCase):
+    """Five Sets checked less than their inquiries parse, acked, and saved
+    it, so the inquiry raised on every read after -- and after a restart."""
+
+    def test_the_thirtieth_of_february_is_not_a_dial_date(self):
+        _c, h = _full_site()
+        self.assertIn("9999FF1B", send(h, "S52B0112402301200"))
+        self.assertNotIn("9999FF", send(h, "S52B0112402291200"))
+        self.assertNotIn("9999FF", send(h, "I52000"))
+
+    def test_an_alarm_assignment_is_eight_digits(self):
+        _c, h = _full_site()
+        for cmd in ("S52C010101ab01", "S78701aabbcc01", "S7A701aabbcc01",
+                    "S75B01aabbcc01", "S80801aabbcc01"):
+            self.assertIn("9999FF1B", send(h, cmd), cmd)
+        for cmd in ("I52C00", "I78700", "I80801"):
+            self.assertNotIn("9999FF", send(h, cmd), cmd)
+
+    def test_a_computer_format_date_is_digits_too(self):
+        _c, h = _full_site()
+        self.assertIn("9999FF1B", send(h, "s75C01AB0101"))
+        self.assertNotIn("9999FF", send(h, "s75C01240101"))
+        self.assertNotIn("9999FF", send(h, "I75C01"))
+
+    def test_what_a_state_file_already_holds_still_reads(self):
+        c, h = _full_site()
+        c.receiver_alarms = {1: [("01", "01", "ab")]}
+        c.receiver_dial = {1: "1240230" + "1200"}
+        self.assertNotIn("9999FF", send(h, "I52C00"))
+        self.assertNotIn("9999FF", send(h, "I52B00"))
+
+
+class TheReidTableWritesBackWhatItReads(unittest.TestCase):
+    """i54C00 answers twelve hex floats and s54C00 wanted `GG.G` whatever the
+    case of the letter, so a tool could not write back what it read."""
+
+    def test_the_computer_form_round_trips(self):
+        c, h = _full_site()
+        table = (7.0, 7.5, 8.0, 9.0, 10.0, 11.0, 11.5, 11.0, 10.0, 9.0, 8.0,
+                 7.0)
+        c.values["S54C00"] = "".join(f"{v:04.1f}" for v in table)
+        inner = send(h, "i54C00").strip(chr(1)).split(chr(3))[0]
+        data = inner[6 + 10:].split("&&")[0]
+        self.assertEqual(len(data), 96)
+        c.values["S54C00"] = ""
+        self.assertNotIn("9999FF", send(h, "s54C00" + data))
+        self.assertEqual(c.values["S54C00"],
+                         "".join(f"{v:04.1f}" for v in table))
+
+
+class TheValveSubAlarmHistoryHasItsStampFunction(unittest.TestCase):
+    """B62's display path called `console.alarm_report_stamp` in a module
+    with no `console` in it. Latent while the history is always empty."""
+
+    def test_a_row_prints(self):
+        from unittest import mock
+        _c, h = _full_site()
+        row = {"sensor": 1, "fault": "COMMUNICATION ALARM", "state": "01",
+               "at": "2609141200"}
+        with mock.patch.object(Handler, "_valve_history",
+                               return_value=[row]):
+            out = send(h, "IB6200")
+        self.assertIn("SENSOR FAULT ALARM", out)
+
+
+class TheTicketStampSaysWhichHalfIsWrong(unittest.TestCase):
+    """FIDELITY S24. 05 BAD DATE and 06 BAD TIME, and the 30th of February
+    has a legal month and a legal day."""
+
+    def result(self, h, cmd):
+        out = send(h, cmd)
+        return [ln for ln in out.split(chr(13) + chr(10))
+                if "RESULT CODE" in ln]
+
+    def test_an_impossible_date_is_a_bad_date(self):
+        _c, h = _full_site()
+        for cmd in ("S7B5010124023012000100", "S7B6010124023012000100",
+                    "S7B5010124130112000100"):
+            self.assertEqual(self.result(h, cmd),
+                             ["RESULT CODE 05: BAD DATE"], cmd)
+
+    def test_an_impossible_hour_is_a_bad_time(self):
+        _c, h = _full_site()
+        self.assertEqual(self.result(h, "S7B5010124022825000100"),
+                         ["RESULT CODE 06: BAD TIME"])
+
+
+class TheVlldTemperaturesSayWhetherTheHardwareIsThere(unittest.TestCase):
+    """FIDELITY M21. 576013-849 Rev B p.40 defines B51 and B52's two
+    temperature columns with the same parenthesis, and the parenthesis is
+    the point of them:
+
+        GRND = Temperature via ground temperature thermistor at last
+               dispense (if 0.0, no thermistor is present).
+        TANK = Temperature via in-tank probe of corresponding tank contents
+               (if 0.0, no probe is present).
+
+    So the report says whether the hardware is on the site, and this printed
+    a plausible temperature either way: a console with no probe card in it
+    reported the fuel's temperature, and one with no ground thermistor
+    reported the ground's. Zero is a reading here, not a missing one.
+
+    The thermistor half is only answerable since M4 gave the cage the card
+    it lives on.
+    """
+
+    def a_line(self, probe=1, thermistor=False):
+        c = Console()
+        c.modules = {"probe": probe, "vlld": 1, "rs232": 1}
+        c.probe_gt = thermistor
+        return c
+
+    def timings(self, c):
+        """(ground, tank) as the B51 row would print them."""
+        import time
+        from types import SimpleNamespace
+        from tls350sim import leaktest, wirelines
+        done = SimpleNamespace(started=time.mktime(c.now()),
+                               result=leaktest.PASSED, rate_key="gross")
+        ground, tank = wirelines._vlld_timings(c, 1, done)[:2]
+        return ground, tank
+
+    def test_a_site_with_both_reports_both(self):
+        ground, tank = self.timings(self.a_line(thermistor=True))
+        self.assertNotEqual(ground, 0.0)
+        self.assertNotEqual(tank, 0.0)
+        # "the ground sits a little above it", which both samples show
+        self.assertLess(abs(ground - tank), 2.0)
+
+    def test_no_thermistor_is_a_ground_temperature_of_zero(self):
+        """The plain four-probe card has no thermistor position, so a
+        console carrying one has no ground temperature to report."""
+        ground, tank = self.timings(self.a_line(thermistor=False))
+        self.assertEqual(ground, 0.0)
+        self.assertNotEqual(tank, 0.0)
+
+    def test_no_probe_card_is_a_tank_temperature_of_zero(self):
+        ground, tank = self.timings(self.a_line(probe=0, thermistor=False))
+        self.assertEqual(tank, 0.0)
+        self.assertEqual(ground, 0.0)
+
+    def test_the_column_still_holds_its_width_at_zero(self):
+        """`{:7.1f}` either way, so the zero lands in the GRND column
+        rather than shortening the row."""
+        self.assertEqual(f"{0.0:7.1f}", "    0.0")
+        self.assertEqual(len(f"{0.0:7.1f}"), len(f"{66.2:7.1f}"))
+
+
+class ThePackedHistoriesCarryTheStationHeader(unittest.TestCase):
+    """FIDELITY S23. The header is 503; `station_header_field` read 501."""
+
+    def test_the_packed_alarm_history_names_the_station(self):
+        c = Console()
+        presets.load(c, "Two-tank retail site")
+        name = (c.text("503", 1) or "").strip()
+        self.assertTrue(name)
+        self.assertIn(name, send(Handler(c, verbose=False), "i11300"))
+
+
+class TheSiteLinkModemIsWhateverWasProgrammed(unittest.TestCase):
+    """FIDELITY D10. `885`'s option list had two entries where `88D`'s own
+    enumeration has four, and `88D` answered `VR TLS GSM MODEM` on every
+    port regardless -- so the console reported a GSM modem on a port whose
+    type could not be set to one.
+
+    576013-623 Rev AN p.6-4 is the side that settles it: "Press ENTER to
+    accept the modem option or press CHANGE and then ENTER to choose US
+    ROBOTICS (UK), VR TLS ANALOG MOD, or VR TLS GSM MODEM", and Table 6-1
+    on p.6-1 lists the same four with their port settings. The serial
+    manual's two-entry Notes list under 885 is unchanged in Rev U, Rev Y
+    and Rev AA, so it is that manual's own error rather than a revision
+    this shelf is missing.
+    """
+
+    def a_console(self, kind=None):
+        c = Console()
+        c.modules["rs232"] = 1
+        if kind is not None:
+            c.values["S88501"] = kind
+        return c, Handler(c, verbose=False)
+
+    def test_the_field_offers_all_four(self):
+        from tls350sim.console import FIELDS
+        choices = dict(FIELDS["S88501"]["choices"])
+        self.assertEqual(choices, {"00": "NETCOMM SMART M7F",
+                                   "01": "US ROBOTICS (UK)",
+                                   "02": "VR TLS ANALOG MOD",
+                                   "03": "VR TLS GSM MODEM"})
+
+    def test_88d_reports_the_type_that_was_set(self):
+        for kind, name in (("00", "NETCOMM SMART M7F"),
+                           ("01", "US ROBOTICS (UK)"),
+                           ("02", "VR TLS ANALOG MOD"),
+                           ("03", "VR TLS GSM MODEM")):
+            _c, h = self.a_console(kind)
+            out = body(h, "I88D01")
+            self.assertIn("MODEM TYPE : " + name, out, kind)
+            self.assertIn("MODEM AUTO DETECTED: " + name, out, kind)
+
+    def test_an_unprogrammed_port_is_the_screens_own_default(self):
+        _c, h = self.a_console()
+        self.assertIn("MODEM TYPE : NETCOMM SMART M7F", body(h, "I88D01"))
+
+    def test_rssi_is_only_drawn_for_the_gsm_modem(self):
+        """"Only displayed if modem type is VR TLS GSM MODEM" --
+        576013-818 Rev AA Figure 6-27, p.6-22. It is in 576013-818 and not
+        in 576013-610, which is where FIDELITY D10 used to cite it: Rev AC
+        of the Operator's Manual contains the string RSSI zero times."""
+        for kind in ("00", "01", "02"):
+            _c, h = self.a_console(kind)
+            self.assertNotIn("RSSI", body(h, "I88D01"), kind)
+        _c, h = self.a_console("03")
+        self.assertIn("RSSI:", body(h, "I88D01"))
+
+    def test_99_is_the_manuals_own_word_for_no_reading(self):
+        """"rr - RSSI ... 99: not known or not detectable", and the same
+        for `ee`, 576013-635 Rev AA p.473. Both notes say the field is
+        "only valid if Modem Type is" GSM, so 99 is what the three other
+        types report -- and a GSM port has to report something else, which
+        a flat 9999 for every port could not."""
+        c, _h = self.a_console("01")
+        self.assertEqual(c.comm_signal(1), (99, 99))
+        c, _h = self.a_console("03")
+        rssi, ber = c.comm_signal(1)
+        # "31: -51 dBm or greater ... 02...30: -109 to -53 dBm" and
+        # "00...7: as RXQUAL values in the table GSM 05.08"
+        self.assertTrue(0 <= rssi <= 31, rssi)
+        self.assertTrue(0 <= ber <= 7, ber)
+
+    def test_the_computer_format_carries_the_same_two_bytes(self):
+        """`PPMMDDrree`: the port, the type, the type it detected, and the
+        two readings. It was `03039999` for every port on every console."""
+        _c, h = self.a_console("02")
+        out = body(h, "i88D01")
+        self.assertIn("010202", out)
+        self.assertIn("9999", out)

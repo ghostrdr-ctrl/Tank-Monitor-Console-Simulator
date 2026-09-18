@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The bench, drawn as the site it stands for.
 
 The console above is the console; the bench below is the forecourt. A tank
@@ -33,6 +36,14 @@ from tkinter import ttk
 
 from . import inputs, readings, relays
 from .meterid import DEFAULT_BUS, DEFAULT_SLOT, MeterId
+
+# Nothing in this file uses those three. The panel and the bench's own tests
+# reach them through it -- `bench.DEFAULT_BUS`, `bench.DEFAULT_SLOT` and
+# `bench.MeterId` -- so they are re-exported on purpose. Naming them here says
+# so to a reader and to pyflakes, which honours neither `noqa` nor the
+# `import X as X` convention; a fourth name added above and left unused is
+# still reported.
+_RE_EXPORTED = (DEFAULT_BUS, DEFAULT_SLOT, MeterId)
 
 # ---------------------------------------------------------------------------
 # the design tokens: one place for every colour and face the bench uses
@@ -201,10 +212,14 @@ class Segmented(tk.Frame):
         self.command = command
         self.buttons = {}
         self.bars = {}
+        self.holders = {}
+        self.order = list(names)
+        self.hidden = set()
         self.current = None
         for name in names:
             holder = tk.Frame(self, bg=BG)
             holder.pack(side="left", padx=(0, 4))
+            self.holders[name] = holder
             b = tk.Label(holder, text=name, bg=BG, fg=MUTED, font=FONT_HEAD,
                          padx=14, pady=6, cursor="hand2")
             b.pack()
@@ -219,6 +234,35 @@ class Segmented(tk.Frame):
     def _hover(self, name, on):
         if name != self.current:
             self.buttons[name].config(fg=BODY if on else MUTED)
+
+    def set_visible(self, name, on):
+        """Show or hide one segment without disturbing the others' order.
+
+        Re-packing every holder rather than just the one, because `pack`
+        appends: a segment hidden and shown again would otherwise come back
+        at the right-hand end, and the views would shuffle every time the
+        exposure changed. `self.order` is the order they were built in and
+        it is the order they are always drawn in.
+        """
+        if name not in self.holders:
+            return
+        if on:
+            self.hidden.discard(name)
+        else:
+            self.hidden.add(name)
+        for n in self.order:
+            self.holders[n].pack_forget()
+        for n in self.order:
+            if n not in self.hidden:
+                self.holders[n].pack(side="left", padx=(0, 4))
+        if not on and self.current == name:
+            for n in self.order:
+                if n not in self.hidden:
+                    self.select(n)
+                    break
+
+    def visible(self, name):
+        return name in self.holders and name not in self.hidden
 
     def select(self, name):
         if name == self.current:
@@ -1226,7 +1270,7 @@ class SensorTile(tk.Frame):
     """One sensor: a lamp, its name, what kind of thing it is, and a state
     button that offers only the states this sensor's own type can be in.
 
-    **Everything on this tile is the whole word.** The first version was
+    Everything on this tile is the whole word. The first version was
     178px wide and put the type and the state side by side on one line,
     which cannot be done: a console location label is twenty characters
     ("STP SUMP TANK 1 UNLE"), the widest type the manual offers is "dual
@@ -1328,10 +1372,66 @@ class SensorTile(tk.Frame):
                    "measures it, and a Vac Warning is posted above 22.4 "
                    "gph or with under eight hours of vacuum left.")
 
+        # A Mag sump sensor gets the sump. 576013-610 Rev AC chapter 24's
+        # leak test measures water going out of a sump the technician has
+        # filled, and nothing on this bench had any water in a sump to
+        # measure -- so the four things the test reads are set here: how
+        # deep it stands, how fast it leaves, how warm it is and how fast
+        # that is moving. ENTER or leaving the box sets it; a keystroke
+        # does not, because "1" on the way to "12" is a sump with one inch
+        # of water in it and a running test would abort on it. FIDELITY U1b.
+        if mod == "smart" and self.console.sensor_type(mod, num) == "03":
+            sumps = self.console.sumps
+            for text, unit, key, value, tip in (
+                    ("water in sump", "in", "water",
+                     f"{sumps.height(num):g}",
+                     "Inches of water standing in the sump. A leak test "
+                     "wants 6 to 22 on a 24-inch sensor, and the console "
+                     "posts its water warning and alarm off this height "
+                     "except while a test holds them off."),
+                    ("leaving at", "in/h", "leak",
+                     f"{sumps.leak.get(int(num), 0.0):g}",
+                     "How fast the water goes down. The test passes under "
+                     "0.0104 in/h and aborts once a quarter inch has gone."),
+                    ("water temp", "\u00b0F", "temp",
+                     f"{sumps.temperature(num):.1f}",
+                     "The water's temperature. The test aborts below 36 F "
+                     "or above 115 F."),
+                    ("changing at", "\u00b0F/h", "drift",
+                     f"{sumps.drift.get(int(num), 0.0):g}",
+                     "How fast the temperature is moving. The test waits "
+                     "until it is under 5 F an hour, and gives up after "
+                     "four hours.")):
+                row = tk.Frame(inner, bg=CARD)
+                row.pack(fill="x", padx=8, pady=(4, 0))
+                tk.Label(row, text=text, bg=CARD, fg=FAINT, font=FONT_SM,
+                         anchor="w").pack(side="left")
+                var = tk.StringVar(value=value)
+                box = tk.Entry(row, textvariable=var, width=6, bg="#24262b",
+                               fg=INK, font=MONO_SM, insertbackground=INK,
+                               relief="flat", justify="right")
+                box.pack(side="left", padx=(4, 2))
+                for event in ("<Return>", "<FocusOut>"):
+                    box.bind(event, lambda _e, k=key, v=var:
+                             self._set_sump(k, v))
+                tk.Label(row, text=unit, bg=CARD, fg=FAINT,
+                         font=FONT_SM).pack(side="left")
+                Tip(box, tip)
+
         # the bottom margin, as a widget: with nothing holding the tile's
         # height open any more, the last row would otherwise sit on the edge
         tk.Frame(inner, bg=CARD, height=7).pack(fill="x")
         self._paint(cur)
+
+    def _set_sump(self, key, var):
+        try:
+            value = float(var.get().strip() or 0)
+        except ValueError:
+            return
+        sumps = self.console.sumps
+        {"water": sumps.pour, "leak": sumps.set_leak,
+         "temp": sumps.set_temperature,
+         "drift": sumps.set_drift}[key](self.num, value)
 
     def _set_vac_leak(self, _e=None):
         text = self.leak_var.get().strip()
@@ -2386,7 +2486,7 @@ class GradeRow(tk.Frame):
 class BlendCard(tk.Frame):
     """One blended grade button on a dispenser.
 
-    **The console never learns this exists**, and that is the fidelity
+    The console never learns this exists, and that is the fidelity
     point rather than a shortcut. 576013-818 p.12-7: "A tank can be mapped
     to only one meter for a given Fuel Position (FP)", and the only
     blender support anywhere in the manuals is a DIM parameter saying how

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """What the console must get right, tested without a window.
 
 Everything here was verified by hand against the manuals first; these lock it
@@ -177,6 +180,19 @@ class Menus(unittest.TestCase):
         full.values["S56600"] = "1"      # SERVICE NOTICE: ENABLED
         full.modules["pumpmon"] = 1      # its own card, not the pump sense one
         self.assertEqual(len(full.available_diagnostics()), len(DIAG_MENU))
+        # the two Mag sump functions want a Mag sensor programmed, not just
+        # the card: "This menu displays only if the console detects a Mag
+        # Sump Sensor capable of leak detection". FIDELITY U1b. And
+        # LAST-SHIFT INVENTORY wants a Shift Start Time: "At least one Shift
+        # Start Time must be entered to activate the 'Last Shift Inventory'
+        # feature". FIDELITY O22. And DELIVERY MAINTENANCE wants ticketed
+        # delivery on: "Before you use this function, Ticketed Delivery must
+        # be enabled in the Setup Mode". FIDELITY O23.
+        self.assertEqual(len(full.available_operating()),
+                         len(NORMAL_MENU) - 5)
+        full.values["S72301"] = "0103"
+        full.values["S50201"] = "0600"
+        full.values["S51C00"] = "1"
         # and the one operating function that is an option in System Setup
         self.assertEqual(len(full.available_operating()),
                          len(NORMAL_MENU) - 1)
@@ -656,6 +672,238 @@ class CardCage(unittest.TestCase):
                   in c.slot_readings() if slot > 0]
         self.assertEqual(panel, report)
         self.assertIn("9 4 RELAY", report)
+
+
+class TheProbeFamilyIsTwoCards(unittest.TestCase):
+    """FIDELITY M4. 576013-635 Rev AA's function 102 type list names both --
+    "0A=Four Probe w/ Ground Temp Module" beside "01=Four Probe Module" --
+    and 576013-818 Table 6-1 gives them their own resistors, `4 Probe 2K`
+    and `4 Probe w/Temp Interface 160K`, which is a hundredfold apart.
+
+    576013-879 Rev W p.60 is the card: `PROBE/THERMISTOR INTERFACE MODULE -
+    I.S. BAY`, drawn `PROBE` then `THERMISTOR` over one row of eight
+    terminals, and its device table's second row is the thermistor -- "only
+    one ground temperature thermistor is needed per site and the thermistor
+    must be wired to thermistor position number 1".
+
+    This console had one probe card, so the ground temperature thermistor
+    had nowhere to be and the cage could not say the site had one. The
+    captured console in `tests/console_capture` is exactly this card.
+    """
+
+    def a_cage(self, gt=False):
+        c = Console(None)
+        c.set_module("probe", 1)
+        c.probe_gt = gt
+        return c
+
+    def test_the_default_card_is_the_plain_one(self):
+        c = self.a_cage()
+        self.assertFalse(c.probe_gt)
+        self.assertEqual(c.card("probe")[1], "329356-002")
+        self.assertEqual(c.card("probe")[2], 2000)
+        self.assertEqual(c.module_type("probe"), "01")
+
+    def test_the_thermistor_card_is_its_own_type_and_its_own_resistor(self):
+        c = self.a_cage(gt=True)
+        label, part, ohms = c.card("probe")
+        self.assertEqual(label, "Four-Input Probe/Thermistor Interface Module")
+        self.assertEqual(ohms, 160000)
+        self.assertEqual(c.module_type("probe"), "0A")
+        # 576013-632 Rev C, which is not on this shelf: "the Veeder-Root
+        # Probe/Thermistor Interface Module (P/N 847490-104)". The prefix is
+        # one this cage already uses -- the Pump Relay Monitor is 847490-504.
+        self.assertEqual(part, "847490-104")
+
+    def test_both_cards_carry_four_probes(self):
+        """Which is why it is a variant and not a second cage key: some
+        forty serial codes gate on `has("probe")`, and the numbering
+        objection M2 had does not arise when the count is the same."""
+        for gt in (False, True):
+            c = self.a_cage(gt=gt)
+            self.assertEqual(c.wires("probe"), 4)
+            self.assertEqual(c.capacity("probe"), 4)
+            self.assertEqual(len(c.slot_text("601").split()), 4)
+
+    def test_the_glass_and_the_paper_spell_it_differently(self):
+        """576013-818 Rev AB Figure 6-2 draws `SLOT 1 4 PROBE/ G. T.` and
+        576013-635 Rev AA's function 102 sample prints `4 PROBE / G.T.`.
+        One name table served both surfaces, so whichever was chosen the
+        other one was wrong."""
+        c = self.a_cage(gt=True)
+        self.assertEqual(c.slot_report()[0][0], "SLOT 1 4 PROBE/ G. T.")
+        paper = [name for slot, _key, name, _p, _c in c.slot_readings()
+                 if slot == 1]
+        self.assertEqual(paper, ["4 PROBE / G.T."])
+
+    def test_the_slot_reads_the_cards_own_id_resistor(self):
+        """A hundredfold apart, so the two columns a technician compares
+        cannot confuse the two cards. Table 6-1's own note: "the actual or
+        measured resistance will differ slightly from the nominal value"."""
+        for gt, nominal in ((False, 2000), (True, 160000)):
+            c = self.a_cage(gt=gt)
+            por, now = c.module_id_resistance("probe", 1)
+            self.assertAlmostEqual(por / nominal, 1.0, delta=0.05)
+            self.assertAlmostEqual(now / por, 1.0, delta=0.01)
+
+    def test_the_captured_console_s_own_row_replays(self):
+        """`1   4 PROBE / G.T.   164313   164181` is what a real TLS-350
+        printed. The nominal is 160K and both figures sit just above it,
+        which is the band this console already models."""
+        c = self.a_cage(gt=True)
+        row = next(line for line in c.configuration_lines()
+                   if line.startswith("  1   "))
+        self.assertTrue(row.startswith("  1   4 PROBE / G.T."), row)
+        por, now = (float(n) for n in row.split()[-2:])
+        for reading in (por, now):
+            self.assertGreater(reading, 160000)
+            self.assertLess(reading, 168000)
+
+    def test_the_card_survives_a_cold_boot(self):
+        """The cage is re-scanned at power-up; the programming is not."""
+        c = self.a_cage(gt=True)
+        c.cold_boot()
+        self.assertTrue(c.probe_gt)
+        self.assertEqual(c.module_type("probe"), "0A")
+
+    def test_the_bay_listing_names_the_card_that_is_in_it(self):
+        c = self.a_cage(gt=True)
+        named = [label for _bay, _slot, key, label, _part in c.cage()
+                 if key == "probe"]
+        self.assertEqual(named,
+                         ["Four-Input Probe/Thermistor Interface Module"])
+
+
+class ThePrintedBoardNamesAreTheirOwnVocabulary(unittest.TestCase):
+    """FIDELITY M20. `MODULE_SHORT` was read off 576013-818's Table 6-1 --
+    the ID RESISTANCE table, which names cards for a technician holding a
+    meter -- and served both the SLOT screen and function 102's printout.
+    The printout has its own list, and two primary sources agree on it
+    against this console: the sample in 576013-635 Rev AA p.49, unchanged
+    from Rev U through Rev AA, and the captured console in
+    `tests/console_capture`, ten years and one continent apart.
+
+    Each name below is attested twice: the STRING is printed in one of the
+    samples, and the two ID resistances beside it reproduce the Table 6-1
+    nominal of the card this console maps that name to. A name and a
+    resistance agreeing is what identifies the card, because the resistance
+    is the only field on that report whose meaning does not depend on
+    reading the name.
+    """
+
+    #: (the printed name, POR, CURRENT, this console's key) off the two
+    #: samples. The band is `module_id_resistance`'s own.
+    ATTESTED = [
+        # tests/console_capture/raw/I10200.bin, JAN 16 2006
+        ("PLLD SENSOR BD", 3878, 3881, "plld"),
+        ("PLLD POWER BD", 100848, 100820, "plldctl"),
+        ("RS232 SERIAL BD", 15051, 15059, "rs232"),
+        ("SERIAL SAT BD", 482940, 482561, "ssat"),
+        # 576013-635 Rev AA p.49, function 102's own sample
+        ("FAXMODEM  BOARD", 47008, 47006, "modem"),
+        ("ELEC DISP INT.", 100725, 100748, "edim"),
+    ]
+
+    def a_cage(self):
+        c = Console(None)
+        for key in ("probe", "plld", "plldctl", "rs232", "ssat", "modem",
+                    "edim"):
+            c.modules[key] = 1
+        c.probe_gt = True
+        return c
+
+    def test_each_printed_name_reaches_the_paper(self):
+        paper = "\n".join(self.a_cage().configuration_lines())
+        for name, _por, _now, _key in self.ATTESTED:
+            self.assertIn(name, paper, name)
+        self.assertIn("4 PROBE / G.T.", paper)
+
+    def test_and_the_glass_keeps_its_own(self):
+        """The screen's names are Table 6-1's, which is what the citation
+        audit sanctions on a `SLOT #` line -- so this is not one table
+        replacing another, it is two tables where there was one."""
+        glass = "\n".join(l1 for l1, _l2 in self.a_cage().slot_report())
+        for name in ("6 PLLD SENSOR", "PLLD CNTRL", "RS-232", "S-SAT COMM",
+                     "SITEFAX", "EDIM", "4 PROBE/ G. T."):
+            self.assertIn(name, glass, name)
+        for name, _por, _now, _key in self.ATTESTED:
+            self.assertNotIn(name, glass, name)
+
+    def test_the_resistance_beside_each_name_identifies_its_card(self):
+        """The cross-check that makes the mapping evidence rather than a
+        reading of the words: the sample's own two figures against the
+        Table 6-1 nominal of the card this console attaches that name to."""
+        c = self.a_cage()
+        for name, por, now, key in self.ATTESTED:
+            nominal = c.card(key)[2]
+            self.assertAlmostEqual(por / nominal, 1.0, delta=0.05,
+                                   msg=f"{name} against {key} {nominal}")
+            self.assertAlmostEqual(now / por, 1.0, delta=0.02, msg=name)
+
+    def test_the_satellite_is_the_serial_one_and_the_resistor_says_so(self):
+        """`SERIAL SAT BD` could be either of two satellite boards by its
+        name. Table 6-1 gives the serial one 475K and the Amoco one 332K,
+        and the capture reads 482940."""
+        c = self.a_cage()
+        self.assertLess(abs(482940 / c.card("ssat")[2] - 1.0), 0.05)
+        self.assertGreater(abs(482940 / c.card("asat")[2] - 1.0), 0.4)
+
+    def test_a_card_with_no_attested_name_prints_the_screen_s(self):
+        """Most of the cage appears in no sample at all. Inventing
+        `8 LIQUID BD` from the pattern would be drawing a line on the one
+        report a technician reads to find out what is in the console."""
+        c = self.a_cage()
+        c.modules["liquid"] = 1
+        self.assertEqual(c.slot_name("liquid"), c.slot_name("liquid", True))
+        self.assertEqual(c.slot_name("liquid"), "8 LIQUID")
+
+    def test_every_attested_name_belongs_to_a_card_this_console_has(self):
+        """`4 INPUT BOARD` is in the sample too, at slot 9, and is
+        `2C=Four Input Module` -- a card in no row of Table 6-1 and no entry
+        of this cage. It is deliberately absent rather than bent onto a
+        card it is not."""
+        from tls350sim.console import MODULE_PAPER, MODULE_SHORT
+        self.assertNotIn("4 INPUT BOARD", MODULE_PAPER.values())
+        for key in MODULE_PAPER:
+            self.assertIn(key, MODULE_SHORT, key)
+
+
+class TheSevenInputSmartCardReportsItself(unittest.TestCase):
+    """The same defect on the other variant, found by building M4's.
+
+    576013-635 Rev AA's type list names both of that family too --
+    "2B=SmartSensor(7) Module" beside "28=SmartSensor(8) Module" -- and
+    `MODULE_TYPE` is keyed by the cage key, so a console with the Press
+    module in it reported the eight-input card down the port. FIDELITY M2's
+    entry lists three things that had to start asking the console instead of
+    a table; this is a fourth nobody had looked at.
+    """
+
+    def test_the_press_module_is_2b_and_the_other_is_28(self):
+        c = Console(None)
+        c.set_module("smart", 1)
+        self.assertEqual(c.module_type("smart"), "28")
+        c.smart_press = True
+        self.assertEqual(c.module_type("smart"), "2B")
+
+    def test_and_the_bay_listing_names_it(self):
+        c = Console(None)
+        c.set_module("smart", 1)
+        c.smart_press = True
+        named = [(label, part) for _b, _s, key, label, part in c.cage()
+                 if key == "smart"]
+        self.assertEqual(
+            named, [("Seven-Input Smart Sensor/Pressure Module", "332250-001")])
+
+    def test_but_its_slot_line_is_still_the_family_s(self):
+        """No page draws either smart card's slot line, so the variant has
+        no name of its own and inventing one would be drawing a screen the
+        hardware may not have."""
+        c = Console(None)
+        c.set_module("smart", 1)
+        c.smart_press = True
+        self.assertEqual(c.slot_name("smart"), c.slot_name("smart", True))
+        self.assertIn("SMART", c.slot_name("smart"))
 
 
 class EightOfEverySensorCard(unittest.TestCase):
@@ -1909,12 +2157,18 @@ class Reconciliation(unittest.TestCase):
         self.assertEqual(c.bir.current(1)["opening"], closed["physical"])
         self.assertEqual(c.bir.current(1)["sales"], 0.0)
 
-    def test_no_bir_key_no_meter_data(self):
+    def test_no_bir_key_no_meter_data_but_the_fuel_still_leaves(self):
+        """The dispenser dispenses whether or not the console can account
+        for it: the tank goes down on the handle alone, and what the key
+        withholds is the booking -- no totals, no events, no period."""
         c = self.a_site()
         c.software["bir"] = False
         before = c.tank_level[1]["volume"]
         self.hours(c, 4)
-        self.assertEqual(c.tank_level[1]["volume"], before)
+        self.assertLess(c.tank_level[1]["volume"], before)
+        self.assertEqual(sum(c.bir.totals.values()), 0.0)
+        self.assertEqual(c.bir.events, [])
+        self.assertEqual(c.bir.period, {})
 
     def test_a_tool_reads_the_shift_and_closes_it(self):
         c = self.a_site()
@@ -2736,6 +2990,7 @@ class Wire(unittest.TestCase):
         self.c.meter_flow = {1: 100.0}
         self.c.tick()
         self.c.tank_level[1]["volume"] += 1000.0
+        self.c.tick()
         self.c.clock_offset += 3600
         self.c.tick()
         self.c.clock_offset += 3600
@@ -2906,6 +3161,43 @@ class ReconciliationMode(unittest.TestCase):
         self.assertEqual(c.bir.current(1, "shift")["adjust"], 0.0)
         self.assertEqual(c.bir.current(1, "daily")["adjust"], 100.0)
         self.assertIsNone(c.bir.last(1, "daily"))
+
+    def test_an_adjustment_reaches_a_shift_that_has_closed(self):
+        """576013-610 Rev AC p.28-19: "You can adjust the volume for the
+        previous or current shift or for any day in the period." Every
+        adjustment landed in the open periods, so the previous shift could
+        not be adjusted at all and forty gallons meant for it went into the
+        running one. Its CALC'D INVNTRY and VARIANCE move with it, and so
+        does the day that holds it. FIDELITY Q1."""
+        c = self.a_site()
+        c.bir.close("shift")
+        closed = c.bir.last(1, "shift")
+        calculated, variance = closed["calculated"], closed["variance"]
+        self.assertIs(c.bir.adjust(1, 40.0, "shift", previous=True), closed)
+        self.assertEqual(closed["adjust"], 40.0)
+        self.assertEqual(closed["calculated"], calculated + 40.0)
+        self.assertEqual(closed["variance"], variance - 40.0)
+        self.assertEqual(c.bir.current(1, "shift")["adjust"], 0.0)
+        self.assertEqual(c.bir.current(1, "daily")["adjust"], 40.0)
+
+    def test_a_typed_closing_date_reaches_that_day(self):
+        """p.28-20: "Enter the desired closing date for the adjustment"."""
+        c = self.a_site()
+        c.bir.close("daily")
+        closed = c.bir.last(1, "daily")
+        c.clock_offset += 86400.0
+        c.bir.adjust(1, -25.0, "daily", day=closed["closed"])
+        self.assertEqual(closed["adjust"], -25.0)
+        self.assertEqual(c.bir.current(1, "daily")["adjust"], 0.0)
+        self.assertEqual(c.bir.current(1, "shift")["adjust"], 0.0)
+
+    def test_a_period_nobody_holds_takes_no_adjustment(self):
+        c = self.a_site()
+        self.assertIsNone(c.bir.adjust(1, 40.0, "shift", previous=True))
+        self.assertIsNone(c.bir.adjust(1, 40.0, "daily",
+                                       day=time.time() - 5 * 86400.0))
+        for kind in ("shift", "daily", "weekly", "periodic"):
+            self.assertEqual(c.bir.current(1, kind)["adjust"], 0.0)
 
     def test_sales_run_down_the_tank_and_into_every_period(self):
         c = self.a_site()
@@ -3374,6 +3666,26 @@ class AlarmReduction(unittest.TestCase):
         self.assertNotIn("190301", got)        # six minutes, not two
         c.clock_offset += 240.0
         self.assertIn("190301", c.compute_alarms())
+
+    def test_a_disabled_dim_is_the_other_alarm_and_the_other_side_of_it(self):
+        """576013-610 Rev AC Table 29-19: COMMUNICATION ALARM is "No
+        communication between DIM board and an external device", DISABLED
+        DIM ALARM is "No communication between ECPU board and DIM board".
+        Type 02 against type 03; the category is the DIM's side, 18 for an
+        MDIM and 19 for an EDIM. UNKNOWNS A45."""
+        from tls350sim.console import describe_alarms
+        c = Console()
+        c.modules["probe"] = 1
+        c.modules["edim"] = 1
+        c.tank_level[1] = {"volume": 5000.0, "water": 0.0}
+        c.dim_disabled.add(1)
+        self.assertIn("190201", c.conditions())
+        self.assertNotIn("190301", c.conditions())
+        self.assertFalse(c.dim_link_ok())
+        screens = [a["screen"] for a in describe_alarms(["190201"])]
+        self.assertEqual(screens, ["E 1:DISABLED DIM ALARM"])
+        c.modules = {"probe": 1, "mdim": 1}
+        self.assertIn("180201", c.conditions())
 
     def test_a_tank_level_alarm_is_not_filtered_by_this(self):
         """Appendix A filters the sensor families, the probe and the two
@@ -4143,11 +4455,20 @@ class SensorTypes(unittest.TestCase):
         """794380-208, the sump sensor, is Tri-State: Normal, Fuel, Open."""
         c = self.a_sensor(kind="1")
         self.assertEqual(set(c.sensor_states("liquid", 1)), {"fuel", "out"})
+        self.assertEqual(c.sensor_reading("liquid", 1), "SENSOR NORMAL")
+        c.sensor_state[("liquid", "1")] = "water"
+        self.assertEqual(c.sensor_reading("liquid", 1), "SENSOR NORMAL")
         c.sensor_state[("liquid", "1")] = "fuel"
         self.assertIn("030301", c.compute_alarms())
         c.sensor_state[("liquid", "1")] = "water"
         self.assertNotIn("030601", c.compute_alarms())
-        self.assertEqual(c.sensor_reading("liquid", 1), "SENSOR NORMAL")
+        # The FUEL ALARM two lines up is latched and unacknowledged, so the
+        # reading is still FUEL ALARM -- what the console is SAYING, which
+        # is what the wire has always answered and what 576013-610 p.15-1
+        # requires of SENSOR NORMAL. What this test is about is that WATER
+        # is not among the words a Tri-State sensor can produce.
+        # FIDELITY O27.
+        self.assertNotIn("WATER", c.sensor_reading("liquid", 1))
         c.sensor_state[("liquid", "1")] = "short"
         self.assertNotIn("030501", c.compute_alarms())
 
@@ -4573,14 +4894,19 @@ class ModuleIdResistors(unittest.TestCase):
             por, now = c.module_id_resistance(module)
             self.assertLess(abs(now - por) / por, 0.01, module)
 
-    def test_an_empty_slot_reads_open_circuit(self):
-        """"UNUSED 10191362 10329900" in the intrinsically safe bay and
-        "COMM 4-6 UNUSED 15000000 15000000" in the communication bay.
+    def test_an_empty_slot_reads_the_rail_in_every_bay(self):
+        """FIDELITY X5, corrected by M22.
 
-        FIDELITY X5. The two are not the same KIND of number, and this test
-        asserted a flat `10200000` on the I.S. side -- a nominal printed as
-        a reading. The sample's seven empty I.S. rows are seven different
-        pairs, and 15,000,000 is the one figure it repeats to the digit.
+        15,000,000 is a firmware constant: a 2015 capture's PACKED reply
+        sends `4B64E1C0` -- exactly 15,000,000.0 -- for both columns of all
+        nineteen of its empty slots, beside type code `00`, "Not used". A
+        measured open circuit does not land on a round decimal twice.
+
+        This used to assert a DIFFERENT number for the intrinsically safe
+        bay, near 10.2 million and drifting, on X5's argument that the I.S.
+        bay reads its open circuit through its barrier. Both real consoles
+        this project can check print the rail in all sixteen slots. The
+        sample's seven I.S. rows are still unexplained and are UNKNOWNS A75.
         """
         c = Console()
         c.modules = {"probe": 1}
@@ -4591,27 +4917,33 @@ class ModuleIdResistors(unittest.TestCase):
                  if k.startswith("SLOT") and int(k.split()[1]) > 8]
         comms = [v for k, v in rows if k.startswith("COMM")]
         self.assertEqual((len(safe), len(power), len(comms)), (7, 8, 6))
-
-        # the rail, printed to the digit, on both columns of every row
-        for line in power + comms:
+        for line in safe + power + comms:
             self.assertEqual(line, "POR=15000000 C=15000000")
 
-        def pair(line):
-            por, now = line.replace("POR=", "").split(" C=")
-            return int(por), int(now)
-
-        seen = set()
-        for line in safe:
-            por, now = pair(line)
-            # and the other thing: near the 10.2M the bay reads through its
-            # barrier, and a MEASUREMENT of it. The current column is above
-            # the power-on one on all seven rows of the sample, and no two
-            # rows are alike.
-            self.assertLess(abs(por - 10200000) / 10200000, 0.02, line)
-            self.assertGreater(now, por, line)
-            self.assertLess(abs(now - por) / por, 0.02, line)
-            seen.add(por)
-        self.assertEqual(len(seen), len(safe), "every I.S. slot read alike")
+    def test_and_the_captured_console_s_own_empty_rows_replay(self):
+        """The rows this had never been compared against. `I10200` is on the
+        capture conformance FIXTURE list because the captured console has
+        cards this one does not -- which is honest about the card rows and
+        was quietly covering the empty ones too. These are checked directly
+        instead."""
+        import os
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(here, "tests", "console_capture", "raw",
+                            "I10200.bin")
+        if not os.path.exists(path):
+            raise unittest.SkipTest("no console capture in this tree")
+        with open(path, "rb") as fh:
+            real = fh.read().decode("latin-1")
+        wanted = [line.rstrip() for line in real.splitlines()
+                  if "UNUSED" in line]
+        # that console has a probe card, a PLLD pair and two comm boards,
+        # so what is left empty is I.S. 3-8, power 10-16 and COMM 3-6
+        self.assertEqual(len(wanted), 6 + 7 + 4)
+        c = Console()
+        c.modules = {"probe": 1}
+        mine = {line for line in c.configuration_lines() if "UNUSED" in line}
+        for line in wanted:
+            self.assertIn(line.strip(), [m.strip() for m in mine], line)
 
 
 class ADeliveryTheBenchCanActuallyMake(unittest.TestCase):
@@ -4684,17 +5016,35 @@ class ADeliveryTheBenchCanActuallyMake(unittest.TestCase):
         self.assertAlmostEqual(record.amount, volume - 2000.0, places=1)
         self.assertAlmostEqual(record.start["volume"], 2000.0, places=1)
 
-    def test_a_dribble_that_never_adds_up_is_not_a_delivery(self):
-        """The threshold still exists; it is measured from the start of the
-        rise rather than from the last look."""
+    def test_a_fill_too_gradual_is_not_a_delivery_however_much_it_adds_up(self):
+        """"the rate of fill can be too gradual for the system to recognize
+        the increase as a delivery" (576013-623 Rev AN p.7-17), and the
+        rate is the TLS-450's stated one, "increases by 25 Gallons per
+        Minute" (577013-940 Rev F p.69). Five gallons a minute for forty
+        minutes is 200 gallons and no delivery. UNKNOWNS A24."""
         c = self.a_site()
         volume = 2000.0
-        for _ in range(4):
+        for _ in range(40):
             volume += 5.0
             c.tank_level[1]["volume"] = volume
-            c.clock_offset += 5.0
+            c.clock_offset += 60.0
             c.deliveries.tick()
         self.assertIsNone(self.settle(c))
+
+    def test_and_the_high_water_filter_watches_for_six_a_minute(self):
+        """"in this case the Console detects that a Delivery is occurring
+        when the fuel level in the Tank increases by six Gallons per Minute
+        (GPM)", p.71. Ten a minute is a delivery on High and not on Low."""
+        for level, expect in (("LOW", False), ("HIGH", True)):
+            c = self.a_site()
+            c.set_setting("water_filter", level, 1)
+            volume = 2000.0
+            for _ in range(10):
+                volume += 10.0
+                c.tank_level[1]["volume"] = volume
+                c.clock_offset += 60.0
+                c.deliveries.tick()
+            self.assertEqual(self.settle(c) is not None, expect, level)
 
     def test_a_tanker_load_is_the_same_two_fixes(self):
         """`Loads._watch` carried both defects, copied line for line."""
@@ -4957,10 +5307,14 @@ class TheCommBayCardsThatWereMissing(unittest.TestCase):
 
     def test_and_the_console_calls_both_of_them_the_same_thing(self):
         """Table 6-1 has one name for the pair, "Serial Satellite Comm", so
-        they read the same on a slot line and differ by their resistance."""
+        they read the same on a slot line and differ by their resistance.
+
+        The SLOT LINE is the glass, which is where Table 6-1's names belong
+        and what this has always been about; it used to ask `slot_readings`,
+        which is the printout and is now a different vocabulary. M20."""
         c = self.a_bay(ssat=1, asat=1)
-        names = [name for _slot, key, name, _p, _n in c.slot_readings()
-                 if key in ("ssat", "asat")]
+        names = [line.split(" ", 2)[2] for line, _l2 in c.slot_report()
+                 if "S-SAT" in line]
         self.assertEqual(names, ["S-SAT COMM", "S-SAT COMM"])
         # `S-SAT ` with its own trailing space: the manual prints
         # `COMM BOARD  : 1 (S-SAT )` and so does a real console. It is a
@@ -4968,6 +5322,19 @@ class TheCommBayCardsThatWereMissing(unittest.TestCase):
         # same manual prints `(FXMOD)` at five. See FIDELITY S18.
         self.assertEqual(c.comm_board_name(1), "S-SAT ")
         self.assertEqual(c.comm_board_name(2), "S-SAT ")
+
+    def test_but_the_printout_tells_apart_the_one_it_has_a_name_for(self):
+        """And that asymmetry is the EVIDENCE's, not the hardware's. A real
+        console printed `SERIAL SAT BD` beside 482940 ohms, which is the
+        Shell board's 475K and not the Amoco board's 332K -- so that name is
+        attested for one of the pair and for the other nothing is. The
+        unattested one keeps the screen's name rather than borrowing a
+        printed one it was never seen to use. M20."""
+        c = self.a_bay(ssat=1, asat=1)
+        paper = {key: name for _slot, key, name, _p, _n in c.slot_readings()
+                 if key in ("ssat", "asat")}
+        self.assertEqual(paper["ssat"], "SERIAL SAT BD")
+        self.assertEqual(paper["asat"], "S-SAT COMM")
 
     def test_sitelink_has_a_card_to_be_driven_by(self):
         """"330546-001 ... 267 K ... SiteLink, (Not intended for general
@@ -5261,6 +5628,41 @@ class TheFourCsldTablesAreFourReports(unittest.TestCase):
             self.assertGreaterEqual(e[key], 0.0)
             self.assertLessEqual(e[key], csld.CONTROL_MAX_MINUTES)
 
+    def test_feedback_is_a_ramp_on_how_full_the_rate_table_is(self):
+        """The manual gives FDBK a range and no formula, and its own sample
+        rows give the formula: 45 x (C1 - 40) / 40, flat at zero until the
+        80-row table is half full and reaching 45 exactly as it fills.
+
+        These pairs are read off the IA52 figures in 576013-818 Rev AA and
+        Rev AB, 577013-918 Rev D and both TLS-450 serial manuals -- 100 rows
+        with no exception. C1=44 giving exactly 4.5 and C1=56 exactly 18.0
+        leave no rounding slack for a different ramp. UNKNOWNS A51.
+        """
+        c = self.a_csld_tank()
+        for c1, want in ((0, 0.0), (11, 0.0), (22, 0.0), (26, 0.0),
+                         (44, 4.5), (49, 10.1), (53, 14.6), (56, 18.0),
+                         (58, 20.3), (70, 33.8), (74, 38.3), (75, 39.4),
+                         (80, 45.0)):
+            c.csld.detail[3] = [{"at": 0.0, "rate": 0.01,
+                                 "interval": 30.0,
+                                 "state": csld.ACCEPTABLE}
+                                for _ in range(c1)]
+            self.assertAlmostEqual(c.csld.feedback(3), want, places=6,
+                                   msg=f"C1={c1}")
+
+    def test_feedback_breaks_a_tie_upwards_the_way_the_column_does(self):
+        """Its steps are eighths of a minute, so half of them land on a tie,
+        and the samples break every one upwards -- C1=74 is 38.25 and prints
+        38.3. Python rounds a tie to even and would print 38.2."""
+        c = self.a_csld_tank()
+        for c1, want in ((74, 38.3), (58, 20.3), (70, 33.8)):
+            c.csld.detail[3] = [{"at": 0.0, "rate": 0.01,
+                                 "interval": 30.0,
+                                 "state": csld.ACCEPTABLE}
+                                for _ in range(c1)]
+            self.assertAlmostEqual(c.csld.feedback(3), want, places=6,
+                                   msg=f"C1={c1}")
+
     def test_a_tank_nobody_has_tested_reads_no_test(self):
         c = Console()
         presets.load(c, "Compliance site, CSLD and sensors")
@@ -5330,10 +5732,38 @@ class TheFourCsldTablesAreFourReports(unittest.TestCase):
     def test_the_star_means_pump_sense(self):
         """"* following ACTIVE = Pump sense available", chapter 11's key."""
         plain = self.a_csld_tank().csld_table_lines("A54", 3)[-1]
-        starred = self.a_csld_tank(pump_sense=True).csld_table_lines(
-            "A54", 3)[-1]
         self.assertFalse(plain.endswith("*"))
-        self.assertTrue(starred.endswith("*"))
+        c = self.a_csld_tank(pump_sense=True)
+        meter = next(m for m, t in c.meters.items() if int(t) == 3)
+        c.meter_flow[meter] = 6.0
+        starred = c.csld_table_lines("A54", 3)[-1]
+        self.assertEqual(starred, "DISPENSE STATE: ACTIVE *")
+
+    def test_the_star_follows_active_and_only_active(self):
+        """The key says so in three words, and every sample on the shelf
+        agrees: `ACTIVE *`, `ACTIVE` and `IDLE` are the three shapes, across
+        576013-818 Rev AA and Rev AB, 577013-918 Rev D and both revisions of
+        the serial manual. `IDLE *` is in none of them, and this appended
+        the mark to whichever word came out. See FIDELITY K5."""
+        c = self.a_csld_tank(pump_sense=True)
+        self.assertEqual(c.csld.moving_state(3), "IDLE")
+        self.assertTrue(c.pump_tank_has_sense(3))
+        self.assertEqual(c.csld_table_lines("A54", 3)[-1],
+                         "DISPENSE STATE: IDLE")
+
+    def test_the_pump_sense_module_decides_the_state_it_marks(self):
+        """"Idle is determined by: 1) analysis of a group of probe samples
+        from the 30 second average table, and 2) checking the pump sense
+        module (if available)", Figure 11-2. The footer was clause 1 alone,
+        under a mark whose own description says "CSLD is using a Pump Sense
+        signal to determine" it. FIDELITY K5."""
+        c = self.a_csld_tank(pump_sense=True)
+        self.assertFalse(c.pump_running(3))
+        self.assertEqual(c.csld.moving_state(3), "IDLE")
+        meter = next(m for m, t in c.meters.items() if int(t) == 3)
+        c.meter_flow[meter] = 6.0
+        self.assertTrue(c.pump_running(3))
+        self.assertEqual(c.csld.moving_state(3), "ACTIVE")
 
     # ---- and the four packed records ------------------------------------
     def test_the_four_records_are_four_shapes(self):
@@ -5393,7 +5823,14 @@ class TheTwoCountingScreensOfFigure611(unittest.TestCase):
             c.clock_offset += 300.0
             c.tick()
         if rows:
-            c.csld.detail[3] = list(rows)
+            # the way `_sample` does it, because the two sets are not the
+            # same one: every test COMPLETES, and only a test whose gain is
+            # under the gate is RECORDED in the rate table. Putting an
+            # over-gate row in the table models a console that cannot
+            # exist. See UNKNOWNS A63.
+            c.csld.completed[3] = [r["rate"] for r in rows][-csld.RJT_WINDOW:]
+            c.csld.detail[3] = [r for r in rows
+                                if r["rate"] >= -csld.POSITIVE_LEAK]
         return c
 
     def a_row(self, rate, state=csld.ACCEPTABLE):
@@ -5428,6 +5865,30 @@ class TheTwoCountingScreensOfFigure611(unittest.TestCase):
     def test_a_gain_under_four_tenths_is_not_one(self):
         c = self.a_csld_tank([self.a_row(-0.39) for _ in range(5)])
         self.assertEqual(c.diag_value("csld_rejects", 3).split()[-1], "0")
+
+    def test_an_over_gate_test_completes_and_is_never_recorded(self):
+        """Figure 11-2: "Record test results in database if: ... 2) leak
+        rate < +0.4 gph". So the two counts come from different sets, and
+        RJT can be nonzero while the rate table it prints beside is empty.
+
+        The evidence that a real console does this rather than recording
+        and filtering afterwards: no rate table on the shelf has a row over
+        the gate -- 100 sample rows across five manuals, the largest +0.395
+        -- while the same figures print RJT counts of 5, 9 and 12. A
+        recorded-then-excluded row would show in the column. UNKNOWNS A63.
+        """
+        c = self.a_csld_tank([self.a_row(-0.6) for _ in range(4)])
+        self.assertEqual(c.csld.table(3), [])
+        self.assertEqual(c.csld.evaluation(3)["records"], 0)
+        self.assertEqual(c.csld.evaluation(3)["rejects"], 4)
+
+    def test_no_rate_table_row_may_ever_be_over_the_gate(self):
+        """The invariant the manuals' own 100 sample rows keep."""
+        c = self.a_csld_tank([self.a_row(-0.6), self.a_row(0.02),
+                              self.a_row(-0.41), self.a_row(-0.39)])
+        self.assertTrue(all(r["rate"] >= -csld.POSITIVE_LEAK
+                            for r in c.csld.table(3)), c.csld.table(3))
+        self.assertEqual(len(c.csld.table(3)), 2)
 
     def test_both_lines_fill_the_display_and_end_at_its_edge(self):
         """D5's rule for the same manual's screens: the value goes against
@@ -5555,6 +6016,50 @@ class OverfillWantsTheDelivery(unittest.TestCase):
         for c in (self.a_site(0.5), self.filling(self.a_site(0.5), to=9000.0)):
             self.assertEqual([a for a in self.tank_alarms(c)
                               if a[:4] in ("0204", "0207", "0212")], [])
+
+
+class ATankerLoadIsOneBulkDraw(unittest.TestCase):
+    """A pending load opened on any fall and only a rise discarded it, so
+    on a quiet forecourt a day of sales became one Tanker Load -- and the
+    first car after midnight erased yesterday's."""
+
+    # 23:00, pinned: the second test walks past midnight
+    START = (2026, 9, 14, 23, 0, 0, 0, 1, -1)
+
+    def a_site(self):
+        c = fitted()
+        a_tank(c, volume=10000.0)
+        c.clock_offset = time.mktime(self.START) - time.time()
+        c.values["S60201"] = "01REGULAR UNLEADED   "
+        c.values["S51300"] = "1"
+        c.values["S61001"] = "0105"
+        c.tick()
+        return c
+
+    def test_forty_sales_twenty_minutes_apart_are_not_a_load(self):
+        c = self.a_site()
+        for _ in range(40):
+            c.tank_level[1]["volume"] -= 15.0
+            c.clock_offset += 60.0
+            c.tick()
+            c.clock_offset += 1140.0
+            c.tick()
+        self.assertEqual(c.loads.all(1), [])
+
+    def test_a_sale_after_midnight_leaves_yesterdays_load(self):
+        c = self.a_site()
+        c.tank_level[1]["volume"] -= 3000.0
+        c.clock_offset += 60.0
+        c.tick()
+        c.clock_offset += 600.0
+        c.tick()
+        self.assertEqual(len(c.loads.all(1)), 1)
+        c.clock_offset += 2 * 3600.0
+        c.tick()
+        c.tank_level[1]["volume"] -= 15.0
+        c.clock_offset += 60.0
+        c.tick()
+        self.assertEqual(len(c.loads.all(1)), 1)
 
 
 if __name__ == "__main__":

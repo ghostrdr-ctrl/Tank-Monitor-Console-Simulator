@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Capture a real TLS-350's answers, so the emulation can be diffed on them.
 
     python tools/capture_console.py 172.30.9.14 --port 10001 \
@@ -16,7 +19,7 @@
 The console is reached through its TCP/IP card's serial tunnel, which is what
 a technician's laptop talks to.
 
-**Inquiry codes only.** Every command this sends begins `I` or `i`, which
+Inquiry codes only. Every command this sends begins `I` or `i`, which
 read. There is no `S` code anywhere in this file, and none should ever be
 added: a Set writes the console's programming, and a bench console is
 somebody's equipment.

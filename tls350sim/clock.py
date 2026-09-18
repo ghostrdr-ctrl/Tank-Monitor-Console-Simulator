@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """How the console writes a date and a time.
 
 Its own module because every part of the console needs it and the engines
@@ -20,8 +23,8 @@ def clock_date(when, year=True, sep=", "):
 
     Counted across the whole reference shelf by word position rather than by
     reading order -- the text extractions collapse runs of spaces, so a grep
-    says the opposite -- single-digit days are written with a space **694
-    times against 61**, and the geometry settles it rather than the count:
+    says the opposite -- single-digit days are written with a space 694
+    times against 61, and the geometry settles it rather than the count:
     576013-635 Rev AA p.100 sets six consecutive rows in one monospace
     sample, and `OCT 10,` starts one character to the LEFT of `OCT 9,` with
     the comma and the year in the same columns in both. The day is right

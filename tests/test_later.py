@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The fifteen codes later revisions added.
 
 Eleven from Revision Y, four from Revision AA. For a long time these answered
@@ -66,11 +69,32 @@ class TheyAllAnswer(unittest.TestCase):
         for code in sorted(wirelater.MINE):
             self.assertIn(code, KNOWN, code)
 
+    # Two codes are documented and are NOT in `functiondata.json`, which is
+    # a parse of section 7 of 576013-635 and nothing else. `VAB` and `VAC`
+    # are in no revision of that manual at all -- N, U, Y or AA -- and are
+    # documented only in 577014-009 Rev B Table 3 p.18, with a worked sample
+    # of each in its Figures 15 and 16. Hand-adding them to the parsed census
+    # would cost that file its provenance, so they are named here instead,
+    # with the document that carries them. See UNKNOWNS C4.
+    ELSEWHERE = {"VAB": "577014-009 Rev B Table 3, Figure 15",
+                 "VAC": "577014-009 Rev B Table 3, Figure 16"}
+
     def test_and_every_one_is_in_the_census(self):
         """A code the console answers that no manual documents would be an
-        invention. These are all in one."""
+        invention. Each is in one -- and not all in the SAME one."""
         for code in sorted(wirelater.MINE):
+            if code in self.ELSEWHERE:
+                continue
             self.assertIn(code, DOCUMENTED, code)
+
+    def test_the_two_codes_from_another_manual_are_named(self):
+        """A ratchet on the exception, so the list cannot grow quietly: a
+        code that is neither in the parsed census nor named above fails the
+        test before this one."""
+        for code, where in self.ELSEWHERE.items():
+            self.assertIn(code, wirelater.MINE, code)
+            self.assertNotIn(code, DOCUMENTED, code)
+            self.assertTrue(where.startswith("577014-009"), where)
 
     def test_they_produce_a_body_and_not_just_a_header(self):
         _c, h = a_site()
@@ -299,6 +323,96 @@ class RevisionAAsOtherTwentyFive(unittest.TestCase):
         self.assertIn("PASS", send(h, "IVA400"))
         self.assertTrue(body(h, "iVA400").split("&&")[0].endswith("0"))
 
+    def test_the_same_fault_posts_the_alarm_the_manual_names(self):
+        """37/08 APM SETUP WARN: "A sensor used by APM is missing or not
+        configured", 577014-009 Rev B Table 2 p.16 -- the only page that
+        gives any of category 37's ten alarms a condition. It is the rule
+        VA4 already answered FAIL on, so the two agree by construction.
+        See UNKNOWNS A60."""
+        from tls350sim.console import describe_alarms
+        c, _h = a_site()
+        c.software = {"isd": True, "pmc": True}
+        c.values["S54E00"] = "1"                 # 54E: 1=APM
+        self.assertTrue(c.apm_monitoring())
+        self.assertFalse(c.apm_setup_ok())
+        raised = [x for x in c.conditions() if x.startswith("37")]
+        self.assertEqual(raised, ["370800"])
+        self.assertEqual(describe_alarms(raised)[0]["screen"],
+                         "APM SETUP FAILURE WARNING")
+
+    def test_the_two_apm_reports_no_function_code_manual_carries(self):
+        """577014-009 Rev B Table 3 p.18 gives two serial commands that are
+        in no revision of 576013-635, so both answered the refusal marker.
+        Figures 15 and 16 give a worked sample of each."""
+        _c, h = a_site()
+        for cmd in ("IVAB00", "IVAC00"):
+            self.assertFalse(refused(h, cmd), cmd)
+        self.assertIn("Automatic Pressure Monitoring Daily Summary Report",
+                      send(h, "IVAB00"))
+        self.assertIn("AUTOMATIC PRESSURE MONITORING FAULT HISTORY REPORT",
+                      send(h, "IVAC00"))
+
+    def test_the_fault_history_columns_are_the_figures_own(self):
+        """Measured off Figure 16's word boxes at a 6.291pt pitch: the date
+        opens the line, the time sits at column 9, the fault at 19 in a
+        field as wide as its own rule, and the state at 41."""
+        _c, h = a_site()
+        rows = [l for l in send(h, "IVAC00").split(chr(13) + chr(10))
+                if l.startswith("   DATE") or l.startswith("-" * 10)]
+        head, rule = rows[0], rows[1]
+        self.assertEqual(head.index("DATE"), 3)
+        self.assertEqual(head.index("TIME"), 12)
+        self.assertEqual(head.index("FAULT"), 25)
+        self.assertEqual(head.index("STATE"), 41)
+        self.assertEqual(rule.index("-" * 19), 19)
+        self.assertEqual(len(rule), 46)
+
+    def test_the_fault_history_rows_are_the_alarms_actually_posted(self):
+        """Not an invented sample: `alarm_log` already records every alarm
+        this console posts and clears, so the report is category 37 of it,
+        named off Table 2. A console with 37/08 standing prints that row."""
+        from tls350sim import wirelater
+        c, h = a_site()
+        c.software = {"isd": True, "pmc": True}
+        c.values["S54E00"] = "1"
+        c.tick()
+        shown = send(h, "IVAC00")
+        self.assertIn("APM SETUP WARN", shown)
+        self.assertIn("ALARM", shown)
+        # and it is Table 2's short name, not consoledata's long one
+        self.assertEqual(wirelater.APM_FAULTS["08"], "APM SETUP WARN")
+        self.assertNotIn("APM Setup Failure warning", shown)
+
+    def test_the_daily_summary_prints_a_header_and_no_invented_rows(self):
+        """A row is a day's APM assessment in kPa, and this console models
+        no such reading -- the same gap that leaves nine of the ten
+        category-37 alarms without a producer. So the header stands alone,
+        the way every other empty report here does, with no NO DATA line."""
+        _c, h = a_site()
+        shown = send(h, "IVAB00")
+        self.assertIn("ASSESSMENT TIME OF DAY = 11:59 PM", shown)
+        self.assertIn("Status Codes: (W)Warn", shown)
+        self.assertNotIn("NO DATA", shown)
+        self.assertNotIn("PASS", shown)
+
+    def test_neither_has_a_computer_format_on_any_page(self):
+        """Table 3 gives the PC-to-console command and the figures call
+        themselves the "Serial to PC Format"; no page carries a packed
+        layout for either. 7B1 is the other code in that position."""
+        _c, h = a_site()
+        for cmd in ("iVAB00", "iVAC00"):
+            self.assertTrue(refused(h, cmd), cmd)
+
+    def test_a_console_not_monitoring_by_apm_never_posts_it(self):
+        """54E's other setting is CARB ISD, and an ISD site has no APM to
+        be misconfigured. The alarm follows the monitoring type, not the
+        absence of a vapour sensor."""
+        c, _h = a_site()
+        c.values["S54E00"] = "0"
+        self.assertFalse(c.apm_monitoring())
+        self.assertEqual([x for x in c.conditions() if x.startswith("37")],
+                         [])
+
 
 class TwoCodesTakeTheirVerificationAtTheFront(unittest.TestCase):
     """8A4 was described here as the only one. That was true of Revision U.
@@ -328,6 +442,90 @@ class TwoCodesTakeTheirVerificationAtTheFront(unittest.TestCase):
         self.assertEqual(after.count("--/--/--"), 2)
         row = [l for l in after.splitlines() if "APM TESTS" in l][0]
         self.assertNotIn("--/--/--", row)
+
+
+class TheApmLogsWhatItDoes(unittest.TestCase):
+    """VA8's events. The log was returned and written by nothing, while every
+    moment its own sample records happens on this console. FIDELITY I8."""
+
+    HEADER = "DATE     TIME     DESCRIPTION                     ACTION/NAME"
+
+    def an_apm_site(self):
+        c, h = a_site()
+        c.values["S54E00"] = "1"                     # "1=APM"
+        return c, h
+
+    def rows(self, h, asked="IVA800"):
+        lines = send(h, asked).splitlines()
+        # the closing <ETX> is a line of its own and strip() keeps it
+        return [line for line in lines[lines.index(self.HEADER) + 1:]
+                if line.strip(chr(3) + chr(32))]
+
+    def test_the_report_is_the_pages_title_and_columns(self):
+        """p.668, and an empty log is the header and nothing under it."""
+        _c, h = self.an_apm_site()
+        text = send(h, "IVA800")
+        self.assertIn("AUTOMATIC PRESSURE MONITORING MISCELLANEOUS EVENTS "
+                      "REPORT", text)
+        self.assertIn(self.HEADER, text)
+        self.assertNotIn("NO EVENTS", text)
+        self.assertEqual([r for r in self.rows(h) if r.strip()], [])
+
+    def test_a_manual_clear_names_the_test_it_cleared(self):
+        """`10-04-27 11:37:21 APM SETUP SELF TEST             TEST MANUALLY
+        CLEARED`: VA7's 03 is VA8's 01, and the action starts at 50."""
+        _c, h = self.an_apm_site()
+        send(h, "SVA700" + "149" + "03")
+        row = self.rows(h)[0]
+        self.assertEqual(row[18:50].rstrip(), "APM SETUP SELF TEST")
+        self.assertEqual(row[50:], "TEST MANUALLY CLEARED")
+
+    def test_a_power_cycle_is_a_shutdown_then_a_startup(self):
+        c, h = self.an_apm_site()
+        c.breaker_off()
+        c.breaker_on()
+        words = [r[18:50].rstrip() for r in self.rows(h)]
+        if "APM STARTUP" in words:
+            self.assertLess(words.index("APM STARTUP"),
+                            words.index("APM SHUTDOWN"), "newest first")
+        self.assertIn("APM SHUTDOWN", words)
+
+    def test_a_clock_change_prints_the_time_it_left(self):
+        c, h = self.an_apm_site()
+        send(h, "S50100" + "2701021530")
+        row = self.rows(h)[0]
+        self.assertEqual(row[:17], "27-01-02 15:30:00")
+        self.assertEqual(row[18:50].rstrip(), "TIME CHANGE DETECTED AT")
+        self.assertRegex(row[50:], r"^[0-9]{2}-[0-9]{2}-[0-9]{2} "
+                                   r"[0-9]{2}:[0-9]{2}:[0-9]{2}$")
+
+    def test_a_carb_isd_console_logs_no_apm_events(self):
+        c, h = a_site()
+        c.values["S54E00"] = "0"
+        send(h, "SVA700" + "149" + "01")
+        c.breaker_off()
+        self.assertEqual(c.apm_events(), [])
+
+    def test_the_computer_form_is_the_pages_record(self):
+        """p.669: ssss, then SSSSSSSS aa bb cc dd ee tt per event."""
+        _c, h = self.an_apm_site()
+        send(h, "SVA700" + "149" + "02")
+        packed = body(h, "iVA800").split("&&")[0][6 + 10:]
+        self.assertEqual(packed[:4], "0001")
+        record = packed[4:]
+        self.assertRegex(record[:8], r"^[0-9A-F]{8}$")
+        self.assertEqual(record[8:], "03" + "06" + "000000" + "00")
+
+    def test_the_limit_and_the_window(self):
+        """"nnnn - Limit number of records", and a start date after every
+        event leaves nothing."""
+        _c, h = self.an_apm_site()
+        for which in ("01", "02", "03"):
+            send(h, "SVA700" + "149" + which)
+        self.assertEqual(len(self.rows(h)), 3)
+        self.assertEqual(len(self.rows(h, "IVA800" + "0" * 16 + "0002")), 2)
+        self.assertEqual(self.rows(h, "IVA800" + "99991231" + "99991231"),
+                         [])
 
 
 class TheyAreReportsNotSettings(unittest.TestCase):

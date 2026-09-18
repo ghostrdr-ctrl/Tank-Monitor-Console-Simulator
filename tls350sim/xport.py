@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The Lantronix XPort inside the TLS-350's TCP/IP Interface Module.
 
 A real TLS-350 does not speak Ethernet. Veeder-Root's TCP/IP Interface
@@ -44,10 +47,13 @@ tool that fingerprints the card sees a real one.
 """
 import base64
 import json
+import os
 import socket
-import struct
 import threading
 
+from . import atomicfile
+from . import exposed
+from .exposed import BENCH as BENCH_LEVEL
 from . import xportrec as R
 
 # The port a real XPort reserves for its setup menu, and the one
@@ -75,7 +81,7 @@ CAPTURED_MAC = bytes((0x00, 0x20, 0x4A, 0xAD, 0x64, 0x70))
 CRLF = b"\r\n"
 
 
-def default_mac(captured=False):
+def default_mac(captured=False, anonymous=False):
     """A MAC in Lantronix's range, unique to this machine.
 
     A real card's is burned in, and no two cards share one. The emulator
@@ -88,9 +94,22 @@ def default_mac(captured=False):
     `captured=True` returns the MAC of the card this emulation was written
     from, for reproducing a capture byte for byte. Do not use it on a network
     where that card is present.
+
+    `anonymous=True` draws the last three bytes instead of deriving them,
+    because on a public address the host name is not the emulator's to give
+    away. The derivation is a plain SHA-256 of `socket.gethostname()`: three
+    of its bytes are published in every discovery response, in the setup
+    menu's banner and in the web manager, and three bytes of a known hash is
+    enough to confirm a guessed host name and more than enough to tie two
+    deployments to one operator. On a bench that is a feature -- the MAC is
+    stable, so DeviceInstaller sees the same unit every run. On the internet
+    it is a leak, and `--card-mac` is how an exposed card gets a stable
+    identity that is nobody's host name. See `exposed.Policy`.
     """
     if captured:
         return CAPTURED_MAC
+    if anonymous:
+        return bytes(LANTRONIX_OUI) + os.urandom(3)
     import hashlib
     seed = hashlib.sha256(socket.gethostname().encode()).digest()
     return bytes(LANTRONIX_OUI) + seed[:3]
@@ -589,6 +608,14 @@ class XPortConfig:
     def save(self):
         if not self.path:
             return
+        # On a public address this is reachable from an unauthenticated HTTP
+        # POST (`xportweb._setup_cgi`) and from the port-1 assignment knock,
+        # so a stranger could move the card and write this file. Frozen, the
+        # card still accepts the programming in memory and still answers from
+        # it -- what a real card does -- but it forgets it on restart.
+        # See `exposed.writes_frozen`.
+        if exposed.refused("xport card configuration"):
+            return
         data = {
             "mac": mac_hex(self.mac),
             "records": {str(n): base64.b64encode(v).decode("ascii")
@@ -601,7 +628,7 @@ class XPortConfig:
         for k in self.DEFAULTS:
             data[k] = getattr(self, k)
         try:
-            with self._lock, open(self.path, "w", encoding="utf-8") as f:
+            with self._lock, atomicfile.replacing(self.path) as f:
                 json.dump(data, f, indent=2)
         except OSError:
             pass
@@ -839,9 +866,15 @@ class Discovery:
     frame instead. `reference/lantronix_xport_capture.md` records it.
     """
 
-    def __init__(self, config, log=None, powered=None, trace=False):
+    def __init__(self, config, log=None, powered=None, trace=False,
+                 policy=None, gate=None, capture=None):
         self.config = config
         self.log = log
+        # The exposure controls, all optional; handed none, this responds
+        # exactly as it always has. See `exposed.py`.
+        self.policy = policy
+        self.gate = gate
+        self.capture = capture
         # With trace on, every frame is logged, answered or not. Off by
         # default because a discovery sweep is chatty; on when working out
         # what a tool is asking for, which is the only way to see a frame
@@ -929,6 +962,8 @@ class Discovery:
         while not self._stop:
             try:
                 data, addr = sock.recvfrom(1024)
+            except ConnectionResetError:
+                continue            # the same as `serve`'s, FIDELITY Z3
             except OSError:
                 return
             if self._already_answered(data, addr):
@@ -965,6 +1000,13 @@ class Discovery:
         while not self._stop:
             try:
                 data, addr = self.sock.recvfrom(1024)
+            except ConnectionResetError:
+                # Windows hands back the ICMP port-unreachable from answering
+                # a tool that had already closed its socket as an error on
+                # the NEXT receive. Nothing is wrong with this socket, and
+                # returning here ended discovery for good: DeviceInstaller
+                # lost the card until the simulator restarted. FIDELITY Z3.
+                continue
             except OSError:
                 return
             if self._already_answered(data, addr):
@@ -1022,6 +1064,16 @@ class Discovery:
         address by the route to the asker. For a card whose address this
         machine actually has, that is the card's address anyway.
         """
+        # Every UDP reply leaves here, so this is where the datagram rate
+        # limit goes. See `exposed.Gate.datagram_ok`: a four-byte probe
+        # draws up to 124 bytes with no handshake, so an unlimited
+        # responder on a public address is a 31x DDoS reflector aimed at
+        # whoever the attacker forges as the source address.
+        if self.gate is not None and not self.gate.datagram_ok(addr[0]):
+            return
+        if self.capture is not None:
+            self.capture.record("out", reply, peer=addr[0],
+                                proto="77fe/udp")
         try:
             self.sock.sendto(reply, addr)
         except OSError:
@@ -1034,6 +1086,10 @@ class Discovery:
         `00 01 00 F6` as well as `00 00 00 F6` -- and the card answers both
         the same way, so it is accepted and ignored here too.
         """
+        # "Disable Port 77FEh", from the card's own Security menu. Every
+        # listener used to ignore it; see `_answering`.
+        if not self._answering():
+            return None
         if len(data) != 4 or data[0] != 0x00 or data[2] != 0x00:
             return None
         op = data[3]
@@ -1116,7 +1172,39 @@ class Discovery:
 
     def _setup(self):
         """F8 -> F9, 124 bytes: 4-byte header + the 120-byte record."""
-        return b"\x00\x00\x00\xF9" + self.config.setup_record()
+        return b"\x00\x00\x00\xF9" + self._record0()
+
+    def _record0(self):
+        """Record 0, with the setup password masked off a public card.
+
+        Bytes 8-11 of record 0 are the four-character telnet and web setup
+        password (`xportrec.PASSWD_OFF`), and this responder answers any
+        stranger's four-byte probe with no authentication at all. So the
+        credential that locks the setup menu and the web manager was handed
+        to anyone who asked for it, on UDP and TCP alike -- and it is the
+        same secret the web manager takes as its HTTP Basic password.
+
+        The emulation stays byte-exact on a bench, which is where the
+        capture is diffed against the real card. Off the bench the four
+        credential bytes are zeroed and nothing else is touched; a card
+        with no password set answers identically either way, because those
+        bytes are already zero.
+        """
+        rec = bytearray(self.config.setup_record())
+        if self.policy is not None and self.policy.level != BENCH_LEVEL:
+            rec[R.PASSWD_OFF:R.PASSWD_OFF + 4] = b"\x00" * 4
+        return bytes(rec)
+
+    def _answering(self):
+        """Whether 77FEh answers at all.
+
+        "Disable Port 77FEh" is in the card's own Security menu, and this
+        emulator printed it, stored it and let the menu toggle it without a
+        single listener ever reading it -- so the card's own documented
+        mitigation for the disclosure above did nothing whatsoever. It is
+        honoured here.
+        """
+        return bool(self.config.security.get("port_77fe", True))
 
     def close(self):
         self._stop = True
@@ -1167,8 +1255,22 @@ class Discovery:
                              daemon=True).start()
 
     def _tcp_session(self, conn, addr):
+        ip = addr[0] if addr else None
+        with exposed.session(self.gate, ip) as admitted:
+            if not admitted:
+                try:
+                    conn.close()
+                except OSError:
+                    pass
+                return
+            self._tcp_frames(conn, addr, ip)
+
+    def _tcp_frames(self, conn, addr, ip):
+        cap = self.capture
         try:
-            conn.settimeout(20.0)
+            conn.settimeout(self.policy.idle_timeout
+                            if self.policy is not None
+                            and self.policy.idle_timeout else 20.0)
             buf = bytearray()
             while True:
                 try:
@@ -1178,6 +1280,8 @@ class Discovery:
                 if not data:
                     return
                 buf.extend(data)
+                if cap is not None:
+                    cap.record("in", data, peer=ip, proto="77fe/tcp")
                 # Requests are four bytes each; a client may pipeline them.
                 while len(buf) >= 4:
                     frame = bytes(buf[:4])
@@ -1191,11 +1295,19 @@ class Discovery:
                                     else "no answer"))
                     if reply is None:
                         self._unknown(frame, addr)
+                        if cap is not None:
+                            cap.record("drop", frame, peer=ip,
+                                       proto="77fe/tcp",
+                                       note="opcode not recognised")
                         continue
+                    if self.policy is not None:
+                        self.policy.sleep()
                     try:
                         conn.sendall(reply)
                     except OSError:
                         return
+                    if cap is not None:
+                        cap.record("out", reply, peer=ip, proto="77fe/tcp")
         finally:
             try:
                 conn.close()
@@ -1204,8 +1316,13 @@ class Discovery:
 
 
 # The setup menu lives in its own module; re-exported so callers and tests
-# that have always imported it from here keep working.
+# that have always imported it from here keep working. The import stays at the
+# foot of the file because xportmenu imports this one. `serve_setup` is used
+# below; `SetupSession` only ever comes back out as `xport.SetupSession`, and
+# is named again so that reading it as dead is harder than reading the comment.
 from .xportmenu import SetupSession, serve_setup      # noqa: E402
+
+_RE_EXPORTED = (SetupSession,)
 
 
 def serve(config, host="0.0.0.0", log=None, powered=None, web=True):

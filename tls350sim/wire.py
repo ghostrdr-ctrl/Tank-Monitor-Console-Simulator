@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The serial/TCP side: speak the console's wire format.
 
 Command   <SOH>[6-digit security]<letter><3-char function><2-digit device>[data]<CR>
@@ -22,14 +25,17 @@ Deliberately hand-written rather than imported from any tool: a simulator that
 shares its framing code with the thing under test cannot catch a framing bug.
 """
 import json
+import math
 import os
 import re
 import socket
 import threading
 import time
+import traceback
 
 from .clock import clock_words
-from .console import describe_alarms
+from .console import alarm_report_stamp, describe_alarms
+from . import exposed
 from . import fieldio
 from . import alarmreports
 from . import controls
@@ -112,6 +118,24 @@ def stamp(console=None):
 # security code that may also lead a command, so the console can tell them
 # apart. It answers the In-Tank Inventory Report for every tank.
 SHORT_COMMANDS = {"200": "I20100"}
+
+
+# The five function codes whose own notes print a CEILING on the device
+# number, rather than the usual `00=All` with nothing above it. 576013-635
+# Rev AA gives 412, 8C1, 8C2, 8C3 and BB1 all the same one --
+# `xx - VMC Controller Number (Decimal, 01-18, 00=all)` -- and 576013-610
+# p.26-1 says it again in prose: "You can generate a report for up to 18 VMC
+# controllers."
+#
+# Asked for controller 19 or 99 this console did not refuse, it INVENTED:
+# each row came back with a serial number, a status and a rate, because
+# `readings.fixed` hashes the device number, so a tool walking device
+# numbers to discover a site found every one of them occupied and healthy.
+#
+# Only these five are bounded here. Every other code's notes read
+# `TT - Tank number, 00=All tanks` with no upper bound, and what a real
+# console does there is a question rather than a defect. FIDELITY S28.
+DEVICE_MAX = {"412": 18, "8C1": 18, "8C2": 18, "8C3": 18, "BB1": 18}
 
 
 def _sent_token(raw, folded):
@@ -269,7 +293,7 @@ SETTABLE |= {"550", "551", "581", "648", "64B",
 # stored it. A tool sweeping the range would have been told its write
 # succeeded.
 #
-# Built from **Revision Y**, not Revision U. Deriving it from U missed `132`,
+# Built from Revision Y, not Revision U. Deriving it from U missed `132`,
 # Fiscal Height Security Report, which Rev U does not carry at all -- a report
 # that took a Set and stored it. A rule about what the manual documents has to
 # be built from the latest manual on the shelf, or it inherits that manual's
@@ -409,8 +433,22 @@ class Handler:
             <ETX>
         """
         if code[:1].islower():
+            # `errors="replace"` on the VALUE, which is the same choice the
+            # display form below already makes and for the same reason: a
+            # site's own text reaches here, and a byte the console cannot
+            # send is not a reason to refuse a function code it knows.
+            #
+            # It used to encode the value strictly, so one character out of
+            # range raised, `handle` turned the raise into `9999FF`, and an
+            # inquiry answered the refusal the manual keeps for "a function
+            # code that it does not recognize". A label set over the port
+            # with a Latin-1 byte in it -- `S60201CAF\xc9` -- put `i60201`
+            # into that state permanently, while `I60201` went on answering,
+            # because only one of these two branches had been made safe.
+            # The checksum is taken after the substitution, so it covers
+            # what is actually sent. See FIDELITY S27.
             body = (SOH + code.encode("ascii") + stamp(self.c).encode("ascii")
-                    + value.encode("ascii"))
+                    + printable_body(value).encode("ascii", "replace"))
             # the checksum covers "all the characters preceding it", which
             # includes the && tag itself
             body += b"&&"
@@ -469,7 +507,8 @@ class Handler:
         # without the two line endings for a long time. Measured on a real
         # TLS-350 (software 326.01) over its TCP/IP card: all 49 replies
         # captured begin SOH CR LF and end CR LF ETX, without exception.
-        return SOH + SEP.encode("ascii") + text.encode("ascii", "replace") \
+        return SOH + SEP.encode("ascii") \
+            + printable_body(text).encode("ascii", "replace") \
             + SEP.encode("ascii") + ETX
 
     def _devices_of(self, module, dev):
@@ -679,7 +718,11 @@ class Handler:
     def _inventory(self, tank, tok):
         """The seven numbers I201 reports, in the manual's own order."""
         st = self.c.tank_level.get(tank, {})
-        volume, water = st.get("volume", 0.0), st.get("water", 0.0)
+        # `water_height`, not the float's own depth: the Water Minimum
+        # Threshold is a correction to the measurement rather than a gate on
+        # an alarm, and the WATER VOLUME column beside this one has gone
+        # through it all along. FIDELITY O27.
+        volume, water = st.get("volume", 0.0), self.c.water_height(tank)
         full = self.c.full_volume(tank) or 0.0
         # The calibration chart, not a straight line: height_at() is what
         # I204, I214, the printed inventory and a delivery snapshot all use,
@@ -1014,6 +1057,8 @@ class Handler:
         if kind == "float":
             return f"{packed.unhexfloat(held):.2f} {units}".strip()
         one, two = packed.unhexfloat(held[:8]), packed.unhexfloat(held[8:16])
+        if spec.get("pair"):
+            return spec["pair"].format(one, two)
         return f"{one:.3f} TO {two:.3f} {units}".strip()
 
     @staticmethod
@@ -1098,7 +1143,7 @@ class Handler:
     def _recon_history(self, dev, data):
         """C09, which is the odd one: keyed by TANK and not by product.
 
-        **A history is a table and this drew one row of it**, the current
+        A history is a table and this drew one row of it, the current
         day, twice over: `STRT HT` and `END HT` were both `stick_height`,
         the reading NOW, so the two columns could never differ on a report
         whose whole subject is a day's movement. p.588's sample chains --
@@ -1237,13 +1282,31 @@ class Handler:
                  "min": min(variances), "max": max(variances),
                  "ave": sum(variances) / len(variances), "status": "01"}]
 
+    def csld_monthly_rows(self, tanks, previous=False):
+        """A56's display body: a month of CSLD state changes per tank.
+
+        The panel's CUR and PRV CSLD MONTHLY screens print this too, so it
+        is one report whichever end of the console asks. FIDELITY D23.
+        """
+        rows = ["CSLD MONTHLY REPORT",
+                "PREVIOUS MONTH" if previous else "CURRENT MONTH",
+                "0.2 GAL/HR TEST"]
+        for tank in tanks:
+            label = self.c.text("602", tank) or f"TANK {tank}"
+            rows.append(f"T {tank}:{label}")
+            rows.append("PROBE SERIAL NUM " + self.c.probe_serial(tank))
+            for at, state in self._csld_states(tank, previous):
+                rows.append(f"{clock_words(at):22s}"
+                            + hrmreports.CSLD_STATE[state])
+        return rows
+
     def _csld_states(self, tank, previous=False):
         """A56's month of CSLD state changes, newest first.
 
         This read `probe_leak_buffer(tank, "periodic")` -- the SCHEDULED
         leak-test buffer -- and a CSLD tank runs no scheduled tests, so the
-        list was always empty and the fallback fired. **No PASS or FAIL
-        could ever appear in the monthly report**, against the manual's own
+        list was always empty and the fallback fired. No PASS or FAIL
+        could ever appear in the monthly report, against the manual's own
         sample showing a month of RESULT: PASS, RESULT: FAIL, RESULT: INCR
         and STATUS: changes. `csld.history` is the database it wanted. See
         FIDELITY K3.
@@ -1323,26 +1386,17 @@ class Handler:
         the same answer A20 to A22 give and for the same reason."""
         return []
 
-    def _sump_rows(self, number, most):
-        """The mag sump tests this sensor has to report.
+    def _mag_devices(self, dev):
+        """One sensor, or every sensor programmed as a Mag sensor.
 
-        Nothing here runs a sump test to completion -- 099, 09A and 09B put
-        one into a phase and that is what 317 reports. A sensor that has been
-        through one has a reading to show; one that has not has none, which is
-        status 00, NO TEST DATA AVAILABLE.
+        `00` is all of them, and all a Mag sump test can run on is the smart
+        sensors set to category 03 -- not every position the card has, which
+        is what `_devices_of` answers and which put a vacuum sensor's
+        position into the sump reports. See FIDELITY U1b.
         """
-        phase = self.c.control_phase_of("sump", number)
-        if phase == "00":
-            return []
-        base = readings.fixed(18.0, 24.0, "sumpht", number)
-        warm = readings.fixed(70.0, 80.0, "sumptemp", number)
-        now = time.mktime(self.c.now())
-        out = []
-        for n in range(most):
-            when = now - n * 30 * 86400
-            out.append((base, warm, base - n * 0.002, warm - n * 0.1, 120.0,
-                        6.0, 0.0, when, 12.0))
-        return out
+        if dev != "00" and dev.isdigit() and int(dev):
+            return [int(dev)]
+        return self.c.mag_sensors()
 
     def _loads_of(self, tank):
         """[(sequence, load)] for the tanker load reports, newest first."""
@@ -1380,7 +1434,7 @@ class Handler:
         level = self.c.tank_level.get(tank, {})
         return [level.get("volume", 0.0), self.c.product_mass(tank),
                 self.c.product_density(tank), self.c.stick_height(tank),
-                level.get("water", 0.0), self.c.product_temperature(tank)]
+                self.c.water_height(tank), self.c.product_temperature(tank)]
 
     def _deliveries_of(self, tank, most):
         """The delivery records these reports walk, newest first."""
@@ -1566,26 +1620,47 @@ class Handler:
         lo, hi = isd.DETAIL_CCC_RANGE
         return want if lo <= want <= hi else None
 
+    def _carb_requirements(self, site):
+        """[(label, min, max)]: the CARB operating requirement rows.
+
+        Each row reports the setting it names, so the A/L RANGE line is the
+        site's own V4F -- which is what 577013-800 Rev P p.48 prints. It was
+        a constant that no programming reached. See FIDELITY I5.
+        """
+        out = []
+        for label, tok, only in isd.CARB_REQUIREMENTS:
+            if only == site:
+                held = self._isd_value(tok)
+                out.append((label, packed.unhexfloat(held[:8]),
+                            packed.unhexfloat(held[8:16])))
+        return out
+
+    def _carb_thresholds(self, site):
+        """The CARB threshold rows, with the leak detection figure resolved.
+
+        That one is the site's own, off its hose count and CP-201's bands --
+        see `isd.leak_detection_cfh`. Every other row is a constant.
+        """
+        return isd.carb_thresholds(site, len(isd.hose_view(self._isd_rows())))
+
     def _isd_carb_lines(self):
         """The CARB block V00 prints and V02 and V03 reprint inside theirs."""
         site = "assist" if self._isd_evr() == "02" else "balance"
         rows = ["CARB EVR CERTIFIED OPERATING REQUIREMENTS",
                 f"{'':47s}Min  Max"]
-        for label, lo, hi, only in isd.CARB_REQUIREMENTS:
-            if only == site:
-                rows.append(f"{label:47s}{lo:.2f} {hi:.2f}")
+        for label, lo, hi in self._carb_requirements(site):
+            rows.append(f"{label:47s}{lo:.2f} {hi:.2f}")
         rows.append("ISD MONITORING TEST PASS/FAIL THRESHOLDS")
         rows.append(f"{'':47s}Period Below Above")
-        for label, per, lo, hi, unit, only in isd.CARB_THRESHOLDS:
-            if only in (site, "any"):
-                # 47 is the column the manual puts the period in, and one
-                # label is longer than that: VAPOR COLLECTION ASSIST SYSTEM
-                # A/L DEGRADATION FAIL is 51 characters, so a fixed field ran
-                # the two together as `...DEGRADATION FAIL7dys`. The page
-                # leaves two spaces, so the long row pushes its period right
-                # rather than losing the gap.
-                wide = max(47, len(label) + 2)
-                rows.append(f"{label:{wide}s}{per:6s} {lo:5s} {hi}{unit}")
+        for label, per, lo, hi, unit, _only in self._carb_thresholds(site):
+            # 47 is the column the manual puts the period in, and one
+            # label is longer than that: VAPOR COLLECTION ASSIST SYSTEM
+            # A/L DEGRADATION FAIL is 51 characters, so a fixed field ran
+            # the two together as `...DEGRADATION FAIL7dys`. The page
+            # leaves two spaces, so the long row pushes its period right
+            # rather than losing the gap.
+            wide = max(47, len(label) + 2)
+            rows.append(f"{label:{wide}s}{per:6s} {lo:5s} {hi}{unit}")
         return rows
 
     def _isd_status_lines(self, since, monthly, heading):
@@ -1685,10 +1760,20 @@ class Handler:
     def _isd_alarm_body(self):
         """And as the computer format packs them: a count then the records."""
         body = ""
-        for group in self._isd_alarm_groups():
+        warnings, failures, events = self._isd_alarm_groups()
+        for group in (warnings, failures):
             body += f"{len(group):03d}"
+            # p.604-605 name a warning's and a failure's category and type
+            # and enumerate neither, so these keep the code they had.
+            # UNKNOWNS A62.
             for at, _what, _value in group:
                 body += f"{int(at):08X}" + "01" + "01" + "00" + "00" + "00" + "00"
+        body += f"{len(events):03d}"
+        for at, what, value in events:
+            # p.606 does enumerate the Shutdown & Misc. events, and every
+            # one of them was packed as 01 01, ISD Startup. FIDELITY I11.
+            aa, bb = isd.misc_event_code(what, value)
+            body += f"{int(at):08X}" + aa + bb + "00" + "00" + "00" + "00"
         return body
 
     def _isd_evr(self):
@@ -1748,10 +1833,10 @@ class Handler:
 
     def _vp_control(self):
         """VC0: whether the vapour processor is on automatic or manual."""
-        return self.c.values.get("SVC000") or isd.VP_AUTOMATIC
+        return self.c.vp_control()
 
     def _vp_running(self):
-        return self.c.values.get("SVC100") or "0"
+        return self.c.vp_running()
 
     def _isd_setup_ok(self):
         """V51: "Status of ISD/PMC Setup Test", 0=Pass.
@@ -1807,8 +1892,8 @@ class Handler:
     def _draws_station(tok):
         """Whether this reply carries the four station header lines.
 
-        **The manual's own sample for the code, and a fallback for the
-        codes it has no sample for.** This used to be "is it in `REPORTS`",
+        The manual's own sample for the code, and a fallback for the
+        codes it has no sample for. This used to be "is it in `REPORTS`",
         a hand-kept set -- and a hand-kept set is exactly what the samples
         are there to replace. 67 codes in it draw no header on the page and
         got one anyway, most of the sensor diagnostics along with `217`
@@ -1838,6 +1923,32 @@ class Handler:
         return NOT_UNDERSTOOD
 
     def handle(self, raw):
+        """Answer one command, and never let a defect take the session down.
+
+        Anything that raised below here -- a parse a malformed command
+        reached, a stored value its own inquiry could not read -- went out
+        through `_session`, which catches `OSError` only, so the thread died,
+        the connection dropped and the tool's next send got
+        `ConnectionAbortedError`. A console refuses what it cannot answer,
+        with the same frame as a code it does not know, and the session
+        carries on.
+        """
+        try:
+            return self._handle(raw)
+        except Exception as e:
+            note = f"{raw!r}   [refused: {type(e).__name__}: {e}]"
+            if self.verbose:
+                print("  " + note)
+                traceback.print_exc()
+            if self.log:
+                self.log(note)
+            try:
+                letter = parse_command(raw)[1] or ""
+            except Exception:
+                letter = ""
+            return self._eom(NOT_UNDERSTOOD, letter)
+
+    def _handle(self, raw):
         # A console with the breaker open is dark everywhere at once: no
         # display, no printer, and nothing on the serial port either.
         if not self.c.powered:
@@ -1861,8 +1972,6 @@ class Handler:
                 self.log(f"{raw!r}   [no comm card fitted]")
             return b""
         security, letter, tok, dev, data = parse_command(raw)
-        # _tanks needs to know which family it is answering for
-        self._token = tok
         # 576013-635 p.267: with the security DIP on and a code programmed,
         # "the system will not respond to a command without the proper
         # security code." No response at all, not an error frame: a caller
@@ -1895,6 +2004,12 @@ class Handler:
             if self.log:
                 self.log(f"{letter}{tok}{dev}   [not understood]")
             return self._eom(NOT_UNDERSTOOD, letter)
+        bound = DEVICE_MAX.get(tok.upper())
+        if bound is not None and int(dev) > bound:
+            # a device number past the ceiling its own notes print
+            if self.log:
+                self.log(f"{letter}{tok}{dev}   [device past {bound}]")
+            return self._eom(NOT_UNDERSTOOD, letter)
         if (not self.c.supports(versions.TOKEN_FEATURE.get(tok.upper()))
                 or not versions.knows_token(tok.upper(), self.c.version,
                                             self.c.board)):
@@ -1908,6 +2023,11 @@ class Handler:
                          f"[not in software {self.c.version}]")
             return self._eom(NOT_UNDERSTOOD, letter)
         with self.c.lock:
+            # _tanks needs to know which family it is answering for. Set
+            # under the lock: one Handler serves every session on the port,
+            # and set before it, two clients at once could swap it between
+            # this line and the read.
+            self._token = tok
             # the port has carried data, which is half of what 888 reports;
             # the other half is what it was doing while it did, and a command
             # arriving on the serial port is 888's own `06=RS232 REQUEST`.
@@ -2227,18 +2347,7 @@ class Handler:
                     # heading, where its alarm-history neighbours print
                     # nothing at all. See FIDELITY S18.
                     rows.append("NONE")
-                for e in entries:
-                    stamp = time.strptime(e["at"], "%y%m%d%H%M")
-                    at = clock_words(time.mktime(stamp))
-                    if tok == "11A":
-                        rows.append(f"{at:43s}"
-                                    f"{e['id']:<7.{wide}s}"
-                                    f"{'':20s}"
-                                    f"{e['code']:<{wide_code}.{wide_code}s}")
-                    else:
-                        rows.append(f"{at:23s}"
-                                    f"{e['id']:<12.{wide}s}"
-                                    f"{e['code']:<{wide_code}.{wide_code}s}")
+                rows += alarmreports.service_rows(tok, entries)
                 return self._frame(code, SEP.join(rows)), "service history"
             body = (self.c.station_header_field()
                     if tok in alarmreports.HEADERS else "")
@@ -2744,13 +2853,12 @@ class Handler:
                 body = ""
                 if tok != "V01":
                     site = "assist" if self._isd_evr() == "02" else "balance"
-                    reqs = [(lo, hi) for _l, lo, hi, only
-                            in isd.CARB_REQUIREMENTS if only == site]
+                    reqs = [(lo, hi) for _l, lo, hi
+                            in self._carb_requirements(site)]
                     body += f"{len(reqs):02d}"
                     for lo, hi in reqs:
                         body += "01" + packed.hexfloats([lo, hi])
-                    thresholds = [r for r in isd.CARB_THRESHOLDS
-                                  if r[5] in (site, "any")]
+                    thresholds = self._carb_thresholds(site)
                     body += f"{len(thresholds):02d}"
                     for i, (_l, per, lo, hi, _u, _o) in enumerate(thresholds, 1):
                         values = [float(x) for x
@@ -2767,13 +2875,12 @@ class Handler:
                 if display:
                     rows = self._isd_carb_lines() + [isd.CARB_FOOTER]
                     return self._frame(code, SEP.join(rows)), "carb thresholds"
-                reqs = [(lo, hi) for _l, lo, hi, only in isd.CARB_REQUIREMENTS
-                        if only == site]
+                reqs = [(lo, hi) for _l, lo, hi
+                        in self._carb_requirements(site)]
                 body = f"{len(reqs):02d}"
                 for lo, hi in reqs:
                     body += "01" + packed.hexfloats([lo, hi])
-                rows = [r for r in isd.CARB_THRESHOLDS
-                        if r[5] in (site, "any")]
+                rows = self._carb_thresholds(site)
                 body += f"{len(rows):02d}"
                 for i, (_l, per, lo, hi, _u, _o) in enumerate(rows, 1):
                     values = [float(x) for x in (per.rstrip("dysmin"), lo, hi)
@@ -3268,7 +3375,10 @@ class Handler:
                 text = "\n" + ("\n\n".join(
                     reports[tok](t) for t in tanks)) + "\n"
                 return self._frame(code, text), "tank chart"
-            val = self.c.values.get(f"S63B{tanks[0]:02d}") if tok == "63B"                 else None
+            # `tanks` is empty on a console with a probe card and no tank
+            # programmed, and the chart of no tank is an empty one
+            val = (self.c.values.get(f"S63B{tanks[0]:02d}")
+                   if tok == "63B" and tanks else None)
             return self._frame(code, val or ""), "tank chart"
         if tok == "217":
             # Tank Profile: which of the five a tank is on, per I217's table
@@ -3344,6 +3454,9 @@ class Handler:
             if not self.c.has("probe"):
                 return self._nine(code), "no probe module fitted"
             asked = (data or "").strip()
+            if tok in ("213", "21B") and asked and not asked[0:2].isdigit():
+                # nn, how many deliveries, is a decimal count
+                return self._nine(code), "REJECTED: nn is a number"
             most = int(asked[0:2] or 5) if tok in ("213", "21B") and asked \
                 else 5
             tanks = self._tanks(dev)
@@ -3613,17 +3726,7 @@ class Handler:
             previous = (data or "").strip().startswith("1")
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = ["CSLD MONTHLY REPORT",
-                        "PREVIOUS MONTH" if previous else "CURRENT MONTH",
-                        "0.2 GAL/HR TEST"]
-                for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"T {tank}:{label}")
-                    rows.append("PROBE SERIAL NUM "
-                                + self.c.probe_serial(tank))
-                    for at, state in self._csld_states(tank, previous):
-                        rows.append(f"{clock_words(at):22s}"
-                                    + hrmreports.CSLD_STATE[state])
+                rows = self.csld_monthly_rows(tanks, previous)
                 return self._frame(code, SEP.join(rows)), "CSLD monthly"
             body = "1" if previous else "0"
             for tank in tanks:
@@ -3776,7 +3879,7 @@ class Handler:
                         wiretables.heading("B62")]
                 for one in history:
                     stamp = time.strptime(one["at"], "%y%m%d%H%M")
-                    when, clock = console.alarm_report_stamp(stamp)
+                    when, clock = alarm_report_stamp(stamp)
                     rows.append(f"{one['sensor']:2d}"
                                 f"{14:5d}   "
                                 f"{'SENSOR FAULT ALARM':<21s}"
@@ -3793,60 +3896,20 @@ class Handler:
         if tok in sumpreports.SUMP_REPORTS:
             # Four reports, one family -- and `tt` is a STATUS on 317 and 318
             # and a COUNT OF ROWS on 319 and 31A. Same letter, same position.
+            # The rows are sumpreports' and the tests behind them sumptest's;
+            # these used to be one sensor's readings made up per call, the
+            # same whatever had or had not been run. FIDELITY U1b.
             if not self.c.has("smart"):
                 return self._nine(code), "no smart sensor module fitted"
             spec = sumpreports.SUMP_REPORTS[tok]
-            sensors = self._devices_of("smart", dev)
+            sensors = self._mag_devices(dev)
             if code[0].isupper():
                 rows = ["MAG SUMP LEAK TEST", spec["title"]]
                 for number in sensors:
-                    label = self.c.text("722", number) or f"SUMP {number}"
-                    rows.append(f"s {number}:{label}")
-                    got = self._sump_rows(number, spec["rows"])
-                    if spec["tt"] == "status":
-                        state = self.c.control_phase_of("sump", number)
-                        rows.append("STATUS:"
-                                    + sumpreports.SUMP_STATUS.get(state, ""))
-                        if not got:
-                            continue
-                        one = got[0]
-                        rows += [f"START HT: {one[0]:.3f} IN.",
-                                 f"START TEMP: {one[1]:.1f} F",
-                                 f"END HT: {one[2]:.3f} IN.",
-                                 f"END TEMP: {one[3]:.1f} F",
-                                 f"DURATION: {one[4]:.0f} MINS"]
-                        if spec.get("full"):
-                            rows += [f"TEMP RATE: {one[5]:.1f} F/HR",
-                                     f"LEAK RATE: {one[6]:.4f} IN./HR"]
-                    else:
-                        rows.append("                       START  START"
-                                    "   END    END  DURATION")
-                        rows.append("START DATE/TIME       HEIGHT  TEMP"
-                                    "  HEIGHT  TEMP  MINUTES")
-                        for one in got:
-                            rows.append(f"{clock_words(one[7]):22s}"
-                                        f"{one[0]:7.3f}{one[1]:6.1f}"
-                                        f"{one[2]:8.3f}{one[3]:6.1f}"
-                                        f"{one[4]:6.0f}")
+                    rows += sumpreports.display_rows(self.c, tok, number)
                 return self._frame(code, SEP.join(rows)), "mag sump test"
-            body = ""
-            for number in sensors:
-                got = self._sump_rows(number, spec["rows"])
-                body += f"{number:02d}"
-                if spec["tt"] == "status":
-                    body += self.c.control_phase_of("sump", number)
-                    if spec.get("full"):
-                        body += "00"                      # abort reason
-                else:
-                    body += f"{len(got):02d}"             # a COUNT, not a status
-                for one in got:
-                    body += time.strftime("%y%m%d%H%M", time.localtime(one[7]))
-                    values = list(one[0:5])
-                    body += f"{len(values):02d}" + packed.hexfloats(values)
-                    if spec.get("full"):
-                        body += "01" + packed.hexfloat(one[5])
-                        body += packed.hexfloat(one[8])
-                        body += "01" + packed.hexfloat(one[6])
+            body = "".join(sumpreports.computer_record(self.c, tok, number)
+                           for number in sensors)
             return self._frame(code, body), "mag sump test"
         if tok in ("391", "392"):
             if not self.c.has("probe"):
@@ -3986,21 +4049,35 @@ class Handler:
             ports = ([int(dev)] if dev != "00" and dev.isdigit() and int(dev)
                      else sorted(self.c.comm_positions()) or [1])
             if tok == "88D":
+                # `MM - Modem Type` and `DD - Modem Auto Detected` are two
+                # bytes, and this console has no modem to detect: what it
+                # found is what it was told it would find. Both read `S885`
+                # -- which had four options on the keypad and two here, so
+                # 88D reported a GSM modem on every port whatever the
+                # setting said. See FIDELITY D10.
                 if code[0].isupper():
                     rows = ["COMMUNICATION DIAGNOSTIC"]
                     for n in ports:
+                        kind = self.c.modem_type(n)
+                        name = sumpreports.MODEM_TYPE.get(
+                            kind, sumpreports.MODEM_TYPE["00"])
                         # p.477 sets the colon at 12, the same column
                         # 888 and 889 set theirs
                         rows += [f"COMM BOARD  : {n} S-LINK",
-                                 "MODEM TYPE : "
-                                 + sumpreports.MODEM_TYPE["03"],
-                                 "MODEM AUTO DETECTED: "
-                                 + sumpreports.MODEM_TYPE["03"],
-                                 "RSSI: 99  BER: 99"]
+                                 "MODEM TYPE : " + name,
+                                 "MODEM AUTO DETECTED: " + name]
+                        # "Only displayed if modem type is VR TLS GSM
+                        # MODEM" -- 576013-818 Rev AA Figure 6-27, p.6-22.
+                        if kind == self.c.GSM_MODEM:
+                            rssi, ber = self.c.comm_signal(n)
+                            rows.append(f"RSSI: {rssi:02d}  BER: {ber:02d}")
                     return self._frame(code, SEP.join(rows)), "SiteLink"
-                return (self._frame(code, "".join(f"{n:02d}03039999"
-                                                  for n in ports)),
-                        "SiteLink")
+                body = ""
+                for n in ports:
+                    kind = self.c.modem_type(n)
+                    rssi, ber = self.c.comm_signal(n)
+                    body += f"{n:02d}{kind}{kind}{rssi:02d}{ber:02d}"
+                return self._frame(code, body), "SiteLink"
             if code[0].isupper():
                 return (self._frame(code, SEP.join(self._comm_status(ports))),
                         "comm status")
@@ -4141,8 +4218,14 @@ class Handler:
                                                   + packed.hexfloat(0.0)
                                                   for n in range(1, 5))),
                         "MDIM totalizer")
+            # "all" is what the cage can carry, which is what the PAPER has
+            # always used: `console.vmc_numbers()` is
+            # `range(1, capacity("vmc") + 1)` and this was a hardcoded three.
+            # 576013-610 p.26-1: "You can generate a report for up to 18 VMC
+            # controllers." One code, too narrow for `00` and unbounded for
+            # `xx`. FIDELITY O27 and S28.
             controllers = ([int(dev)] if dev != "00" and dev.isdigit()
-                           and int(dev) else list(range(1, 4)))
+                           and int(dev) else self.c.vmc_numbers())
             if code[0].isupper():
                 rows = ["VMC REPORT",
                         "VMC S/N     SIDE STATUS  RECOVER RATE FUEL CNT"
@@ -4534,7 +4617,7 @@ class Handler:
     def _head_gap(self, tok):
         """Blank lines between the frame and the first line of the body.
 
-        **Not the constant this console took it for.** 512 of the manual's
+        Not the constant this console took it for. 512 of the manual's
         541 Display samples leave one and 29 leave none -- 613, 614, 902,
         903, 905 and 881 among them -- and a real console agrees with the
         page on every one of those that was captured. `build_wire_titles.py`
@@ -4580,7 +4663,7 @@ class Handler:
 
         None if this is not one of them, so the caller carries on.
         """
-        from .console import FIELDS, SETUP_MENU
+        from .console import FIELDS
         if not any(key.startswith(f"S{tok}") and "." in key for key in FIELDS):
             return None
         title = (WIRE_TITLES.get(tok) or {}).get("title") or ""
@@ -4693,9 +4776,13 @@ class Handler:
             when = time.mktime(time.strptime(stamp, "%y%m%d%H%M"))
         except ValueError:
             # 05 and 06 are separate codes, so which half of the stamp is
-            # wrong decides which one comes back
-            month, day = stamp[2:4], stamp[4:6]
-            if not ("01" <= month <= "12" and "01" <= day <= "31"):
+            # wrong decides which one comes back -- and the date half is
+            # wrong when it is not a DATE, not only when its month or its day
+            # is out of range on its own. The 30th of February has a legal
+            # month and a legal day, and answered BAD TIME. FIDELITY S24.
+            try:
+                time.strptime(stamp[:6], "%y%m%d")
+            except ValueError:
                 return "bad_date"
             return "bad_time"
         if when > time.mktime(self.c.now()):
@@ -4994,7 +5081,7 @@ class Handler:
             # 577013-819 Rev F Table 2 is a THREE column map and this wrote
             # the third: the date. The alarms the selection clears are the
             # second column. See FIDELITY I4.
-            self.c.clear_isd_test(test)
+            self.c.clear_isd_test(test, fp, hose)
             if test != isd.COLLECTION:
                 self.c.values[f"SV85{test}"] = stamp
             elif fp == "00":
@@ -5229,11 +5316,17 @@ class Handler:
                 return self._nine(code), f"no {module} module fitted"
             if "149" not in (data or ""):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
-            devices = self._devices_of(module, dev)
+            # a sump test runs on the Mag sensors, not on every position
+            devices = (self._mag_devices(dev) if what.startswith("sump")
+                       else self._devices_of(module, dev))
             rows = []
             for number in devices:
                 state = self.c.control_device(what, number)
                 rows.append((number, state))
+            if not rows:
+                # a console with no Mag sensor programmed has none to test
+                return (self._frame(code, banner if code[0].isupper()
+                                    else ""), what)
             if code[0].isupper():
                 letter = "Q" if module == "plld" else "s"
                 first, state = rows[0]
@@ -5359,7 +5452,9 @@ class Handler:
             # than left inside one string.
             body = value[2:] if value[:2] == dev else value
             day, rest = body[:1], body[1:].strip()
-            for one in (range(1, 8) if day == "0" else [int(day or 0)]):
+            if not day or day not in "01234567":
+                return self._nine(code), "REJECTED: D is 0 to 7"
+            for one in (range(1, 8) if day == "0" else [int(day)]):
                 if 1 <= one <= 7:
                     self.c.set_setting(f"avg_sales_{one}", rest,
                                        int(dev) if dev != "00" else 1)
@@ -5441,12 +5536,34 @@ class Handler:
 
         Returns the data to store, or None if the console would refuse it.
         """
-        if not code[:1].isupper():
-            return data                      # computer format: already packed
         from .console import FIELDS
         field = FIELDS.get(f"S{tok}" + (dev if dev != "00" else "00"))
         if field is None and dev != "01":
             field = FIELDS.get(f"S{tok}01")
+        if not code[:1].isupper():
+            # Computer format is already packed -- but a date is six digits
+            # in both forms, and this returned before looking: `s75C01AB0101`
+            # was acked where the display form is refused, and I75C01 then
+            # raised on int('AB') from the state file for good.
+            text = data.strip()
+            if (field and not field.get("part")
+                    and field.get("kind") == "date"
+                    and text and not text.isdigit()):
+                return None
+            # A numeric field in computer format carries a packed IEEE
+            # float, and "nan", "inf" and "1e400" are none of those -- a
+            # real console has a range for the field and would refuse them.
+            # Accepting them stored a non-finite number that `int()` and
+            # `round()` cannot represent, and the console answered 9999FF
+            # to everything from then on, because `traffic.gauge()` runs
+            # from `tick()` at the top of every command. Eleven bytes, once,
+            # unauthenticated, and on a bench or LAN console it was written
+            # to disk and outlived the restart.
+            if (field and not field.get("part")
+                    and field.get("kind") in ("float", "int")
+                    and text and not _finite_packed(text)):
+                return None
+            return data
         if not field or field.get("part") or field.get("kind") not in (
                 "float", "int", "flag", "time", "date", "digits", "enum"):
             return data
@@ -5477,7 +5594,8 @@ class Handler:
                 pfx, text = text[:2], text[2:]
         try:
             return pfx + fieldio.encode_value(field, text,
-                                              self.c.metric(), self.c)
+                                              self.c.metric(), self.c,
+                                              code=f"S{tok}{dev}")
         except ValueError:
             return None
 
@@ -5611,18 +5729,84 @@ def echo_for(data):
     return bytes(out)
 
 
-def serve(console, host, port, verbose=True, log=None, on_socket=None):
+
+# The bytes a console cannot put on its display, and must never put on the
+# wire inside a frame.
+#
+# A reply is framed `SOH ... ETX`, and SOH is the only way a client can find
+# where a frame starts. Stored text was emitted with `encode("ascii",
+# "replace")`, which substitutes bytes ABOVE 0x7E and passes every control
+# byte below 0x20 through untouched -- SOH included. So a Set that put a raw
+# 0x01 into a stored field (the station header at 503 is four separately
+# settable lines, drawn at the top of nearly every display report) made the
+# console emit a second, attacker-authored frame inside its own reply, closed
+# by the real reply's ETX. A client resynchronising on SOH -- which is the
+# only thing it can do -- reads the forgery as a complete report, and the
+# display format carries no checksum to contradict it.
+#
+# Sanitising on OUTPUT rather than on input covers every field at once,
+# including the ones a later revision adds. CR and LF survive because
+# `_frame` uses them as its own separators; everything else below a space,
+# and DEL, becomes a space -- which is what a real console's display does
+# with them, having no glyph for any of it.
+_UNPRINTABLE = {c: " " for c in range(0x20)}
+_UNPRINTABLE.pop(0x0D)
+_UNPRINTABLE.pop(0x0A)
+_UNPRINTABLE[0x7F] = " "
+_UNPRINTABLE = str.maketrans(_UNPRINTABLE)
+
+
+def printable_body(text):
+    """Stored text, with anything that could forge a frame taken out."""
+    return text.translate(_UNPRINTABLE)
+
+
+
+def _finite_packed(text):
+    """Is this a number the console could actually hold?
+
+    Computer format packs a float as eight hex digits, and `Console.limit`
+    falls back to `float(body)` when that fails -- which is what let
+    "nan" and "inf" through. Both forms are checked here, and both must
+    come out finite.
+    """
+    try:
+        return math.isfinite(packed.unhexfloat(text[-8:]))
+    except (ValueError, TypeError):
+        pass
+    try:
+        return math.isfinite(float(text))
+    except (ValueError, TypeError):
+        return False
+
+
+def serve(console, host, port, verbose=True, log=None, on_socket=None,
+          on_conn=None, policy=None, gate=None, capture=None):
     """Answer the console's serial protocol on a TCP port.
 
     `on_socket` is handed the listening socket once it is up. The card's
     network supervisor keeps it so it can close it and move the tunnel when
     the address or the port programmed into the card changes -- which is
     what a real card does when you save a new port and it reboots.
+
+    `on_conn` is handed each connection as it is accepted, for the same
+    reason: when the card reboots, the sessions open on it go too.
+
+    `policy`, `gate` and `capture` are the exposure controls and all three
+    are optional: handed none, this serves exactly as it always has. See
+    `exposed.py` for what each of them does and why the defaults are what
+    they are.
     """
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
-    srv.listen(5)
+    # A deeper backlog than the old 5 when there is a gate to do the
+    # refusing. The point is not to serve more of a flood: it is that a
+    # connection refused by the KERNEL is invisible -- it never reaches the
+    # gate, so it is never counted and never captured -- and on a honeypot
+    # the fact that an address is flooding is the finding. Accepting it and
+    # then turning it away in `_session` is what puts it in the log.
+    srv.listen(16 if gate is not None else 5)
     if on_socket:
         on_socket(srv)
     if verbose:
@@ -5635,11 +5819,29 @@ def serve(console, host, port, verbose=True, log=None, on_socket=None):
             return
         if log:
             log(f"-- connection from {addr[0]}")
-        threading.Thread(target=_session, args=(conn, handler),
+        if on_conn:
+            on_conn(conn)
+        threading.Thread(target=_session,
+                         args=(conn, handler),
+                         kwargs={"peer": addr, "policy": policy,
+                                 "gate": gate, "capture": capture},
                          daemon=True).start()
 
 
 TERMINATORS = (13, 10, 3)      # carriage return, line feed, ETX
+
+# The most a session holds of a command it has not finished. The longest a
+# tool sends is a fourteen-pair tank chart -- SOH, the six-digit security
+# code, `s63BTTnn`, fourteen `ffHHHHHHHHVVVVVVVV` and its terminator -- at 268
+# bytes, and the widest template in `formats` run across sixteen devices is
+# 526. 576013-635 Rev AA section 3.0 gives the console's own buffer as 128
+# characters, which the tank chart overruns by itself, so the number is not
+# taken from there. See CLOSED Z4.
+LONGEST_COMMAND = 1024
+
+# The most a session holds of a telnet subnegotiation still waiting for its
+# IAC SE. A terminal's own are a few bytes; its window size is nine.
+LONGEST_SUBNEGOTIATION = 256
 
 
 def _complete(buf):
@@ -5666,70 +5868,160 @@ def _complete(buf):
     return 0
 
 
-def _session(conn, handler):
-    buf, pending, telnet = bytearray(), bytearray(), False
-    try:
-        conn.sendall(PROBE)
-    except OSError:
-        return
-    try:
+class Framer:
+    """One session's bytes, as the commands in them.
+
+    Everything `_session` knows about a connection that is not the socket:
+    the part of a telnet sequence still to come, the part of a command still
+    being typed, and whether the other end has turned out to be a terminal.
+    Its own class so what a stream can do to those buffers can be tested
+    without a connection. Neither buffer had a limit, so a Set that never
+    sent its terminator, or a subnegotiation that never sent IAC SE, grew
+    the session for as long as the bytes kept coming. See CLOSED Z4.
+    """
+
+    def __init__(self):
+        self.buf, self.pending, self.telnet = bytearray(), bytearray(), False
+
+    def feed(self, chunk):
+        """(sends, commands): what goes straight back, in order, and each
+        whole command this chunk completed."""
+        sends, commands = [], []
+        self.pending += chunk
+        data, saw, leftover = strip_telnet(bytes(self.pending))
+        if len(leftover) > LONGEST_SUBNEGOTIATION:
+            # Only a subnegotiation waits this long, and one that has not
+            # ended by now is not going to. What it swallowed goes with it.
+            leftover = b""
+        self.pending = bytearray(leftover)
+        if saw and not self.telnet:
+            # it answered, so it is a terminal: take over the echo
+            self.telnet = True
+            sends.append(HELLO)
+        if self.telnet and data:
+            # somebody is typing: show them what they typed
+            sends.append(echo_for(data))
+        buf = self.buf
+        # in order, because a rub-out only takes back what came before it
+        for byte in data:
+            if byte == 0x1B:
+                # ESC (576013-635 p.267): "a means to halt a response
+                # message at any time before its completion." Over a
+                # socket the reply goes out in one send, so what ESC can
+                # still do is abandon a command that is only part typed,
+                # which is the same intent: nothing part-formed survives.
+                buf.clear()
+            elif byte in (0x08, 0x7F):
+                del buf[-1:]
+            else:
+                buf.append(byte)
         while True:
-            chunk = conn.recv(4096)
-            if not chunk:
+            start = buf.find(SOH)
+            if start == -1:
+                buf.clear()      # noise with no SOH in it is not a command
                 break
-            pending += chunk
-            data, saw, leftover = strip_telnet(bytes(pending))
-            pending = bytearray(leftover)
-            if saw and not telnet:
-                # it answered, so it is a terminal: take over the echo
-                telnet = True
-                try:
-                    conn.sendall(HELLO)
-                except OSError:
-                    break
-            if telnet and data:
-                # somebody is typing: show them what they typed
-                try:
-                    conn.sendall(echo_for(data))
-                except OSError:
-                    break
-            # in order, because a rub-out only takes back what came before it
-            for byte in data:
-                if byte == 0x1B:
-                    # ESC (576013-635 p.267): "a means to halt a response
-                    # message at any time before its completion." Over a
-                    # socket the reply goes out in one send, so what ESC can
-                    # still do is abandon a command that is only part typed,
-                    # which is the same intent: nothing part-formed survives.
+            del buf[:start]
+            n = _complete(bytes(buf))
+            if n > LONGEST_COMMAND or (not n and len(buf) > LONGEST_COMMAND):
+                # Longer than any command there is, so not one: dropped, and
+                # taken up again at the next SOH, the way noise is.
+                after = buf.find(SOH, 1)
+                if after == -1:
                     buf.clear()
-                elif byte in (0x08, 0x7F):
-                    del buf[-1:]
-                else:
-                    buf.append(byte)
-            while True:
-                start = buf.find(SOH)
-                if start == -1:
-                    buf.clear()      # noise with no SOH in it is not a command
                     break
-                del buf[:start]
-                n = _complete(bytes(buf))
-                if not n:
-                    break
-                raw, _ = bytes(buf[:n]), None
-                del buf[:n]
-                out = handler.handle(raw)
-                if out:
-                    # a terminal wants the reply on a line of its own, and the
-                    # next thing it types on the line after that; a tool gets
-                    # the frame and nothing else
-                    if telnet:
-                        lead = b"" if raw[-1:] in (b"\r", b"\n") else b"\r\n"
-                        out = lead + out + b"\r\n"
-                    conn.sendall(out)
-    except OSError:
-        pass
-    finally:
+                del buf[:after]
+                continue
+            if not n:
+                break
+            commands.append(bytes(buf[:n]))
+            del buf[:n]
+        return sends, commands
+
+
+def _session(conn, handler, peer=None, policy=None, gate=None, capture=None):
+    """One tunnel session: the bytes in, the console's answers out.
+
+    The exposure controls are all no-ops when nothing was handed in, which
+    is how every existing caller and every test still gets the old
+    behaviour. What they add on a public address:
+
+      * an IDLE TIMEOUT. There was none at all -- a connection that opened
+        and said nothing held its thread until the process ended, so the
+        cheapest possible denial of service against this program was to open
+        connections and do nothing. `conn.settimeout` is the whole fix.
+      * ADMISSION, so one source cannot hold every thread.
+      * a RESPONSE DELAY before each answer. An instant reply is the tell
+        that this is software; see `exposed.Policy`.
+      * the CAPTURE, which is the point of running it at all.
+    """
+    ip = peer[0] if peer else None
+    port = peer[1] if peer and len(peer) > 1 else None
+
+    def seen(direction, data, **kw):
+        if capture is not None:
+            capture.record(direction, data, peer=ip, port=port,
+                           proto="tunnel", **kw)
+
+    with exposed.session(gate, ip) as admitted:
+        if not admitted:
+            # Refused, and told so the way a card with no free connection
+            # tells: by closing. A real XPort's tunnel accepts one session
+            # and drops what it cannot serve, so a closed connection is the
+            # honest answer here and not a honeypot tell.
+            try:
+                conn.close()
+            except OSError:
+                pass
+            return
+        if policy is not None and policy.idle_timeout:
+            conn.settimeout(policy.idle_timeout)
+        seen("open", b"")
+        framer = Framer()
         try:
-            conn.close()
+            conn.sendall(PROBE)
+        except OSError:
+            return
+        try:
+            while True:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                seen("in", chunk)
+                sends, commands = framer.feed(chunk)
+                for data in sends:
+                    conn.sendall(data)
+                    seen("out", data)
+                for raw in commands:
+                    out = handler.handle(raw)
+                    # BEFORE the `if`, deliberately. The delay used to sit
+                    # on the answering path only, and a command refused for
+                    # a bad RS-232 security code returns b"" -- so a wrong
+                    # guess cost nothing while a right one cost 0.15-0.75 s
+                    # and produced a reply. That is a free oracle over a
+                    # six digit code, and `Framer.feed` accepts an inquiry
+                    # with no terminator, so guesses pack about 315 to a
+                    # segment. Delaying every command, answered or not,
+                    # prices the silent path the same as the loud one -- and
+                    # is the more faithful behaviour anyway, because a card
+                    # on a 9600 baud line cannot be polled thousands of
+                    # times a second whatever it decides to say back.
+                    if policy is not None:
+                        policy.sleep()
+                    if out:
+                        # a terminal wants the reply on a line of its own,
+                        # and the next thing it types on the line after
+                        # that; a tool gets the frame and nothing else
+                        if framer.telnet:
+                            lead = (b"" if raw[-1:] in (b"\r", b"\n")
+                                    else b"\r\n")
+                            out = lead + out + b"\r\n"
+                        conn.sendall(out)
+                        seen("out", out, cmd=exposed.command_of(raw))
         except OSError:
             pass
+        finally:
+            seen("close", b"")
+            try:
+                conn.close()
+            except OSError:
+                pass

@@ -333,13 +333,13 @@
    "08": "PMC Setup Warn"
   },
   "18": {
-   "02": "DIM Disabled",
-   "03": "DIM Communication Alarm",
+   "02": "DISABLED DIM ALARM",
+   "03": "COMMUNICATION ALARM",
    "04": "TRANSACTION ALARM"
   },
   "19": {
-   "02": "DIM Disabled",
-   "03": "DIM Communication Alarm",
+   "02": "DISABLED DIM ALARM",
+   "03": "COMMUNICATION ALARM",
    "04": "TRANSACTION ALARM"
   }
  },
@@ -940,7 +940,8 @@
    "min": 0.0,
    "max": 999999.0,
    "code": "S62501",
-   "mask": "000000"
+   "mask": "000000",
+   "default": "000099"
   },
   "S61001": {
    "code": "S61001",
@@ -1350,7 +1351,31 @@
    "max": 999.0,
    "code": "S7A901",
    "wire_format": "%d FEET",
-   "mask": "000"
+   "mask": "000",
+   "range_by": {
+    "code": "7A8",
+    "ranges": {
+    "01": {
+     "min": 10,
+     "max": 500,
+     "min_metric": 3,
+     "max_metric": 151,
+     "zero": true
+    },
+     "02": {
+      "min": 30,
+      "max": 500,
+      "min_metric": 10,
+      "max_metric": 151
+     }
+    },
+    "default": {
+     "min": 10,
+     "max": 500,
+     "min_metric": 3,
+     "max_metric": 151
+    }
+   }
   },
   "S7A401": {
    "label": "WPLLD shutdown rate",
@@ -1404,7 +1429,10 @@
    "min": 0,
    "max": 16,
    "width": 2,
-   "code": "S75201"
+   "code": "S75201",
+   "screen_words": {
+    "0": "NONE"
+   }
   },
   "S75D01": {
    "label": "VLLD dispense mode",
@@ -2468,7 +2496,8 @@
    "min": 0.0,
    "max": 99.0,
    "code": "S62601",
-   "mask": "00"
+   "mask": "00",
+   "default": "99"
   },
   "S62D01.annual": {
    "label": "Annual test fail alarm",
@@ -2788,7 +2817,19 @@
    "max": 999.0,
    "code": "S7AD01",
    "wire_format": "%d FEET",
-   "mask": "000"
+   "mask": "000",
+   "range_by": {
+    "code": "7A8",
+    "ranges": {
+     "01": {
+      "min": 10,
+      "max": 220,
+      "min_metric": 3,
+      "max_metric": 67,
+      "zero": true
+     }
+    }
+   }
   },
   "S77401": {
    "label": "PLLD continuous handle alarm timeout, hours",
@@ -2907,7 +2948,11 @@
   "S77E01": {
    "label": "PLLD passive 0.10 GPH test",
    "kind": "flag",
-   "code": "S77E01"
+   "code": "S77E01",
+   "words": [
+    "NO",
+    "YES"
+   ]
   },
   "S77C01": {
    "label": "PLLD low pressure shutoff",
@@ -3620,6 +3665,14 @@
     [
      "01",
      "US ROBOTICS (UK)"
+    ],
+    [
+     "02",
+     "VR TLS ANALOG MOD"
+    ],
+    [
+     "03",
+     "VR TLS GSM MODEM"
     ]
    ],
    "label": "SiteLink modem type",
@@ -3687,7 +3740,8 @@
    "max": 60,
    "width": 2,
    "code": "S52701",
-   "mask": "00"
+   "mask": "00",
+   "default": "3"
   },
   "S52801": {
    "label": "Confirmation report",
@@ -3785,7 +3839,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "4 point 75% height volume, gallons"
+   "label": "4 point 75% height volume, gallons",
+   "mask": "000000"
   },
   "S60501.p50": {
    "code": "S60501",
@@ -3796,7 +3851,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "4 point 50% height volume, gallons"
+   "label": "4 point 50% height volume, gallons",
+   "mask": "000000"
   },
   "S60501.p25": {
    "code": "S60501",
@@ -3807,7 +3863,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "4 point 25% height volume, gallons"
+   "label": "4 point 25% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p95": {
    "code": "S60601",
@@ -3818,7 +3875,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 95% height volume, gallons"
+   "label": "20 point 95% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p90": {
    "code": "S60601",
@@ -3829,7 +3887,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 90% height volume, gallons"
+   "label": "20 point 90% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p85": {
    "code": "S60601",
@@ -3840,7 +3899,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 85% height volume, gallons"
+   "label": "20 point 85% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p80": {
    "code": "S60601",
@@ -3851,7 +3911,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 80% height volume, gallons"
+   "label": "20 point 80% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p75": {
    "code": "S60601",
@@ -3862,7 +3923,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 75% height volume, gallons"
+   "label": "20 point 75% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p70": {
    "code": "S60601",
@@ -3873,7 +3935,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 70% height volume, gallons"
+   "label": "20 point 70% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p65": {
    "code": "S60601",
@@ -3884,7 +3947,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 65% height volume, gallons"
+   "label": "20 point 65% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p60": {
    "code": "S60601",
@@ -3895,7 +3959,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 60% height volume, gallons"
+   "label": "20 point 60% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p55": {
    "code": "S60601",
@@ -3906,7 +3971,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 55% height volume, gallons"
+   "label": "20 point 55% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p50": {
    "code": "S60601",
@@ -3917,7 +3983,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 50% height volume, gallons"
+   "label": "20 point 50% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p45": {
    "code": "S60601",
@@ -3928,7 +3995,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 45% height volume, gallons"
+   "label": "20 point 45% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p40": {
    "code": "S60601",
@@ -3939,7 +4007,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 40% height volume, gallons"
+   "label": "20 point 40% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p35": {
    "code": "S60601",
@@ -3950,7 +4019,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 35% height volume, gallons"
+   "label": "20 point 35% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p30": {
    "code": "S60601",
@@ -3961,7 +4031,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 30% height volume, gallons"
+   "label": "20 point 30% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p25": {
    "code": "S60601",
@@ -3972,7 +4043,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 25% height volume, gallons"
+   "label": "20 point 25% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p20": {
    "code": "S60601",
@@ -3983,7 +4055,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 20% height volume, gallons"
+   "label": "20 point 20% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p15": {
    "code": "S60601",
@@ -3994,7 +4067,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 15% height volume, gallons"
+   "label": "20 point 15% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p10": {
    "code": "S60601",
@@ -4005,7 +4079,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 10% height volume, gallons"
+   "label": "20 point 10% height volume, gallons",
+   "mask": "000000"
   },
   "S60601.p5": {
    "code": "S60601",
@@ -4016,7 +4091,8 @@
    ],
    "min": 0.0,
    "max": 999999.0,
-   "label": "20 point 5% height volume, gallons"
+   "label": "20 point 5% height volume, gallons",
+   "mask": "000000"
   },
   "chart.code": {
    "kind": "chartcode",
@@ -5184,7 +5260,8 @@
    "width": 2,
    "code": "S79600",
    "mask": "00 DAYS",
-   "default": "31"
+   "default": "31",
+   "wire_format": "%d DAYS"
   },
   "set.print_precision_line": {
    "kind": "setting",
@@ -5349,7 +5426,7 @@
   },
   "S72A01": {
    "kind": "float",
-   "min": 1.0,
+   "min": 0.1,
    "max": 500.0,
    "mask": "0000.0",
    "wire_format": "%.1f GALLONS",
@@ -9077,6 +9154,7 @@
      "code": "S61101",
      "field": "S61101.rate",
      "setup_scope": "TEST RATE",
+     "confirm_label": "TEST RATE:",
      "when": {
       "code": "S61101",
       "part": [
@@ -9112,6 +9190,7 @@
      "code": "S61A01",
      "setup_scope": "TST EARLY STOP",
      "scope_plural": true,
+     "confirm": "screen",
      "print": {
       "lines": [
        "TST EARLY STOP:{}"
@@ -11323,7 +11402,7 @@
      "depth": 1
     },
     {
-     "text": "Interstitial Volume (1 to 500 gallons)",
+     "text": "Interstitial Volume (0.1 to 500 gallons)",
      "code": "S72A01",
      "head": "s %d: (Label)",
      "l2": "VOLUME:",

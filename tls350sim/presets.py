@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Example sites, so there is something to look at without programming one.
 
 Each preset is a whole console: the software in it, the cards in the cage, the
@@ -102,6 +105,12 @@ def two_tank_retail():
         values[f"S788{line:02d}"] = f"{line:02d}02"        # 2.0 steel
         values[f"S789{line:02d}"] = _float(line, 120)
         values[f"S784{line:02d}"] = f"{line:02d}02"        # shut down at 0.2
+        # and both precision rates on MANUAL, which is what lets a
+        # technician start one by hand: an unprogrammed schedule is
+        # DISABLED, "No manual or automatic 0.2 gph testing is allowed",
+        # 576013-623 Rev AN p.10-4. FIDELITY O24.
+        values[f"S78C{line:02d}"] = f"{line:02d}3"         # 0.20 GPH: MANUAL
+        values[f"S783{line:02d}"] = f"{line:02d}3"         # 0.10 GPH: MANUAL
         values[f"S785{line:02d}"] = f"{line:02d}{line:02d}"
     for sensor in (1, 2, 3):
         values[f"S701{sensor:02d}"] = f"{sensor:02d}1"
@@ -144,6 +153,12 @@ def truck_stop():
         values[f"S788{line:02d}"] = f"{line:02d}02"        # 2.0 steel
         values[f"S789{line:02d}"] = _float(line, 200)
         values[f"S784{line:02d}"] = f"{line:02d}02"        # shut down at 0.2
+        # and both precision rates on MANUAL, which is what lets a
+        # technician start one by hand: an unprogrammed schedule is
+        # DISABLED, "No manual or automatic 0.2 gph testing is allowed",
+        # 576013-623 Rev AN p.10-4. FIDELITY O24.
+        values[f"S78C{line:02d}"] = f"{line:02d}3"         # 0.20 GPH: MANUAL
+        values[f"S783{line:02d}"] = f"{line:02d}3"         # 0.10 GPH: MANUAL
         values[f"S785{line:02d}"] = f"{line:02d}{line:02d}"
     for pump in (1, 2, 3, 4):
         values[f"S771{pump:02d}"] = f"{pump:02d}1"
@@ -162,6 +177,9 @@ def truck_stop():
     values["S51200"] = "1"            # daily BIR printouts
     values["S79300"] = "0600"         # daily closing time
     values["S79401"] = "010600"
+    # and its shift starts then: Last-Shift Inventory is on the panel only
+    # where a Shift Start Time is programmed. FIDELITY O22.
+    values["S50201"] = "0600"
     return {
         "modules": {"probe": 1, "liquid": 1, "plld": 1, "pump": 1, "io": 1,
                     "edim": 1,

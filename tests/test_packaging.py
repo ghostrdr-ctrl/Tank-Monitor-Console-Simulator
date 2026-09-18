@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The two halves of the build agreeing on what they are making.
 
 `installer.iss` decides what Inno Setup writes; `build.py` then looks for
@@ -268,6 +271,14 @@ class TheInternalDocsStayOutOfTheSnapshot(unittest.TestCase):
         for name in ("NOTES.md", "UNKNOWNS.md", "AUDIT.md", "FIDELITY.md",
                      "CLOSED.md", "CHANGELOG.md", "RELEASING.md", "BENCH.md"):
             self.assertFalse(snap.ships(name), f"{name} would be published")
+
+    def test_the_register_s_own_test_is_held_back_with_it(self):
+        """`test_fidelity.py` is written against FIDELITY.md, which never
+        ships, so a public clone would carry a test for a document it does
+        not have."""
+        snap = self.snapshot()
+        self.assertFalse(snap.ships("tests/test_fidelity.py"))
+        self.assertTrue(snap.ships("tests/test_console.py"))
 
     def test_the_readme_is_the_one_that_ships(self):
         """The check on the check: a rule that held everything back would

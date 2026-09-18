@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Which lamp a condition lights, read off the manual's own column.
 
 576013-610 Rev AC chapter 29 lists every message the console can display in
@@ -17,15 +20,15 @@ then one per sensor and line-leak family -- and every one of them is headed
     Display Message | Front Panel Indicator | Cause | Action
 
 The second column is the lamp, one row at a time: `PAPER OUT -- Warning`,
-`BATTERY IS OFF -- Alarm`. **It cannot be worked out from the message.**
+`BATTERY IS OFF -- Alarm`. It cannot be worked out from the message.
 `HIGH PRODUCT ALARM` is a Warning and `LIQUID WARNING` is, in one family, an
 Alarm; the console's own descriptions are not even written in one case.
 Reading the lamp off a substring of the description was this project's, and
 it put eighteen conditions on the wrong lamp -- see CLOSED U23 and A1 in
 `audits/2026-09-10-alarm-lifecycle.md`.
 
-**Two independent parses, and the tool refuses to write unless they
-agree**, which is the same bar `build_alarm_labels.py` is held to and for
+Two independent parses, and the tool refuses to write unless they
+agree, which is the same bar `build_alarm_labels.py` is held to and for
 the same reason: `../UNKNOWNS.md` section D records five wrong readings
 caused by two-column tables whose columns drift apart in an extraction.
 
@@ -72,7 +75,7 @@ INLINE = re.compile(r"^\s{0,3}([A-Z0-9][A-Z0-9 ()./+#:%'-]{2,23}?)\s{2,}"
 
 TABLE = re.compile(r"^Table (29-\d+)\.- ")
 
-# **Only for the messages whose lamp DIFFERS between families.** The console
+# Only for the messages whose lamp DIFFERS between families. The console
 # numbers its alarm categories and the manual titles its tables, and these
 # five are the only pairings this file has to make -- each one the same
 # device under two names, and the naming is the console's own:

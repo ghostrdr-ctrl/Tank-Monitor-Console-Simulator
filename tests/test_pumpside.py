@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The pump side of the check valve.
 
 "After the system conducts a line leak test, the line leak detector also runs
@@ -66,7 +69,7 @@ class ItRunsAfterATestHoweverStarted(unittest.TestCase):
         c.tick()
         self.assertEqual(c.leaks.start("vlld", 1, "gross"), "TEST STARTED")
         self.assertNotIn("060901", c.compute_alarms())
-        c.clock_offset += leaktest.LINE_HOURS["gross"] * 3600.0 + 60.0
+        c.clock_offset += leaktest.LINE_SECONDS["gross"] + 60.0
         c.tick()
         self.assertFalse(c.leaks.active("vlld", 1))
         self.assertIn("060901", c.compute_alarms())
@@ -74,7 +77,7 @@ class ItRunsAfterATestHoweverStarted(unittest.TestCase):
         # and a sound pump side passes it, and takes the alarm down
         c.pump_leak[("vlld", 1)] = 0.0
         c.leaks.start("vlld", 1, "gross")
-        c.clock_offset += leaktest.LINE_HOURS["gross"] * 3600.0 + 60.0
+        c.clock_offset += leaktest.LINE_SECONDS["gross"] + 60.0
         c.tick()
         self.assertEqual(c.leaks.pumpside_passes(1, "gross", 0), 1)
         # corrected, and waiting for ALARM/TEST like every other alarm
@@ -86,7 +89,7 @@ class ItRunsAfterATestHoweverStarted(unittest.TestCase):
         c.pump_leak[("vlld", 1)] = 8.0
         c.tick()
         c.leaks.start("vlld", 1, "gross")
-        c.clock_offset += leaktest.LINE_HOURS["gross"] * 3600.0 + 60.0
+        c.clock_offset += leaktest.LINE_SECONDS["gross"] + 60.0
         c.tick()
         self.assertNotIn("060901", c.compute_alarms())
 

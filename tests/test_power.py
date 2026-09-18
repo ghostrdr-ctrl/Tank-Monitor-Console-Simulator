@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The breaker, the battery, and what a cold boot costs.
 
 The battery -- the S1 switch on AND the cell fitted -- is all that holds RAM
@@ -365,6 +368,121 @@ class PowerDiagnostic(unittest.TestCase):
               if f["function"] == "POWER DIAGNOSTIC"][0]
         self.assertEqual(len(fn["screens"]), 9)
         self.assertTrue(all(sc.get("live") for sc in fn["screens"]))
+
+
+class WhatARestartKeeps(unittest.TestCase):
+    """The settings store, which `save` never wrote and `load` never read.
+
+    118 setup screens keep their value only in `settings` -- every relay
+    and line-disable group's YES/NO, the tank and line test methods, the
+    inventory units -- and every one of them came back blank from a
+    restart. The keys are (name, device) tuples, which JSON cannot hold.
+    """
+
+    def restarted(self, c):
+        c.save()
+        return Console(c.state_path)
+
+    def test_a_panel_setting_survives_a_restart(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = Console(os.path.join(d, "state.json"))
+            c.set_setting("tank_test_method", "SINGLE TANK")
+            c.set_setting("evr_hose_label", "REGULAR", 3)
+            back = self.restarted(c)
+            self.assertEqual(back.setting("tank_test_method"), "SINGLE TANK")
+            self.assertEqual(back.setting("evr_hose_label", 3), "REGULAR")
+
+    def test_a_relays_two_stores_come_back_together(self):
+        """The group screen's YES and the list it stands for. Reloaded, the
+        list still drove the coil under a screen that said NO."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = Console(os.path.join(d, "state.json"))
+            c.modules["relay"] = 1
+            c.assign_relay_alarm(1, "02", "01", "01")
+            back = self.restarted(c)
+            self.assertEqual(back.setting("relay_alm_intank", 1), "YES")
+            self.assertEqual(back.outputs.assignments(1),
+                             [("02", "01", "01")])
+
+
+class WhatARestoreReplaces(unittest.TestCase):
+    """RESTORE SETUP DATA "clear[s] current system setup data and replace[s]
+    it", and it put back less than it saved and cleared less than it
+    replaced."""
+
+    def a_console(self, d):
+        return Console(os.path.join(d, "state.json"))
+
+    def test_the_chart_code_serial_number_and_office_come_back(self):
+        """`#SET key value` was unpacked as four fields, so the value went
+        to a throwaway and all three came back blank."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = self.a_console(d)
+            c.chart_code, c.serial_number = "1234", "SN99"
+            c.wm_office = "DISTRICT 4"
+            c.archive_save()
+            c.chart_code = c.serial_number = c.wm_office = ""
+            c.archive_restore()
+            self.assertEqual((c.chart_code, c.serial_number, c.wm_office),
+                             ("1234", "SN99", "DISTRICT 4"))
+
+    def test_a_capacity_entered_after_the_save_does_not_survive_it(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = self.a_console(d)
+            c.tank_capacity[1] = 9000.0
+            c.archive_save()
+            c.tank_capacity[2] = 5000.0
+            c.archive_restore()
+            self.assertEqual(c.tank_capacity, {1: 9000.0})
+
+    def test_a_relay_list_comes_back_with_its_yes(self):
+        """A cold boot loses the list, so the archive has to carry it, or
+        the restore puts the group's YES back over nothing."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            c = self.a_console(d)
+            c.modules["relay"] = 1
+            c.assign_relay_alarm(1, "02", "01", "01")
+            c.archive_save()
+            c.breaker_off()
+            c.battery_present = False
+            c.battery_changed()
+            c.breaker_on()
+            self.assertEqual(c.relay_alarms, {})
+            c.archive_restore()
+            self.assertEqual(c.outputs.assignments(1), [("02", "01", "01")])
+            self.assertEqual(c.setting("relay_alm_intank", 1), "YES")
+
+
+class WhatAResetForgets(unittest.TestCase):
+    """`reset` is a console out of its box, and `presets.load` and
+    `cold_boot` both go through it."""
+
+    def test_a_preset_loaded_over_programming_keeps_none_of_it(self):
+        from tls350sim import presets
+        c = Console()
+        presets.load(c, "Truck stop, four tanks and BIR")
+        c.relay_alarms = {1: [("02", "01", "01")]}
+        c.receiver_alarms = {1: [("02", "01", "01")]}
+        c.line_disable_alarms = {("plld", 1): [("02", "01", "01")]}
+        c.meter_offsets = {(1, 1): {"fp": 1, "tank": 1, "pct": 1.0}}
+        c.vmc_fuel_pos = {1: {"A": 1, "B": 2}}
+        presets.load(c, "Two-tank retail site")
+        for name in Console.STORES:
+            self.assertFalse(getattr(c, name), name)
+
+    def test_a_cold_boot_keeps_the_tracker_keys_and_a_reset_does_not(self):
+        """The keys are FPROM, "to FPROM" in 576013-610 ch.33."""
+        c = Console()
+        c.mt_keys = [("123456", "CONTRACTOR")]
+        c.cold_boot()
+        self.assertEqual(c.mt_keys, [("123456", "CONTRACTOR")])
+        c.reset()
+        self.assertEqual(c.mt_keys, [])
 
 
 if __name__ == "__main__":

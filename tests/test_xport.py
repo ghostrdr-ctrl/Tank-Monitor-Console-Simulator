@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The XPort emulation, against a real card.
 
 These assertions used to trace to the Lantronix manuals. They now trace to a
@@ -820,6 +823,75 @@ class Address(unittest.TestCase):
         c = xport.XPortConfig()
         c.ip = "192.168.5.5"
         self.assertEqual(c.effective_ip(), "192.168.5.5")
+
+
+class DiscoveryOutlivesAnAskerThatHungUp(unittest.TestCase):
+    """FIDELITY Z3. Windows reports the ICMP port-unreachable from answering
+    a closed asker as a `ConnectionResetError` on the next receive, and the
+    loop took any `OSError` as the order to stop."""
+
+    def test_a_reset_does_not_end_the_loop(self):
+        from unittest import mock
+        d = xport.Discovery(xport.XPortConfig())
+        frame = b"\x00\x00\x00\xF6"
+        sent = []
+
+        class FakeSock:
+            def __init__(self, *_a, **_k):
+                self.script = [ConnectionResetError(),
+                               (frame, ("127.0.0.1", 5555)), OSError()]
+
+            def setsockopt(self, *_a):
+                pass
+
+            def bind(self, *_a):
+                pass
+
+            def recvfrom(self, _n):
+                step = self.script.pop(0)
+                if isinstance(step, BaseException):
+                    raise step
+                return step
+
+            def sendto(self, data, addr):
+                sent.append((data, addr))
+
+            def close(self):
+                pass
+
+        with mock.patch.object(xport.socket, "socket", FakeSock):
+            d.serve("127.0.0.1")
+        self.assertTrue(sent, "the frame after the reset went unanswered")
+        self.assertEqual(sent[0][0][:4], b"\x00\x00\x00\xF7")
+
+
+class TheWebManagerRefusesAMalformedLength(unittest.TestCase):
+    """FIDELITY Z3. `int(Content-Length)` raised out of the handler on a
+    word, and a negative length read to EOF and held the thread."""
+
+    def test_a_length_that_is_not_a_count_is_answered_400(self):
+        import socket
+        import threading
+        srv = xportweb._Server(("127.0.0.1", 0), xport.XPortConfig())
+        self.addCleanup(srv.server_close)
+        threading.Thread(target=srv.serve_forever,
+                         kwargs={"poll_interval": 0.05}, daemon=True).start()
+        self.addCleanup(srv.shutdown)
+        crlf = chr(13) + chr(10)
+        for length in ("banana", "-5"):
+            with socket.create_connection(srv.server_address[:2],
+                                          timeout=5.0) as s:
+                s.sendall(("POST /secure/ltx_conf.htm HTTP/1.0" + crlf
+                           + "Content-Length: " + length + crlf + crlf)
+                          .encode("ascii"))
+                reply = b""
+                while True:
+                    chunk = s.recv(4096)
+                    if not chunk:
+                        break
+                    reply += chunk
+            status = reply.split(crlf.encode("ascii"))[0]
+            self.assertIn(b" 400", status, length)
 
 
 if __name__ == "__main__":

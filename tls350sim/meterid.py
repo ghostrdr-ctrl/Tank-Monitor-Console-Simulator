@@ -8,10 +8,13 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """What identifies one dispenser meter to this console.
 
 576013-818 p.12-11 states it in one sentence: "The meter must be identified
-by **bus, slot, real FP, and real M**." Not by its number. The serial
+by bus, slot, real FP, and real M." Not by its number. The serial
 manual's own I7B100 sample is the proof of why -- meter 10 appears on seven
 fueling positions there and goes to two different tanks:
 

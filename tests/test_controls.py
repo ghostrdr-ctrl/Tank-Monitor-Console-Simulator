@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """Section 7.1's control functions: the nineteen codes that DO something."""
 import os
 import sys
@@ -188,6 +191,9 @@ class TheDeviceActions(unittest.TestCase):
         c, h = a_site()
         send(h, "S09901149")                      # start mag sump test
         self.assertEqual(c.control_phase_of("sump", 1), "02")    # FILL SUMP
+        # a real test now: an empty sump aborts WATER TOO LOW the moment
+        # its Measuring Height Phase starts (FIDELITY U1b)
+        c.sumps.pour(1, 12.0)
         send(h, "S09A01149")                      # measuring height phase
         self.assertEqual(c.control_phase_of("sump", 1), "03")
         send(h, "S09B01149")                      # stop

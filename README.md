@@ -39,6 +39,7 @@ python run.py --port 10002        somewhere else
 python run.py --seed site.vrset   start out looking like a real site
 python run.py --headless          serial only, no window
 python run.py --xport             emulate the TCP/IP card: setup menu, web manager, discovery
+python run.py --exposed           put it on a public address as a honeypot (read Exposure below)
 python -m unittest discover tests
 ```
 
@@ -154,8 +155,77 @@ The console is faithful; the parts around it are what make it a bench.
   would program a real one -- including the trap where typing `Y` and Enter
   at the gateway question shifts the address by an octet. Off until you start
   it.
+- **A capture of everything said over the wire.** A Capture view lists each
+  exchange with the source address, the direction, the command code and the
+  bytes, and appends the same rows to a file as JSON lines. It appears when
+  something is being captured; see Exposure below.
+- **Your own site, loaded and saved from the window.** Console then Seed
+  programming from file pours a saved setup in, and Save programming to file
+  writes one out, so a site worked up on one bench can be carried to another
+  machine. Same format as `--seed` and as the console's own SAVE SETUP DATA.
 - **A self-updater.** Help then Check for updates fetches and verifies new
   releases.
+
+## Exposure, and running this as a honeypot
+
+This simulator answers the real TLS-350 protocol on the real port, behind a
+byte-for-byte emulation of the Lantronix XPort that puts a console on a
+network. That makes it usable as a high-fidelity ATG honeypot -- the thing
+[GasPot](https://github.com/sjhilt/GasPot) has done since 2015 with a much
+smaller emulation, and the reason tcp/10001 gets scanned at all. GasPot's
+design decisions are good ones and several are matched here deliberately;
+`tls350sim/exposed.py` says which and why.
+
+But the console was written for a bench, where the other end means well: it
+keeps what it is programmed with, and it answers everything. Neither is safe
+on a public address, so the choice is explicit and it is one setting.
+
+    python run.py --exposed                      # a public address
+    python run.py --exposure lan                 # a network you trust
+    python run.py                                # loopback, the default
+
+The dropdown on the bench's Network view is the same setting, and it puts the
+warning up before it takes effect.
+
+**What `--exposed` changes.** Nothing the network says reaches the disk: the
+card cannot be moved, the state file is not rewritten, and a restart is
+always a clean restart. Apply Settings and the setup menu's save still report
+success and still "reboot" the unit -- a card that refused its own save would
+be a louder fingerprint than anything else on the wire -- but nothing
+underneath moves, and the attempt is captured. The card's MAC stops being
+derived from this machine's host name. Connections are capped in total and
+per source, rate-limited per source, and given a 30 second idle timeout.
+Replies are delayed 0.15-0.75 s, because a reply that comes back in 40
+microseconds did not come from a console on a 9600 baud serial line, and
+answering instantly is the fingerprint that gives a software emulation away
+no matter how perfect its bytes are. Every byte in and out is captured.
+
+**What it does not change.** It is not a sandbox. It closes the holes this
+program has that a honeypot must not have; it does not make a 60,000 line
+Python process safe to run as root on a box that matters. Run it as an
+unprivileged user, in a container, on a host you can throw away.
+
+**Before you leave one running:**
+
+- You will be indexed as exposed critical infrastructure and you may get
+  abuse reports from your ISP. Do not do this on a home connection or on any
+  network you do not own.
+- **Change the site.** The demo site ships with this program, so it is a
+  fingerprint: a scanner that has seen one of these recognises the tank names
+  in the next one. GasPot's own default station names became the published
+  signature that identified a GasPot on sight. Use `--seed`, or Console then
+  Seed programming from file.
+- Give the card a fixed identity with `--card-mac`, or it draws a new one
+  each restart. An exposed card also refuses to take an address from the
+  network, so give it one with `--card-ip`.
+- Collecting other people's traffic may be regulated where you are.
+
+**The capture.** `--capture FILE.jsonl` (implied by `--exposed`) appends one
+JSON object per direction: `ts`, `src`, `sport`, `proto`, `dir`, `cmd`,
+`bytes`, `raw`. The field names follow GasPot's so an existing Splunk or ELK
+pipeline built for one reads the other. Bytes are hex, never decoded -- what
+was actually sent is the whole value of the capture, and a stranger's traffic
+is not UTF-8.
 - **A Windows installer** with a per-user install that needs no administrator
   rights, and an in-app update from there on.
 

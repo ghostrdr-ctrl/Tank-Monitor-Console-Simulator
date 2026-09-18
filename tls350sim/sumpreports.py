@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The mag sump, tanker load, VMC and comm reports.
 
 The trap in the mag sump family is `tt`. Four codes, one family, one version,
@@ -21,6 +24,11 @@ A parser that shares the `sstt` header decode across all four reads 319's
 and the status live in different tables below and the handler asks which kind
 of code it is answering before it writes the field.
 """
+import time
+
+from . import packed
+from .clock import clock_words
+from .sumptest import ABORT_WORDS, NO_DATA, PASSED
 
 # 317 and 318's status, and the abort reason that only 317 carries.
 SUMP_STATUS = {
@@ -46,6 +54,176 @@ SUMP_REPORTS = {
     "319": {"tt": "count", "rows": 10, "title": "LAST 10 TEST PASSED"},
     "31A": {"tt": "count", "rows": 3, "title": "LAST PASSED EACH YEAR"},
 }
+
+# ---------------------------------------------------------------------------
+# The bodies. Four codes and three printouts carry the same handful of rows,
+# and the pages differ from each other in small things -- `IN.` on the wire
+# and on Figure 24-1, `IN` on Figure 24-2 and p.23-1; `RESULT: TEST PASSED`
+# on 318 against p.23-1's `RESULT:      TEST PASSED` -- so each caller says
+# which it is drawing, rather than one being made to look like another.
+# ---------------------------------------------------------------------------
+# 576013-635 Rev AA p.112, counted on its own character grid: the dates are
+# twenty-one wide and every column after them ends where its heading does.
+LIST_HEAD = [" " * 29 + "START   START       END     END  DURATION",
+             "START DATE/TIME             HEIGHT    TEMP    HEIGHT    TEMP"
+             "   MINUTES"]
+DASH = "---"
+
+
+def row(label, value, unit="", width=24):
+    """`START HT:     20.971 IN.`: a label, and its value against column 24.
+
+    Every row of p.113 and of Figure 24-1 is twenty-four characters.
+    """
+    return label + value.rjust(width - len(label) - len(unit)) + unit
+
+
+def _minute(when):
+    return time.strftime("%y%m%d%H%M", time.localtime(when))
+
+
+def _floats(values):
+    """`NN - Number of 8 bytes data fields to follow (Decimal)`, and them."""
+    return f"{len(values):02d}" + "".join(packed.hexfloat(v) for v in values)
+
+
+def _rate(flag, value, shape, unit):
+    """A rate in words while 317's flag says it is not one yet."""
+    if flag == "00":
+        return "UNKNOWN"
+    if flag == "02":
+        return "COMPUTING"
+    return format(value or 0.0, shape) + unit
+
+
+def in_progress_rows(console, test, at, unit=" IN."):
+    """Figure 24-1's body, which is 317's display body word for word: a
+    test still running, as it stood at `at`."""
+    sumps = console.sumps
+    rows = ["STATUS:" + SUMP_STATUS[test.status], "START TIME:",
+            " " + clock_words(test.start_at or test.test_at)]
+    height = sumps.height_at(test.sensor, at)
+    degrees = sumps.temp_at(test.sensor, at)
+    if test.start_at is None:
+        # Filling the sump. Nothing has started to be measured, so the rows
+        # Figure 24-2 dashes out for a test aborted this early are dashed
+        # here too, and the water going in is the one live reading.
+        # UNKNOWNS A53.
+        return rows + [row("START HT:", DASH), row("START TEMP:", DASH),
+                       row("CURRENT HT:", f"{height:.3f}", unit),
+                       row("CURRENT TEMP:", f"{degrees:.1f}", " F"),
+                       row("DURATION:", DASH), row("TEMP RATE:", DASH),
+                       row("LEAK RATE:", DASH)]
+    start_ht, start_temp, _ht, _temp, minutes = sumps.values(test, at)
+    rr, trate, _stable, ll, leak = sumps.rates(test)
+    return rows + [row("START HT:", f"{start_ht:.3f}", unit),
+                   row("START TEMP:", f"{start_temp:.1f}", " F"),
+                   row("CURRENT HT:", f"{height:.3f}", unit),
+                   row("CURRENT TEMP:", f"{degrees:.1f}", " F"),
+                   row("DURATION:", f"{minutes:.0f}", " MINS"),
+                   row("TEMP RATE:", _rate(rr, trate, ".1f", " F/HR")),
+                   row("LEAK RATE:", _rate(ll, leak, ".4f", " IN./HR"))]
+
+
+def result_rows(console, test, unit=" IN", words=ABORT_WORDS):
+    """Figure 24-2's body, and 318's: how a finished test ended.
+
+    `words` is whose spelling of the reason: the Operator's Manual's list
+    on paper, the serial manual's table on the wire.
+    """
+    passed = test.status == PASSED
+    rows = ["RESULT: " + ("TEST PASSED" if passed else "TEST ABORTED")]
+    if not passed:
+        rows.append("REASON:" + words.get(test.reason, ""))
+    rows += ["START TIME:", " " + clock_words(test.start_at or test.test_at)]
+    if test.start_at is None:
+        # "If test was aborted before measuring height phase, then all of
+        # these values will be replaced with dashes (---)"
+        return rows + [row(label, DASH) for label in
+                       ("START HT:", "START TEMP:", "END HT:", "END TEMP:",
+                        "DURATION:")]
+    start_ht, start_temp, end_ht, end_temp, minutes = console.sumps.values(test)
+    return rows + [row("START HT:", f"{start_ht:.3f}", unit),
+                   row("START TEMP:", f"{start_temp:.1f}", " F"),
+                   row("END HT:", f"{end_ht:.3f}", unit),
+                   row("END TEMP:", f"{end_temp:.1f}", " F"),
+                   row("DURATION:", f"{minutes:.0f}", " MINS")]
+
+
+def last_passed_rows(console, test):
+    """576013-610 Rev AC p.23-1's LAST PASSED TEST printout, which sets
+    RESULT against column 24 and the date against the margin."""
+    start_ht, start_temp, end_ht, end_temp, minutes = console.sumps.values(test)
+    return [row("RESULT:", "TEST PASSED"), "START TIME:",
+            clock_words(test.start_at),
+            row("START HT:", f"{start_ht:.3f}", " IN"),
+            row("START TEMP:", f"{start_temp:.1f}", " F"),
+            row("END HT:", f"{end_ht:.3f}", " IN"),
+            row("END TEMP:", f"{end_temp:.1f}", " F"),
+            row("DURATION:", f"{minutes:.0f}", " MINS")]
+
+
+def list_row(console, test):
+    """One line of 319 and 31A's table."""
+    start_ht, start_temp, end_ht, end_temp, minutes = console.sumps.values(test)
+    return (f"{clock_words(test.start_at):21s}{start_ht:13.3f}"
+            f"{start_temp:8.1f}{end_ht:10.3f}{end_temp:8.1f}{minutes:10.0f}")
+
+
+def listed(console, tok, n):
+    """The passes 319 and 31A each report, newest first."""
+    if tok == "319":
+        return console.sumps.last_ten(n)
+    return console.sumps.each_year(n, SUMP_REPORTS[tok]["rows"])
+
+
+def display_rows(console, tok, n):
+    """One sensor's block of 317 to 31A's display form, 576013-635 Rev AA
+    pp.113-117."""
+    sumps = console.sumps
+    label = console.text("722", n) or f"SUMP {n}"
+    rows = [f"s {n}:{label}"]
+    if tok in ("317", "318"):
+        test = sumps.tests.get(n) if tok == "317" else sumps.last_passed(n)
+        if test is None:
+            return rows + ["STATUS:" + SUMP_STATUS[NO_DATA]]
+        if test.running:
+            return rows + in_progress_rows(console, test,
+                                           time.mktime(console.now()))
+        return rows + result_rows(console, test, " IN.", ABORT_REASON)
+    return rows + LIST_HEAD + [list_row(console, t)
+                               for t in listed(console, tok, n)]
+
+
+def computer_record(console, tok, n):
+    """One sensor's record of 317 to 31A's computer form.
+
+    317: ss tt cc YYMMDDHHmm NN (five floats) RR rrrrrrrr mmmmmmmm LL llllllll
+    318: ss tt YYMMDDHHmm NN (five floats)
+    319, 31A: ss tt, where tt COUNTS the YYMMDDHHmm NN (five floats) after it
+    """
+    sumps = console.sumps
+    if tok == "317":
+        test = sumps.tests.get(n)
+        if test is None:
+            return f"{n:02d}{NO_DATA}00"
+        rr, trate, stable, ll, leak = sumps.rates(test)
+        return (f"{n:02d}{test.status}{test.reason}"
+                + _minute(test.start_at or test.test_at)
+                + _floats(sumps.values(test))
+                + rr + packed.hexfloat(trate or 0.0)
+                + packed.hexfloat(stable or 0.0)
+                + ll + packed.hexfloat(leak or 0.0))
+    if tok == "318":
+        test = sumps.last_passed(n)
+        if test is None:
+            return f"{n:02d}{NO_DATA}"
+        return (f"{n:02d}{PASSED}" + _minute(test.start_at)
+                + _floats(sumps.values(test)))
+    tests = listed(console, tok, n)
+    return (f"{n:02d}{len(tests):02d}"
+            + "".join(_minute(t.start_at) + _floats(sumps.values(t))
+                      for t in tests))
 
 # ---------------------------------------------------------------------------
 # 411 and 412 have IDENTICAL byte layouts and incompatible alarm tables. The
@@ -92,8 +270,13 @@ COMM_ERROR = {
     "12": "FAX BUILD MESSAGE ERROR",
 }
 
-# 88D. 885 (the setter) knows two of these and 88D (the reader) knows four,
-# so the setter cannot name the two the reader can report.
+# 88D, and 885 now that it has the same four. The serial manual's Notes list
+# under 885 gives two -- in Rev U, Rev Y and Rev AA alike, so it is not a
+# revision artefact -- while 576013-623 Rev AN p.6-4 walks the keypad through
+# all four, "press CHANGE and then ENTER to choose US ROBOTICS (UK), VR TLS
+# ANALOG MOD, or VR TLS GSM MODEM", and its Table 6-1 on p.6-1 lists the four
+# with their port settings. The setup manual is the one that describes the
+# field rather than the wire format of a reply. See FIDELITY D10.
 MODEM_TYPE = {"00": "NETCOMM SMART M7F", "01": "US ROBOTICS (UK)",
               "02": "VR TLS ANALOG MOD", "03": "VR TLS GSM MODEM"}
 

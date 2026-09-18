@@ -8,12 +8,15 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The HRM, CSLD monthly, fuel management, power outage and vapour valve
 reports -- A56, A61, A62, A63, A81, A91, B61 and B62.
 
 Two traps in here and the second is the worst one in the manual.
 
-**A61 against A63.** They print the SAME column headings, including an
+A61 against A63. They print the SAME column headings, including an
 ENDTEMP column, and their computer formats are not the same: A63 carries an
 Ending Temperature float and A61 does not. A61's packed record is status,
 volume, sales, variance -- there is no temperature in it at all. So the
@@ -21,7 +24,7 @@ printed report has a column its own packed form cannot fill, and anybody
 generating one from the other has to know that. A63 also carries an `NN`
 field count where A61's records are fixed width.
 
-**B61 against B62.** The same eight vapour valve faults, numbered two
+B61 against B62. The same eight vapour valve faults, numbered two
 incompatible ways -- and it is a REORDERING as well as a rebasing, so no
 offset converts one to the other:
 

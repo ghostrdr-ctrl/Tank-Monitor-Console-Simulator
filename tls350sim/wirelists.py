@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The seven setup codes whose data is a LIST rather than a single value.
 
 These were the last things in the setup range left untyped, and they were left
@@ -23,19 +26,19 @@ which is why this is a module and not a `kind` in `fieldio`:
     75A   a type digit, then either one daily window or one of seven day rules
     7B1   five fixed fields, and no computer format at all
 
-**52B and 75A are the interesting ones.** The field's own first character says
+52B and 75A are the interesting ones. The field's own first character says
 how long the rest of it is. `S52B01` followed by `5` wants four more
 characters and followed by `1` wants ten, so a reader that fixes the width
 before looking at the method reads the next command's bytes as this one's
 minutes. That is the whole reason these two never got a `kind`: `fieldio`
 decides a width from the field definition, and here the width is in the data.
 
-**52A has a hole at 04.** Reports run 01, 02, 03, 05, 06 ... 19 and there is no
+52A has a hole at 04. Reports run 01, 02, 03, 05, 06 ... 19 and there is no
 04 in the manual's list. It is not a typo to tidy up -- a console that accepts
 04 is accepting a report it cannot send, so 04 is refused like any other
 number outside the list.
 
-**7B1 says so itself:** "Computer format is not supported for this command."
+7B1 says so itself: "Computer format is not supported for this command."
 It is the only setup code in the manual that has no computer format, so a
 lowercase `s7B100` is refused rather than answered. 680 is the only REPORT
 that does the same.
@@ -47,7 +50,6 @@ from . import relays
 from . import screens
 from . import wiretables
 from .clock import clock_date
-from .meterid import MeterId
 
 SEP = "\r\n"
 
@@ -162,7 +164,12 @@ def _dial_text(raw):
     m, rest = raw[0], raw[1:]
     name = DIAL_METHOD.get(m, "")
     if m == "1":
-        when = time.strptime(rest[0:6], "%y%m%d")
+        try:
+            when = time.strptime(rest[0:6], "%y%m%d")
+        except ValueError:
+            # a date `_dial_ok` refuses now and once let through, still in
+            # somebody's state file: shown as it is stored, not raised over
+            return name, f"{rest[0:6]:<16s}{_clock(rest[6:])}"
         return name, f"{clock_date(when):<16s}{_clock(rest[6:])}"
     if m == "2":
         return name, (f"MONTH {int(rest[0:2])} WEEK {rest[2]} "
@@ -202,8 +209,16 @@ def _dial_ok(body):
     if not _valid_clock(rest[-4:]):
         return False
     if m == "1":
-        return (rest[:6].isdigit() and 1 <= int(rest[2:4]) <= 12
-                and 1 <= int(rest[4:6]) <= 31)
+        # A DATE, not a month and a day each in range on its own. The 30th
+        # of February was acked and saved, and `_dial_text` reads it back
+        # with strptime, so every later I52B00 and I52000 raised.
+        if not rest[:6].isdigit():
+            return False
+        try:
+            time.strptime(rest[:6], "%y%m%d")
+        except ValueError:
+            return False
+        return True
     if m == "2":
         return (rest[:2].isdigit() and 1 <= int(rest[:2]) <= 12
                 and rest[2] in "1234" and rest[3] in WEEKDAY)
@@ -261,10 +276,10 @@ BUS = {"2": "POWER BUS (MDIM)", "3": "COMM BUS"}
 # map entry, it is a typo, and the console has nowhere to put it.
 BUS_SLOTS = {"2": range(9, 17), "3": range(1, 7)}
 # "FP - Fueling Position (00-99)" and "MM - Meter (00-99)", 576013-635 p.439,
-# and 576013-818 p.12-11 gives the same two ranges. *(p.12-12's explanation
+# and 576013-818 p.12-11 gives the same two ranges. (p.12-12's explanation
 # writes "M = meter (0-9)" instead, which its own I7B100 sample on the
 # facing page contradicts: that sample maps meters 10, 11 and 12. Both
-# manuals' command notes say 00-99, and two sources beat one.)*
+# manuals' command notes say 00-99, and two sources beat one.)
 POSITIONS = range(0, 100)
 METERS = range(0, 100)
 
@@ -316,10 +331,10 @@ def map_echo(fields, bad=(), tank=None):
     same row and `??` where the fueling position was. This console answered
     a bare frame either way, and a 9999 for the rejection. FIDELITY G6.
 
-    *The rule under the header is 576013-635 p.439's. 576013-818 draws none
+    The rule under the header is 576013-635 p.439's. 576013-818 draws none
     under any of its map samples, INCLUDING its two `I7B100` ones, where the
     other manual's sample of the same report has it -- so the missing rule
-    is that manual's rendering rather than the console's paper.*
+    is that manual's rendering rather than the console's paper.
     """
     shown = [MAP_BAD if i in bad else f for i, f in enumerate(fields)]
     if tank is not None and 4 not in bad:
@@ -372,8 +387,8 @@ def map_fields(body):
     `S7B100 3 1 18 3 -1`, `S7B100 3 1 18 4 0`. Note the fields there are
     NOT padded: the slot is `1` and the fuel position `18`.
 
-    This parser sliced fixed columns, so **every meter-map command printed
-    in the manuals was rejected** while the packed form nobody writes was
+    This parser sliced fixed columns, so every meter-map command printed
+    in the manuals was rejected while the packed form nobody writes was
     accepted. Both are taken now. See FIDELITY G6.
     """
     if " " in body.strip():
@@ -690,11 +705,24 @@ def _set(handler, tok, dev, code, body):
         # table values are zero" -- and an all-zero table is how a site says
         # there is none, so it is the one way to clear the chart rather than
         # a rejection.
-        if len(body) != 48:
-            return handler._nine(code), "REJECTED: wants twelve of GG.G"
+        #
+        # The computer form is twelve hex floats, which is what i54C00
+        # answers, so a tool can write back what it read. This wanted
+        # `GG.G` whatever the case of the letter and refused its own
+        # inquiry's body.
+        computer = code[0].islower()
+        width = 8 if computer else 4
+        if len(body) != 12 * width:
+            return (handler._nine(code), "REJECTED: wants twelve of "
+                    + ("FFFFFFFF" if computer else "GG.G"))
         try:
-            values = [float(body[n * 4:n * 4 + 4]) for n in range(12)]
-        except ValueError:
+            if computer:
+                from . import packed
+                values = [packed.unhexfloat(body[n * 8:n * 8 + 8])
+                          for n in range(12)]
+            else:
+                values = [float(body[n * 4:n * 4 + 4]) for n in range(12)]
+        except Exception:
             return handler._nine(code), "REJECTED: not twelve numbers"
         if any(not 0.0 <= v <= 15.0 for v in values):
             return handler._nine(code), "REJECTED: 0.0 to 15.0"
@@ -760,7 +788,7 @@ def _set(handler, tok, dev, code, body):
     if tok in LINE_DISABLE:
         # The same `AANNTTSS` 52C takes, against a LINE instead of a receiver.
         kind = LINE_DISABLE[tok][0]
-        if len(body) != 8 or not body[6:].isdigit():
+        if len(body) != 8 or not body.isdigit():
             return handler._nine(code), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
@@ -779,7 +807,7 @@ def _set(handler, tok, dev, code, body):
         # 52C's payload again, for a relay: `AANNTTss`, one assignment a
         # Set, ss putting it on the list or taking it off. 8BC is the same
         # command with a later version number -- see the note on RELAY_ALARM.
-        if len(body) != 8 or not body[6:].isdigit():
+        if len(body) != 8 or not body.isdigit():
             return handler._nine(code), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
@@ -797,7 +825,7 @@ def _set(handler, tok, dev, code, body):
     if tok == "52C":
         # "AANNTTSS" -- one assignment per Set, and SS says whether it goes on
         # the list or comes off it
-        if len(body) != 8 or not body[6:].isdigit():
+        if len(body) != 8 or not body.isdigit():
             return handler._nine(code), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
@@ -968,7 +996,7 @@ def _inquire(handler, tok, dev, code):
             rows.append(f"RCVR {r}: {c.text('522', r)}".rstrip())
             # A receiver with nothing selected gets no lines under it.
             #
-            # *This one is worth a second look and is flagged in U5.* Its
+            # This one is worth a second look and is flagged in U5. Its
             # immediate sibling 52C DOES mark an empty block, and the words
             # are in the capture verbatim -- `- NO ALARM ASSIGNMENTS -` on
             # `I78700` and `I61500` -- so the dashed style is real for that
@@ -1032,7 +1060,7 @@ def _inquire(handler, tok, dev, code):
             mine = c.line_disable_alarms.get((kind, number), [])
             for aa, nn, tt in mine:
                 rows.append(f"     {c.alarm_name(aa, nn)}"
-                            + (f" TANK {int(tt)}" if int(tt) else ""))
+                            + (f" TANK {int(tt)}" if tt.isdigit() and int(tt) else ""))
             if not mine:
                 rows.append("- NO ALARM ASSIGNMENTS -")
             body += (f"{number:02d}{len(mine):02X}"
@@ -1067,7 +1095,7 @@ def _inquire(handler, tok, dev, code):
             mine = c.relay_alarms.get(r, [])
             for aa, nn, tt in mine:
                 rows.append(f"     {c.alarm_name(aa, nn)}"
-                            + (f" TANK {int(tt)}" if int(tt) else ""))
+                            + (f" TANK {int(tt)}" if tt.isdigit() and int(tt) else ""))
             if not mine:
                 rows.append("- NO ALARM ASSIGNMENTS -")
             body += (f"{r:02d}{len(mine):02X}"
@@ -1083,7 +1111,7 @@ def _inquire(handler, tok, dev, code):
             mine = c.receiver_alarms.get(r, [])
             for aa, nn, tt in mine:
                 rows.append(f"     {c.alarm_name(aa, nn)}"
-                            + (f" TANK {int(tt)}" if int(tt) else ""))
+                            + (f" TANK {int(tt)}" if tt.isdigit() and int(tt) else ""))
             if not mine:
                 rows.append("- NO ALARM ASSIGNMENTS -")
             body += (f"{r:02d}{len(mine):02X}"

@@ -2,6 +2,12 @@
 console_state.json
 *.vrset
 launch_err.txt
+# and what a save killed mid-write leaves beside one of them.
+# tls350sim/atomicfile.py writes <file>.<8 hex digits>.tmp and renames it
+# over <file>, so a leftover is only ever a half-written copy. Every file it
+# saves is .json or .vrset, and the patterns go no wider than that.
+*.json.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].tmp
+*.vrset.[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].tmp
 
 # A real site's printout and the backup behind it. Same rule as
 # tests/real_backups/: the data stays on the machine that has it and never

@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """IFSF tank-gauge database support, section 8 of 576013-635.
 
 An IFSF console is a different animal from a standard-protocol one. Instead
@@ -223,11 +226,19 @@ def address(db_address):
     """
     if isinstance(db_address, int):
         return db_address, None, None
-    parts = (list(db_address) + [None, None])[:3]
+    # Three Nones, not two: a zero-length sequence padded to two elements
+    # and `parts[2]` was then an IndexError. Nothing reaches this with an
+    # empty address today because nothing reaches it at all -- but a
+    # decoder is exactly what would, and a truncated DB_Ad should be
+    # rejected by its caller, not raise here.
+    try:
+        parts = (list(db_address) + [None, None, None])[:3]
+    except TypeError:
+        return None, None, None
     return parts[0], parts[1], parts[2]
 
 
-def read(console, db_address, data_id, tank=None):
+def read(console, db_address, data_id, tank=None, authenticated=False):
     """The value of a supported data element, or None if unsupported.
 
     One reader for every database. Probe elements read the same physical
@@ -243,12 +254,23 @@ def read(console, db_address, data_id, tank=None):
     A read is SOLICITED, so it does not serve the rows the manual files
     under its own `UNSOLICITED` heading. `unsolicited` below does. See
     FIDELITY J6.
+
+    `authenticated` says the caller has established who is asking. It
+    gates one element -- Maint_Password, 8.1 data id 7 -- and defaults to
+    False so a transport built later has to opt in rather than leak the
+    console's security code by omission. See the note at that element.
     """
     if not is_ifsf(console):
         return None
     if data_id == UNSOLICITED_ID:
         return None
     db, sub, selector = address(db_address)
+    if not isinstance(db, int):
+        # Not a number, so not an address. Said here rather than left to
+        # reach `probe_tank`'s comparison, which raises TypeError on a str
+        # and IndexError on an empty sequence -- in a decoder handed a
+        # truncated frame off the wire, that is a crash, not a rejection.
+        return None
     n = probe_tank(db)
     if n is not None:
         if sub is None:
@@ -263,7 +285,7 @@ def read(console, db_address, data_id, tank=None):
         return None
     if db == DB_TLG:
         if sub is None:
-            return _tlg(console, data_id)
+            return _tlg(console, data_id, authenticated)
         if sub == SUB_TLG_ERROR:
             return _tlg_error(console, data_id, selector)
         return None
@@ -291,6 +313,12 @@ def unsolicited(console, db_address, data_id=UNSOLICITED_ID):
     if not is_ifsf(console) or data_id != UNSOLICITED_ID:
         return None
     db, sub, selector = address(db_address)
+    if not isinstance(db, int):
+        # Not a number, so not an address. Said here rather than left to
+        # reach `probe_tank`'s comparison, which raises TypeError on a str
+        # and IndexError on an empty sequence -- in a decoder handed a
+        # truncated frame off the wire, that is a crash, not a rejection.
+        return None
     n = probe_tank(db)
     if n is not None and sub is None:
         return _probe(console, n, 32)              # TP_Status_Message
@@ -303,7 +331,7 @@ def unsolicited(console, db_address, data_id=UNSOLICITED_ID):
 # the tank-level-gauge database (8.1)
 
 
-def _tlg(console, data_id):
+def _tlg(console, data_id, authenticated=False):
     import time
     if data_id == 1:
         return len(console.programmed_tanks())
@@ -321,7 +349,24 @@ def _tlg(console, data_id):
         # console was never told it stands in.
         return console.text("54D", 0)
     if data_id == 7:
-        return console.security_code() or ""
+        # Maint_Password, and it is the LIVE console security code -- the
+        # same value `wire._handle` compares against to decide whether to
+        # answer a serial command at all.
+        #
+        # Nothing dispatches this module today: there is no IFSF transport,
+        # because the LON framing is in external IFSF Part II/III.3
+        # documents that are not on the shelf. So this is not a live
+        # defect. It is a trap laid for whoever builds the transport, and
+        # the natural place to put an IFSF dispatcher is BEFORE the
+        # standard protocol's security check -- IFSF being a different
+        # protocol with its own addressing -- at which point one
+        # unauthenticated read of database 01H element 7 hands over the
+        # credential that gates everything else.
+        #
+        # So it fails closed. A caller that has established who is asking
+        # says so; anything else reads blank, the way Country_Code above
+        # reads blank until somebody programmes it.
+        return (console.security_code() or "") if authenticated else ""
     if data_id == 50:
         return MANUFACTURER
     if data_id == 51:

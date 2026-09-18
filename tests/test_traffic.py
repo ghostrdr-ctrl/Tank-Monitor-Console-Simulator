@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """The site's own day: cars, blends, tankers, and what a shutdown stops.
 
 The generator is the only thing in this package that draws a random number,
@@ -26,6 +29,7 @@ from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.test_console import held_clock                    # noqa: E402
 from tls350sim import presets                                # noqa: E402
 from tls350sim import traffic as _traffic                    # noqa: E402
 from tls350sim.console import Console                        # noqa: E402
@@ -238,28 +242,52 @@ class TheGapsBetweenTheCars(unittest.TestCase):
         averaged over whatever interval the console last ticked and so
         reads "busy" for a whole seven-hour tick on the strength of one
         two-minute car.
+
+        This measurement reads the wall clock twice over, and needs both of
+        them pinned before `rng.seed(5)` above means anything.
+
+        `held_clock` stops real execution time becoming simulated time:
+        `Console.tick` takes its interval from the wall clock, so the time
+        the machine itself spent running a tick was being added to the 30
+        seconds this loop asks for. That interval feeds `arrival_rate`, and
+        `_poisson` spends a different NUMBER of draws on a different
+        interval, so the stream walked away from the seed -- 429 to 448
+        spans on one seed, and a longest quiet spell anywhere from 5.3 to
+        9.3 minutes against the eight this asks about. The assertions below
+        were reading a fresh random sample each run, and failed about one
+        run in fourteen.
+
+        `at_hour` pins the other one, for the reason written on it: the day
+        curve and `_roll_day` both turn on what time it is, so a run started
+        at whatever o'clock the suite reached this file is a different run.
+        Holding the clock alone leaves that, because it freezes it wherever
+        it happens to be.
+
+        Nothing about the generator changes here. It is the measurement that
+        stops moving.
         """
-        c = (a_site(tanks={1: "REGULAR UNLEADED"}, full=30000.0,
-                    volume=28000.0) if tanks == 1
-             else a_site(full=30000.0, volume=28000.0))
-        c.meters = {n: (1 if tanks == 1 else (n + 1) // 2)
-                    for n in range(1, meters + 1)}
-        c.traffic.rng.seed(5)
-        c.traffic.on = True
-        c.traffic.shape = "FLAT"
-        c.traffic.cars_per_day = cars
-        c.traffic.auto_deliver = False
-        began = None
-        for _ in range(int(hours * 120)):
-            c.clock_offset += 30.0
-            c.tick()
-            if began is None:
-                began = time.mktime(c.now())
-            # hold the level, so the tank never runs dry and goes quiet for
-            # a reason that is not traffic
-            for tank in c.tank_level:
-                c.tank_level[tank]["volume"] = 28000.0
-        ended = time.mktime(c.now())
+        with held_clock():
+            c = at_hour(a_site(tanks={1: "REGULAR UNLEADED"}, full=30000.0,
+                               volume=28000.0) if tanks == 1
+                        else a_site(full=30000.0, volume=28000.0))
+            c.meters = {n: (1 if tanks == 1 else (n + 1) // 2)
+                        for n in range(1, meters + 1)}
+            c.traffic.rng.seed(5)
+            c.traffic.on = True
+            c.traffic.shape = "FLAT"
+            c.traffic.cars_per_day = cars
+            c.traffic.auto_deliver = False
+            began = None
+            for _ in range(int(hours * 120)):
+                c.clock_offset += 30.0
+                c.tick()
+                if began is None:
+                    began = time.mktime(c.now())
+                # hold the level, so the tank never runs dry and goes quiet
+                # for a reason that is not traffic
+                for tank in c.tank_level:
+                    c.tank_level[tank]["volume"] = 28000.0
+            ended = time.mktime(c.now())
         spans = c.activity_spans(1, began, ended)
         busy = sum(b - a for a, b in spans)
         gaps, cursor = [], began
@@ -313,6 +341,21 @@ class TheGapsBetweenTheCars(unittest.TestCase):
         self.assertEqual(gaps, 0)
         self.assertEqual([x for x in c.conditions() if x[:4] == "0221"],
                          ["022101"])
+
+    def test_the_same_seed_measures_the_same_forecourt_twice(self):
+        """Two consoles built from nothing, one seed, one answer.
+
+        The generator is meant to be repeatable -- its own module says every
+        random number it draws comes from its own seeded `Random` -- and the
+        three tests above read that repeatability as though it were a fact.
+        It was not one, and `measure` says why: the seed decides the run only
+        once the clock is held AND the hour is pinned. Each site here is built
+        fresh rather than reseeded and re-run, so a hidden carry-over from the
+        first measurement would show up as a difference in the second.
+        """
+        first = self.measure(_traffic.LEVELS["BUSY"], hours=6, tanks=1)
+        second = self.measure(_traffic.LEVELS["BUSY"], hours=6, tanks=1)
+        self.assertEqual(first[1:], second[1:])
 
     def test_the_answer_does_not_depend_on_how_fast_the_clock_runs(self):
         """The bench runs the clock at up to 36,000x, where one tick is
@@ -918,11 +961,13 @@ class WhyNothingIsHappening(unittest.TestCase):
         c.traffic.set_level("BUSY")
         return c
 
-    def test_a_console_with_no_dim_says_why_rather_than_selling_nothing(self):
+    def test_a_console_with_no_meter_says_why_rather_than_selling_nothing(self):
         c = self.a_bare_console()
         why = [text for text, _where in c.traffic.blockers()]
-        self.assertTrue(any("BIR" in t for t in why), why)
-        self.assertTrue(any("DIM" in t for t in why), why)
+        self.assertTrue(any("meter" in t for t in why), why)
+        # the key and the DIM are not blockers any more: the fuel moves
+        # without them, and only the reconciliation is missing
+        self.assertFalse(any("BIR" in t or "DIM" in t for t in why), why)
         self.assertEqual(c.traffic.selling(), {})
 
     def test_every_reason_names_a_bench_view_that_exists(self):
@@ -1284,37 +1329,104 @@ class ItDoesNotCountSalesThatCannotHappen(unittest.TestCase):
 
     Map the meters but leave the BIR key out and the generator ran
     perfectly: cars arrived, handles went up, the header counted 313 cars
-    and 5,963 gallons -- against a tank that never left 8,000. On this
-    bench `Bir._dispense` is the only thing that draws a tank down from a
-    sale and it wants the key and a DIM, so without them nothing moves and
-    every figure on the view was a number no probe, screen or report would
-    ever agree with.
+    and 5,963 gallons -- against a tank that never left 8,000, because the
+    draw lived inside `Bir._dispense` and wanted the key and a DIM. The
+    first answer was to send no car to such a site. The answer now is that
+    the fuel leaves on the handle alone (`Sales.draw`): the tank goes down,
+    the STP runs and the line test follows, and what the key and the DIM
+    decide is whether the console gets to BOOK any of it.
     """
 
-    def test_a_site_with_no_bir_key_moves_nothing_and_says_so(self):
-        c = a_site()
+    def test_a_site_with_no_bir_key_still_sells_and_books_nothing(self):
+        c = at_hour(a_site())
         c.software["bir"] = False
         c.tick()
-        self.assertFalse(c.traffic.can_sell())
-        before = c.tank_level[1]["volume"]
+        self.assertTrue(c.traffic.can_sell())
+        before = sum(st["volume"] for st in c.tank_level.values())
         c.traffic.on = True
         c.traffic.set_level("BUSY")
+        c.traffic.auto_deliver = False
+        c.traffic.rng.seed(7)
         run(c, 6)
-        self.assertEqual(c.traffic.cars, 0)
-        self.assertEqual(c.traffic.gallons, 0.0)
-        self.assertEqual(c.tank_level[1]["volume"], before)
-        self.assertIn("BIR", c.traffic.idle_reason())
+        after = sum(st["volume"] for st in c.tank_level.values())
+        self.assertGreater(c.traffic.cars, 0)
+        self.assertAlmostEqual(before - after, c.traffic.gallons,
+                               delta=c.traffic.gallons * 0.05 + 60.0)
+        self.assertEqual(through(c), 0.0)
+        self.assertIsNone(c.traffic.idle_reason())
 
-    def test_a_site_with_no_dim_is_the_same(self):
-        c = a_site()
+    def test_a_site_with_no_dim_sells_and_the_console_sees_no_meter(self):
+        c = at_hour(a_site())
         c.modules.pop("edim", None)
         c.tick()
-        self.assertFalse(c.traffic.can_sell())
+        self.assertTrue(c.traffic.can_sell())
+        before = sum(st["volume"] for st in c.tank_level.values())
         c.traffic.on = True
         c.traffic.set_level("BUSY")
+        c.traffic.auto_deliver = False
         run(c, 6)
-        self.assertEqual(c.traffic.cars, 0)
-        self.assertIn("DIM", c.traffic.idle_reason())
+        after = sum(st["volume"] for st in c.tank_level.values())
+        self.assertGreater(c.traffic.cars, 0)
+        self.assertLess(after, before - 1.0)
+        self.assertEqual(through(c), 0.0)
+        self.assertEqual(c.bir.events, [])
+
+    def test_csld_banks_the_same_tests_with_or_without_the_key(self):
+        """CSLD reads the meters and the sales' spans, never BIR, so a
+        keyless site under the same cars banks the same samples. The wall
+        clock is frozen so both consoles start at the same instant."""
+        frozen = time.time()
+        real = time.time
+        time.time = lambda: frozen
+        try:
+            keyed = at_hour(a_site())
+            keyless = at_hour(a_site())
+            keyless.software["bir"] = False
+            keyless.modules.pop("edim", None)
+            for c in (keyed, keyless):
+                c.tick()
+                c.traffic.on = True
+                c.traffic.set_level("SLOW")
+                c.traffic.auto_deliver = False
+                c.traffic.rng.seed(21)
+                run(c, 30)
+        finally:
+            time.time = real
+        summary = [{t: (len(c.csld.samples.get(t, [])), c.csld.result_of(t))
+                    for t in sorted(c.tank_level)} for c in (keyed, keyless)]
+        self.assertEqual(summary[0], summary[1])
+        self.assertTrue(all(n > 0 for n, _r in summary[1].values()), summary)
+        self.assertEqual(keyed.traffic.gallons, keyless.traffic.gallons)
+
+    def test_a_site_with_no_bir_key_still_lifts_the_handle(self):
+        """The whole point of the change: the pump answers the nozzle, and
+        the gross test follows the hang-up, on a console that cannot book
+        a gallon of it."""
+        c = at_hour(a_site())
+        c.software["bir"] = False
+        c.modules.pop("edim", None)
+        c.tick()
+        c.traffic.on = True
+        c.traffic.set_level("BUSY")
+        c.traffic.auto_deliver = False
+        c.traffic.rng.seed(3)
+        seen_pump = False
+        for _ in range(int(6 * 3600.0 / 30.0)):
+            c.clock_offset += 30.0
+            c.tick()
+            for ln in c.lines.lines.values():
+                if ln.handle:
+                    self.assertTrue(ln.pump, "a handle up with no pump")
+                    self.assertFalse(ln.running(), "a test ran through a dispense")
+                    seen_pump = True
+            if seen_pump and any(c.leaks.result(k, n, "gross") is not None
+                                 for k, n in c.lines.lines):
+                break
+        self.assertTrue(seen_pump, "no line ever saw HANDLE ON")
+        self.assertTrue(any(c.leaks.result(k, n, "gross") is not None
+                            for k, n in c.lines.lines),
+                        "no gross test followed a hang-up")
+        self.assertEqual(through(c), 0.0)
 
     def test_a_dry_tank_sells_nothing_and_is_counted_apart(self):
         """BIR clamps what actually LEAVES a tank; nothing clamped what the
@@ -1469,6 +1581,22 @@ class TheShapeOfTheDay(unittest.TestCase):
         self.assertEqual(_traffic.family("DEF"), "def")
         self.assertEqual(_traffic.family("E15"), "plus")
         self.assertEqual(_traffic.family(""), "regular")
+
+
+class ACountAfterTheClockGoesBack(unittest.TestCase):
+    """The days after the console's own date sorted as the newest, so the
+    day a set-back clock landed on was the one pruned, and every car after
+    it was counted into a `Day` nobody held."""
+
+    def test_the_cars_after_a_set_back_are_counted(self):
+        c = Console()
+        tr = c.traffic
+        for _ in range(3):
+            tr._tally().cars += 1
+            c.clock_offset += 86400.0
+        c.clock_offset -= 17 * 86400.0
+        tr._tally().cars += 7
+        self.assertEqual(tr.cars, 7)
 
 
 if __name__ == "__main__":

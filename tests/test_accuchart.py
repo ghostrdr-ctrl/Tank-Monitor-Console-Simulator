@@ -8,6 +8,9 @@
 # any later version. It is distributed WITHOUT ANY WARRANTY; without even the
 # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 # See the GNU General Public License (LICENSE) for more details.
+#
+# You should have received a copy of the GNU General Public License along
+# with this program. If not, see <https://www.gnu.org/licenses/>.
 """AccuChart: the console teaching itself the shape of the tank.
 
 Everything here runs on the console's own clock, because a calibration is a
@@ -418,3 +421,47 @@ class TheCalibrationTableHasTwoHeights(unittest.TestCase):
             self.assertEqual(len(line), 46, repr(line))
             for end in (7, 16, 26, 35, 46):
                 self.assertNotEqual(line[end - 1], " ", repr(line))
+
+
+class TheSigmaColumn(unittest.TestCase):
+    """FIDELITY X14. SIGMA is a multiple of MSSE and nothing else.
+
+    576013-818 Rev AA p.12-18's `I@B601` sample is the only worked pair on
+    this shelf, and 0.56 x 7.1 is 3.976 -- the page's 3.98. The formula
+    carried a `+ 0.4` that made the same row 4.38, and the all-zero
+    `I@B600` sample on the same shelf rules an offset out from the other
+    end: 0.00 prints 0.00, not 0.40.
+    """
+
+    # (MSSE, SIGMA), straight off the two pages
+    ROWS = ((0.56, 3.98), (0.00, 0.00))
+
+    class _Entry:
+        class chart:
+            fitness = 0.0
+
+    def sigma_for(self, msse):
+        entry = self._Entry()
+        entry.chart = type("chart", (), {"fitness": msse})
+        return accuchart.AccuChart.sigma(entry)
+
+    def test_the_manuals_own_rows_come_back(self):
+        for msse, want in self.ROWS:
+            self.assertEqual(self.sigma_for(msse), want, msse)
+
+    def test_there_is_no_constant_term(self):
+        """The zero row is the whole of this: any offset shows up at MSSE 0,
+        whatever the slope is."""
+        self.assertEqual(self.sigma_for(0.0), 0.0)
+
+    def test_it_is_proportional(self):
+        """Double the residual, double the deviation -- which is what a
+        multiple means, and what an offset would break.
+
+        To the PRINTED precision, not exactly: both ends are rounded to two
+        decimals before they are compared, so 1.12 gives 7.95 against twice
+        0.56's 3.98, which is 7.96. One part in eight hundred, and it is the
+        rounding rather than the relation.
+        """
+        self.assertAlmostEqual(self.sigma_for(1.12),
+                               2 * self.sigma_for(0.56), delta=0.02)
