@@ -4849,20 +4849,27 @@ class Console:
         """
         if not self.licensed("isd"):
             return
-        due = self.isd_assessment_time() * 60.0
-        stamp = time.localtime(now)
-        midnight = now - (stamp.tm_hour * 3600 + stamp.tm_min * 60
-                          + stamp.tm_sec)
-        last = midnight + due
+        due = self.isd_assessment_time()
+
+        def due_on(when, days=0):
+            # The programmed time on a calendar day, not 86400 seconds
+            # after the last one: the day the clocks change is 23 or 25
+            # hours long, and a fixed step assessed twice on the one and
+            # not at all on the other.
+            s = time.localtime(when)
+            return time.mktime((s.tm_year, s.tm_mon, s.tm_mday + days,
+                                0, due, 0, 0, 0, -1))
+
+        last = due_on(now)
         if last > now:
-            last -= 86400.0            # today's has not come round yet
+            last = due_on(now, -1)     # today's has not come round yet
         if self.isd_assessed is None:
             # A console that has just come up has not assessed anything; the
             # first assessment is the next one, not every day since 1970.
             self.isd_assessed = last
             return
         while self.isd_assessed < last - 1.0:
-            self.isd_assessed += 86400.0
+            self.isd_assessed = due_on(self.isd_assessed, 1)
             self.isd_assess()
 
     def isd_assess(self):

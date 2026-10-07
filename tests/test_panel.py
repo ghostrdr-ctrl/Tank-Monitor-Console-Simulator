@@ -3889,7 +3889,11 @@ class Panel(unittest.TestCase):
         # today, yesterday and last month are all in a period this console
         # holds -- every period opens at first touch, so a floor taken from
         # those alone would refuse yesterday's ticket on every bench
-        for offset in (0, -86400, -7 * 86400, -40 * 86400):
+        # "last month" is counted from today's date, not as forty days:
+        # the floor is the first of last month, and forty days back from
+        # early in a month is the month before that
+        last_month = -(self.c.now().tm_mday + 20) * 86400
+        for offset in (0, -86400, -7 * 86400, last_month):
             self.assertTrue(self.app._date_in_range(day(offset)), offset)
         # and the message reaches the glass
         self.app._insert.clear()

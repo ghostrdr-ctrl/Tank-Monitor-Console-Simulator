@@ -5,6 +5,13 @@ per change, written for somebody using the simulator rather than building it.
 
 ## Unreleased
 
+## 0.5.1 - 2026-10-07
+
+- The daily ISD assessment runs once on the days the clocks change, as on
+  any other day. It used to run twice when daylight saving ended and skip
+  a day when it began.
+- Notes only: two tests no longer depend on the month they are run in.
+
 ## 0.5.0 - 2026-10-07
 
 - The active alarms report lists only the alarms whose cause is still

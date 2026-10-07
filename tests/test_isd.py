@@ -1301,6 +1301,29 @@ class TheDailyAssessment(unittest.TestCase):
         self.days(c, 1)
         self.assertEqual(c.isd_state("degrade"), "fail")
 
+    def test_a_clock_change_is_still_one_day(self):
+        """The day the clocks change is 23 or 25 hours long, and it is
+        still one assessment. A fixed 86400-second step assessed twice on
+        the long day and skipped the short one; CI runs on UTC and never
+        met either, so this only failed on a machine with daylight saving,
+        in the thirty days before a change. Skipped where there is none."""
+        import time as _time
+        c = self.a_site()
+        start = _time.time() + c.clock_offset
+        flips = [d for d in range(1, 370)
+                 if _time.localtime(start + d * 86400).tm_isdst
+                 != _time.localtime(start + (d - 1) * 86400).tm_isdst]
+        if not flips:
+            self.skipTest("this timezone has no daylight saving")
+        # start fifteen days before the change, so all thirty-one cross it
+        c.clock_offset += (flips[0] - 15) * 86400.0
+        c.tick()
+        c.isd_force("degrade", "warn")
+        self.days(c, 30)
+        self.assertEqual(c.isd_state("degrade"), "warn")
+        self.days(c, 1)
+        self.assertEqual(c.isd_state("degrade"), "fail")
+
     def test_a_condition_that_clears_resets_the_count(self):
         """"Consecutive" is the word the manual uses."""
         c = self.a_site()

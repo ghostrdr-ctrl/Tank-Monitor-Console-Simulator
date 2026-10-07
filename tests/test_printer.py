@@ -394,8 +394,13 @@ class OnThePaper(unittest.TestCase):
         self.assertIn("TANK ALARM HISTORY", out)
         self.assertTrue(any(l.startswith("TANK 1") for l in out), out)
         self.assertEqual(out.count("OVERFILL ALARM"), 1)
-        self.assertEqual(sum(1 for l in out if l.startswith("  SEP")
-                             or l.startswith("  AUG")), 4)
+        # the months come from the console's clock, so the count holds in
+        # any month the suite is run, not only the one it was written in
+        names = "JAN FEB MAR APR MAY JUN JUL AUG SEP OCT NOV DEC".split()
+        months = {"  " + names[time.localtime(base - 3600 * h).tm_mon - 1]
+                  for h in (1, 2, 3, 20)}
+        self.assertEqual(sum(1 for l in out
+                             if any(l.startswith(m) for m in months)), 4)
         for line in out:
             self.assertLessEqual(len(line), printer.SETUP_COLS, repr(line))
 
