@@ -1471,5 +1471,96 @@ class EnterRunsTheGrossTest(unittest.TestCase):
         self.assertEqual(ln.state, "RUNNING PUMP", "it starts from the top")
 
 
+
+def four_lines(leak=0.0):
+    """Four PLLD lines programmed alike, on one console."""
+    c = a_line(leak=leak)
+    for n in (2, 3, 4):
+        for code in ("781", "782", "788", "789"):
+            raw = c.values[f"S{code}01"]
+            c.values[f"S{code}{n:02d}"] = f"{n:02d}" + raw[2:]
+        c.line_leak[("plld", n)] = leak
+    return c
+
+
+def testing(c):
+    """The PLLD lines with a test actually under way, not waiting."""
+    return [n for (k, n), ln in c.lines.lines.items()
+            if k == "plld" and ln.running() and ln.state != "TEST PENDING"]
+
+
+class OneLineTestsAtATime(unittest.TestCase):
+    """A real console tests one PLLD line at a time, never two and never
+    all of them at once (the site's technician, 2026-10-07). The rest wait
+    as TEST PENDING and take their turn."""
+
+    def test_two_manual_starts_run_one_after_the_other(self):
+        c = four_lines()
+        self.assertEqual(c.lines.start("plld", 1, "gross"), "TEST STARTED")
+        self.assertEqual(c.lines.start("plld", 2, "gross"), "TEST STARTED")
+        second = c.lines.line("plld", 2)
+        self.assertEqual(second.state, "TEST PENDING")
+        self.assertFalse(second.pump)
+        finished = {}
+        for _ in range(400):
+            c.clock_offset += 15.0
+            c.leaks.tick()
+            self.assertLessEqual(len(testing(c)), 1, testing(c))
+            for n in (1, 2):
+                if n not in finished and not c.lines.line("plld", n).running():
+                    finished[n] = c.clock_offset
+            if len(finished) == 2:
+                break
+        self.assertEqual(sorted(finished), [1, 2])
+        self.assertLess(finished[1], finished[2])
+        self.assertIs(c.lines.line("plld", 2).result.get("gross"), True)
+
+    def test_four_handles_hung_up_together_test_in_turn(self):
+        """"A gross test always follows the completion of a dispense" --
+        and on four lines at once, it follows four times, one at a time."""
+        c = four_lines()
+        for n in (1, 2, 3, 4):
+            c.lines.handle("plld", n, True)
+        c.clock_offset += 60.0
+        c.leaks.tick()
+        for n in (1, 2, 3, 4):
+            c.lines.handle("plld", n, False)
+        self.assertEqual(testing(c), [1])
+        for _ in range(800):
+            c.clock_offset += 15.0
+            c.leaks.tick()
+            self.assertLessEqual(len(testing(c)), 1, testing(c))
+            if not any(c.lines.line("plld", n).running() for n in (1, 2, 3, 4)):
+                break
+        for n in (1, 2, 3, 4):
+            self.assertIs(c.lines.line("plld", n).result.get("gross"), True, n)
+
+    def test_a_wide_tick_hands_the_tester_on_inside_it(self):
+        """The bench can move the clock an hour in one tick. Both tests
+        finish inside it, the second starting when the first ended."""
+        c = four_lines()
+        c.lines.start("plld", 1, "gross")
+        c.lines.start("plld", 2, "gross")
+        c.clock_offset += 3600.0
+        c.leaks.tick()
+        for n in (1, 2):
+            self.assertFalse(c.lines.line("plld", n).running(), n)
+            self.assertIs(c.lines.line("plld", n).result.get("gross"), True)
+
+    def test_a_handle_on_the_waiting_line_takes_it_out_of_the_queue(self):
+        c = four_lines()
+        c.lines.start("plld", 1, "gross")
+        c.lines.start("plld", 2, "gross")
+        c.lines.handle("plld", 2, True)
+        self.assertFalse(c.lines.line("plld", 2).running())
+        self.assertTrue(c.lines.line("plld", 2).pump, "dispensing")
+
+    def test_wplld_is_not_queued_behind_plld(self):
+        c = four_lines()
+        c.lines.start("plld", 1, "gross")
+        c.lines.start("wplld", 1, "gross")
+        self.assertEqual(c.lines.line("wplld", 1).state, "RUNNING PUMP")
+
+
 if __name__ == "__main__":
     unittest.main()

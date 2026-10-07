@@ -5,6 +5,12 @@ per change, written for somebody using the simulator rather than building it.
 
 ## Unreleased
 
+## 0.6.0 - 2026-10-07
+
+- The installer's shortcuts carry the program's taskbar identity, so the
+  taskbar shows the program's logo rather than a generic or cached icon.
+- Pressure line leak tests run on one line at a time, as on a real console.
+  A line waiting its turn shows TEST PENDING with its pump off.
 ## 0.5.2 - 2026-10-07
 
 - A site backup no longer comes up full of alarms that were never on the

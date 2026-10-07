@@ -52,6 +52,25 @@ def read(path):
         return f.read()
 
 
+class TheShortcutsCarryTheTaskbarIdentity(unittest.TestCase):
+    def test_the_installer_writes_the_id_the_program_claims(self):
+        """The running program sets an explicit AppUserModelID; a shortcut
+        without the same one leaves the taskbar drawing the button from its
+        cache, which showed Tk's feather on an installed 0.5.2."""
+        from tls350sim import APP_USER_MODEL_ID
+        iss = read(ISS)
+        defined = re.search(r'^#define MyAppUserModelID "([^"]+)"', iss, re.M)
+        self.assertIsNotNone(defined, "installer.iss defines no app ID")
+        self.assertEqual(defined.group(1), APP_USER_MODEL_ID)
+        # an .iss line continues with a trailing backslash
+        lines = iss.replace("\\\n", " ").splitlines()
+        launchers = [l for l in lines
+                     if l.startswith("Name:") and "{#MyExeName}" in l]
+        self.assertEqual(len(launchers), 2, launchers)
+        for line in launchers:
+            self.assertIn('AppUserModelID: "{#MyAppUserModelID}"', line)
+
+
 class TheInstallerNameBothHalvesUse(unittest.TestCase):
     def test_the_iss_and_build_py_agree(self):
         """The name Inno Setup writes is the name build.py goes looking for."""

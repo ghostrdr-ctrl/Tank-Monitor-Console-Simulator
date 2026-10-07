@@ -1120,6 +1120,61 @@ class Lines:
         self.c = console
         self.lines = {}            # (kind, number) -> Line
         self._last = None          # console time this engine last looked
+        self._turn = None          # the PLLD line whose test is running
+
+    # ---- one PLLD test at a time --------------------------------------------
+    # A real console tests one PLLD line at a time: never two at once and
+    # never all of them, whatever started them -- a handle hung up, the
+    # schedule, the panel. Reported from the field by the site's technician
+    # (2026-10-07); no manual on the shelf or in the GOLD library says it
+    # either way. The others wait, pump off, as TEST PENDING -- 577013-344
+    # p.22's word for a test that is due and has not run -- and take their
+    # turn first come, first served. WPLLD is left as it was: nothing has
+    # been seen of it.
+    SERIAL = ("plld",)
+
+    def _holder(self):
+        """The line whose test has the PLLD tester, or None."""
+        if self._turn is None:
+            return None
+        ln = self.lines.get(self._turn)
+        if ln is None or not ln.running():
+            self._turn = None
+            return None
+        return ln
+
+    def _claim(self, ln):
+        """Take the tester for this line if it is free. True if it has it."""
+        if ln.kind not in self.SERIAL:
+            return True
+        holder = self._holder()
+        if holder is None:
+            self._turn = (ln.kind, ln.number)
+            return True
+        return holder is ln
+
+    def _queue(self, ln):
+        """A test that has to wait: the pump off and the word for it."""
+        ln.stage, ln.waited = "pump", 0.0
+        ln.stop_pump()
+        ln.state = "TEST PENDING"
+
+    def _grant(self, ln, when):
+        """The tester is free and this line was first in the queue. Its test
+        starts now, which is the time its results are stamped with."""
+        self._turn = (ln.kind, ln.number)
+        ln.started_at = when
+        ln.stage, ln.waited = "pump", 0.0
+        ln.run_pump()
+        ln.state = "RUNNING PUMP"
+
+    def _waiting(self):
+        """The PLLD lines with a test queued, oldest first."""
+        holder = self._holder()
+        return sorted((ln for ln in self.lines.values()
+                       if ln.kind in self.SERIAL and ln.running()
+                       and ln is not holder and not ln.handle),
+                      key=lambda ln: (ln.started_at or 0.0, ln.number))
 
     # ---- the bench ----------------------------------------------------------
     def line(self, kind, number):
@@ -1512,6 +1567,8 @@ class Lines:
                 ln.pd_high_since = None
             ln.begin("gross", now, stage="trail")
             ln.state = "DISPENSING"
+            if not self._claim(ln):
+                self._queue(ln)
 
     def _abort(self, ln):
         ln.rate_key = ln.leg = ln.stage = None
@@ -1540,6 +1597,9 @@ class Lines:
             return "TEST ALREADY RUNNING"
         self._last = time.mktime(self.c.now())
         ln.begin(rate_key, self._last, stage="pump")
+        if not self._claim(ln):
+            self._queue(ln)
+            return "TEST STARTED"
         ln.state = "RUNNING PUMP"
         ln.run_pump()
         return "TEST STARTED"
@@ -1574,8 +1634,28 @@ class Lines:
         now = time.mktime(self.c.now())
         last, self._last = self._last, now
         seconds = max(0.0, now - last) if last is not None else 0.0
+        if self._holder() is None:
+            queued = self._waiting()
+            if queued:
+                self._grant(queued[0], now - seconds)
+        holder, held = self._holder(), self._waiting()
+        spare = 0.0
         for ln in list(self.lines.values()):
-            self._run(ln, seconds, now)
+            if ln in held:
+                continue
+            left = self._run(ln, seconds, now)
+            if ln is holder and not ln.running():
+                spare = left or 0.0
+        # The tester came free inside this interval, so the next line in the
+        # queue has what is left of it and not the whole of it -- and if its
+        # test is over too, the one after that.
+        while held and self._holder() is None:
+            ln = held.pop(0)
+            self._grant(ln, now - spare)
+            left = self._run(ln, spare, now)
+            spare = (left or 0.0) if not ln.running() else 0.0
+        for ln in held:
+            ln.bleed(seconds / 3600.0)      # waiting, pump off, check valve shut
 
     # ---- the alarms a line raises by itself ---------------------------------
     def conditions(self):
@@ -1767,7 +1847,9 @@ class Lines:
                     ln.pressure = self.pump_psi(ln.kind, ln.number)
                 ln.waited += left
                 ln.cycle += left
-                return
+                # what is left of the interval once a test has ended, which
+                # is the queued PLLD line's turn (`tick`)
+                return left if not ln.running() else 0.0
             if ln.isolated:
                 ln.bleed(due / 3600.0)
             left -= due

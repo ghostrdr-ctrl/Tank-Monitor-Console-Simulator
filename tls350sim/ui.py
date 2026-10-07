@@ -36,7 +36,8 @@ from tkinter import font as tkfont
 from .facepanel import CURSOR, DotMatrixLCD, KeyCap, blend
 from tkinter import ttk
 
-from . import APP_NAME, DISCLAIMER, PUBLISHER, __version__
+from . import APP_NAME, APP_USER_MODEL_ID, DISCLAIMER, PUBLISHER
+from . import __version__
 from . import fieldio, leaktest, masks
 from . import bench, exposed, paths, update, updateui, xport
 from . import xportnet
@@ -224,6 +225,14 @@ def claim_taskbar_identity():
 
     Must be called before the first window exists, like the DPI call above,
     and it is harmless to call twice.
+
+    The installer's shortcuts carry the same ID. Without it on them the
+    taskbar cannot match the running button to the shortcut that launched
+    it, and draws the button from its own icon cache instead -- which on a
+    machine that ran a release from before the window had an icon still
+    held Tk's feather, so an installed 0.5.2 whose windows both carry the
+    logo showed the feather on the taskbar (2026-10-07, measured: the
+    windows' WM_GETICON drew the logo's amber, the feather has none).
     """
     if sys.platform != "win32":
         return
@@ -233,7 +242,7 @@ def claim_taskbar_identity():
         return
     try:
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-            f"{PUBLISHER}.{APP_NAME}".replace(" ", ""))
+            APP_USER_MODEL_ID)
     except (AttributeError, OSError):                  # pragma: no cover
         pass
 

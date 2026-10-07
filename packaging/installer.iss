@@ -15,6 +15,11 @@
 #define MyAppName "Tank Monitor Console Simulator"
 #define MyPublisher "Verbose Software"
 #define MyExeName "TankMonitorConsoleSimulator.exe"
+; The taskbar identity the program claims at start-up
+; (tls350sim.APP_USER_MODEL_ID). On the shortcuts too, so Windows ties
+; the running taskbar button to them and draws it with their icon rather
+; than from its cache. tests/test_packaging.py holds the two together.
+#define MyAppUserModelID "VerboseSoftware.TankMonitorConsoleSimulator"
 #define MyAppURL "https://github.com/ghostrdr-ctrl/Tank-Monitor-Console-Simulator"
 
 [Setup]
@@ -80,11 +85,13 @@ Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; \
 ; "Tank Monitor Console Simulator 0.1.0". The .exe itself also carries the
 ; version in its Properties, from the PyInstaller version resource.
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyExeName}"; \
-    Comment: "{#MyAppName} {#MyAppVersion}"
+    Comment: "{#MyAppName} {#MyAppVersion}"; \
+    AppUserModelID: "{#MyAppUserModelID}"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; \
     Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyExeName}"; \
-    Comment: "{#MyAppName} {#MyAppVersion}"; Tasks: desktopicon
+    Comment: "{#MyAppName} {#MyAppVersion}"; Tasks: desktopicon; \
+    AppUserModelID: "{#MyAppUserModelID}"
 
 [Run]
 Filename: "{app}\{#MyExeName}"; \

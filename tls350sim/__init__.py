@@ -25,10 +25,14 @@ only to state, factually, what hardware this simulator is compatible with.
 
 APP_NAME = "Tank Monitor Console Simulator"
 PUBLISHER = "Verbose Software"
+# The taskbar identity the running program claims, and the one the
+# installer writes onto its shortcuts. They have to be the same string:
+# see `ui.claim_taskbar_identity` and packaging/installer.iss.
+APP_USER_MODEL_ID = f"{PUBLISHER}.{APP_NAME}".replace(" ", "")
 DISCLAIMER = (
     "Not affiliated with, authorized by, or endorsed by Veeder-Root, "
     "Gilbarco Veeder-Root, or Vontier Corporation. Trademarks are the "
     "property of their respective owners."
 )
 
-__version__ = "0.5.2"
+__version__ = "0.6.0"
