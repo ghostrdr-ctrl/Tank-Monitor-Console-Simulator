@@ -5,6 +5,53 @@ per change, written for somebody using the simulator rather than building it.
 
 ## Unreleased
 
+## 0.7.0 - 2026-10-07
+
+- The console keeps its histories when the simulator is closed and started
+  again, as a real console keeps them through a power cycle: alarm, leak
+  test, delivery, shift, CSLD and line diagnostic histories, and the
+  alarms that were standing.
+- A site backup that carries the pressure line diagnostics (new in the
+  Multitool) brings their test measurements in, so the 3.0, MID, 0.20 and
+  0.10 diagnostic printouts show the site's tests.
+- Four reports answer empty where a real console does: ticketed deliveries
+  without the BIR option, the tank chart asked for with no height step,
+  the stored inventory (the simulator stores none), and the FLS volume
+  table without Fuel Manager.
+- A site backup keeps the site's card cage as it is: each card in the slot
+  the site has it in, and each position reading what the site read, for as
+  long as the same cards stay fitted.
+- The HRM and BIR adjusted delivery reports are two reports, each headed as
+  a real console heads it, and they list adjusted deliveries only when the
+  BIR option is fitted. The tanker load report is titled, headed and spaced
+  as a real console prints it.
+- The in-tank inventory, status and delivery reports are spaced and titled
+  as a real console prints them.
+- The shift inventory report answers without the BIR option, from the shift
+  start times, laid out as a real console prints it. Its totals are the
+  shift's sales. A site backup brings the last shift in.
+- A tank programmed for CSLD is recognised as one. It read as CSLD NOT ENABLED
+  when its leak test setup had no start time. The CSLD results report is the
+  one-row-a-tank table a real console prints, and a site backup brings its
+  results in.
+- The in-tank leak test results, leak detect and leak test history reports
+  are laid out as a real console prints them, with every test type listed.
+  A site backup brings in each test's method and percentage, and negative
+  gross test rates.
+- Tank and pressure line alarm histories are kept apart from the two system
+  histories and go back as far as a real console's: three of each alarm
+  type on a tank, ten alarms on a line. A site backup brings them in.
+- PRINTER ERROR and HIGH PRODUCT ALARM are filed under the non-priority
+  alarm history, as a real console files them.
+- The pressure line status report gives each line its own block and its own
+  active alarms. On repetitive testing one line tests while the others stay
+  idle, and a line a site backup shows testing carries on testing.
+- Pressure line results and history come in whole from a site backup: every
+  0.10 and 0.20 result, the 3.0 pass counts, the first pass of each month
+  and the no-vent count. The results report lists every result kept,
+  newest first, as a real console does.
+- Loading a site backup sets the console to the site's software, part number
+  and all, so the revision report reads as the site's does.
 ## 0.6.0 - 2026-10-07
 
 - The installer's shortcuts carry the program's taskbar identity, so the

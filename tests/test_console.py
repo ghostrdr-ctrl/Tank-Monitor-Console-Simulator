@@ -3001,17 +3001,20 @@ class Wire(unittest.TestCase):
                       self.ask(b"\x01I90200\r"))
 
     def test_the_shift_inventory_report_answers_i204(self):
-        self.c.software["bir"] = True
+        """System Setup's shift start times, with or without BIR: a version
+        23 site with no BIR key answered it (2026-10-07)."""
         a_tank(self.c, volume=8518.0)
         self.c.tick()
+        self.assertTrue(is_bare(self.ask(SOH + "I20400" + CR)))
+        self.c.values["S50201"] = "0430"        # SHIFT 1 at 4:30 AM
+        self.c.shifts.begin(1, time.mktime(self.c.now()))
         text = self.ask(SOH + "I20400" + CR)
-        self.assertIn("SHIFT", text)
+        self.assertIn(" SHIFT REPORT", text)
+        self.assertIn("SHIFT 1 TIME:  4:30 AM", text)
         self.assertIn("STARTING VALUES", text)
         self.assertIn("ENDING VALUES", text)
         self.assertIn("DELIVERY VALUE", text)
         self.assertIn("TOTALS", text)
-        self.c.software.pop("bir")
-        self.assertTrue(is_bare(self.ask(SOH + "I20400" + CR)))
 
     def test_the_leak_history_report_answers_i207(self):
         a_tank(self.c, volume=5000.0)

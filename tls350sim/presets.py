@@ -290,6 +290,7 @@ def load(console, name, card=None):
     console.reset(keep_clock=True)
     console.version = site.get("version", _console.DEFAULT_VERSION)
     console.board = site.get("board", _console.DEFAULT_BOARD)
+    console.software_part = None
     console.modules = dict(site["modules"])
     console.software = dict(site.get("software") or {})
     # a preset is a whole different console, chip and cards included: no

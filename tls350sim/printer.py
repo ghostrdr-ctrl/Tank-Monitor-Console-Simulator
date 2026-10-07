@@ -2008,8 +2008,15 @@ def alarm_history(console, letter=None, system=False, device=None):
             # held, of every category, under a groundtemp heading. An empty
             # filter shows nothing. See W21.
             wanted = {None}
-    shown = [r for r in console.alarm_log
-             if (not wanted and not letter) or r["aa"] in wanted]
+    if wanted - {None}:
+        # each category's own history -- a tank's and a line's outlast 111
+        # and 112's fifty rows (`Console.DEVICE_HISTORY`)
+        shown = [r for aa in sorted(wanted - {None})
+                 for r in console.alarm_history(aa)]
+        shown.sort(key=lambda r: r.get("at") or "", reverse=True)
+    else:
+        shown = [r for r in console.alarm_log
+                 if (not wanted and not letter) or r["aa"] in wanted]
     if device:
         # "Press PRINT to print the report for the tank displayed. Press
         # TANK/SENSOR to access other tanks in the system" -- and this

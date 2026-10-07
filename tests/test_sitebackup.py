@@ -190,6 +190,710 @@ class RoundTrip(unittest.TestCase):
                             for s in done["skipped"]))
 
 
+class TheSitesSoftware(unittest.TestCase):
+    """A backup's header names the chip the site runs, `sw=346123-100-C
+    swver=23`, and the console takes it on: the version, and the part
+    number as the site reported it rather than one derived from it."""
+
+    def backup(self, header):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        path = os.path.join(d, "site.vrset")
+        src.archive_save(path)
+        with open(path, encoding="utf-8") as fh:
+            body = fh.read()
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(f"# VRSET v1  host=10.0.0.9 console=350 {header}\n"
+                     + body)
+        dst = Console(os.path.join(d, "dst.json"))
+        return dst, sitebackup.load(dst, path)
+
+    def test_the_version_and_the_part_number_are_the_sites(self):
+        c, done = self.backup("sw=346123-100-C swver=23")
+        self.assertEqual(c.version, 23)
+        info = c.software_info()
+        self.assertEqual(info["number"], "346123-100-C")
+        self.assertTrue(info["version"].startswith("123."))
+        reply = wire.Handler(c, verbose=False).handle(b"\x01I90200\r")
+        self.assertIn(b"SOFTWARE# 346123-100-C", reply)
+        self.assertIn("software version 23, SOFTWARE# 346123-100-C",
+                      done["applied"])
+
+    def test_it_survives_a_restart(self):
+        c, _done = self.backup("sw=346123-100-C swver=23")
+        c.save()
+        back = Console(c.state_path)
+        back.load()
+        self.assertEqual(back.software_info()["number"], "346123-100-C")
+
+    def test_a_part_for_another_version_is_not_taken(self):
+        c, _done = self.backup("sw=346126-100-B swver=23")
+        self.assertEqual(c.version, 23)
+        self.assertNotEqual(c.software_info()["number"], "346126-100-B")
+
+    def test_changing_the_version_forgets_it(self):
+        c, _done = self.backup("sw=346123-100-C swver=23")
+        c.set_version(26)
+        self.assertNotEqual(c.software_info()["number"], "346123-100-C")
+
+
+def with_reports(console, path, reports, header="swver=26"):
+    """`console`'s programming plus report blocks written as given, the
+    way a site snapshot carries them: {code: display-format text}."""
+    console.archive_save(path)
+    with open(path, encoding="utf-8") as fh:
+        body = fh.read()
+    out = [f"# VRSET v1  host=10.0.0.9 console=350 {header}", body]
+    for code, text in reports.items():
+        hx = ("\x01\r\nI" + code + "00\r\n" + text.replace("\n", "\r\n")
+              + "\r\n\x03").encode("latin-1").hex()
+        out.append(f"#R BEGIN {code} data Test|Report {code}")
+        out += ["#R X " + hx[k:k + 128] for k in range(0, len(hx), 128)]
+        out.append(f"#R END {code}")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out) + "\n")
+
+
+# Made-up figures in the shape a version 23 console prints them
+RESULTS_373 = """OCT  7, 2026  9:42 AM
+
+PRESSURE LINE LEAK TEST RESULTS
+
+Q 1:LINE ONE
+
+ 3.0 GAL/HR RESULTS:
+
+LAST TEST:
+OCT  7, 2026  9:30 AM PASS
+
+NUMBER OF TESTS PASSED
+  PREV 24 HOURS :    30
+ SINCE MIDNIGHT :     8
+
+
+0.10 GAL/HR RESULTS:
+
+SEP 19, 2026 11:00 PM PASS
+MAR 20, 2026 12:30 AM PASS
+SEP 16, 2025 10:50 PM FAIL
+
+
+0.20 GAL/HR RESULTS:
+
+OCT  5, 2026  9:30 AM PASS
+SEP 27, 2026  8:40 AM PASS
+SEP  3, 2026 10:00 PM PASS
+
+
+NO-VENT TEST ABORTS:
+  2 OUT OF 10 TEST
+
+"""
+
+HISTORY_374 = """OCT  7, 2026  9:42 AM
+
+PRESSURE LINE LEAK TEST HISTORY
+
+
+
+Q 1:LINE ONE
+
+LAST  3.0 PASS:               OCT  7, 2026  9:30 AM
+
+
+FIRST 0.10 PASS EACH MONTH:   SEP 19, 2026 11:00 PM
+                              MAR 20, 2026 12:30 AM
+
+
+FIRST 0.20 PASS EACH MONTH:   OCT  5, 2026  9:30 AM
+                              SEP  3, 2026 10:00 PM
+                              AUG  3, 2026 12:00 AM
+
+"""
+
+
+class TheLineResults(unittest.TestCase):
+    """373 and 374 come in whole: every result at each rate, the 3.0 pass
+    counts, the first pass of each month, and the no-vent count. A version
+    23 site's lines loaded with one result a rate and `PREV 24 HOURS : 1`
+    where the site had sixty."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Truck stop, four tanks and BIR")
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"373": RESULTS_373, "374": HISTORY_374})
+        self.c = Console(os.path.join(d, "dst.json"))
+        # no 102 in this backup, so the cards are the ones already fitted
+        self.c.modules = dict(src.modules)
+        self.done = sitebackup.load(self.c, path)
+        self.c.clock_offset = (sitebackup.parse_when("OCT  7, 2026  9:42 AM")
+                               - time.time())
+        self.h = wire.Handler(self.c, verbose=False)
+
+    def report(self, code):
+        return self.h.handle(f"\x01I{code}01\r".encode()).decode("latin-1")
+
+    def test_every_precision_result_newest_first(self):
+        text = self.report("373")
+        for line in ("SEP 19, 2026 11:00 PM PASS", "MAR 20, 2026 12:30 AM PASS",
+                     "SEP 16, 2025 10:50 PM FAIL", "SEP  3, 2026 10:00 PM PASS"):
+            self.assertIn(line, text)
+        self.assertLess(text.index("SEP 19, 2026"), text.index("MAR 20, 2026"))
+
+    def test_the_latest_is_the_newest_and_not_the_last_listed(self):
+        latest = self.c.leaks.result("plld", 1, "annual")
+        self.assertEqual(latest.started,
+                         sitebackup.parse_when("SEP 19, 2026 11:00 PM"))
+
+    def test_the_pass_counts_are_the_sites(self):
+        text = self.report("373")
+        self.assertIn("  PREV 24 HOURS :    30", text)
+        self.assertIn(" SINCE MIDNIGHT :     8", text)
+
+    def test_the_no_vent_count_is_the_sites(self):
+        self.assertIn("  2 OUT OF 10 TEST", self.report("373"))
+
+    def test_the_month_lists_are_the_sites_newest_first(self):
+        text = self.report("374")
+        self.assertIn("LAST  3.0 PASS:               OCT  7, 2026  9:30 AM",
+                      text)
+        self.assertIn("FIRST 0.20 PASS EACH MONTH:   OCT  5, 2026  9:30 AM",
+                      text)
+        self.assertIn(" " * 30 + "AUG  3, 2026 12:00 AM", text)
+
+    def test_a_busy_line_keeps_its_rare_results(self):
+        """Hundreds of 3.0 passes do not push the 0.10s out of history."""
+        now = time.mktime(self.c.now())
+        for i in range(300):
+            self.c.leaks._record(leaktest.Result(
+                "plld", 1, "gross", leaktest.PASSED, 3.0, 0, 0, now + i))
+        self.assertIn("MAR 20, 2026 12:30 AM PASS", self.report("373"))
+
+
+STATUS_381 = """OCT  7, 2026  9:42 AM
+
+PRESSURE LINE LEAK STATUS
+
+LINE                      DISPENSING  TEST STATUS            PUMP    HANDLE
+Q 1:LINE ONE              ENABLED     TEST COMPLETE          OFF     OFF
+
+ACTIVE ALARMS:
+
+
+Q 2:LINE TWO              ENABLED     TESTING 0.20 GAL/HR    OFF     OFF
+
+ACTIVE ALARMS:
+
+"""
+
+
+class TheLineStatus(unittest.TestCase):
+    """381 heads each line with its own ACTIVE ALARMS, and a line the site
+    shows testing is testing when the backup has loaded."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Two-tank retail site")
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"381": STATUS_381})
+        self.c = Console(os.path.join(d, "dst.json"))
+        self.c.modules = dict(src.modules)
+        self.done = sitebackup.load(self.c, path)
+
+    def test_a_block_for_each_line(self):
+        text = wire.Handler(self.c, verbose=False).handle(
+            b"\x01I38100\r").decode("latin-1")
+        self.assertEqual(text.count("ACTIVE ALARMS:"), 2)
+        self.assertLess(text.index("Q 1:"), text.index("ACTIVE ALARMS:"))
+        self.assertLess(text.index("ACTIVE ALARMS:"), text.index("Q 2:"))
+
+    def test_the_line_the_site_was_testing_is_testing(self):
+        two = self.c.lines.line("plld", 2)
+        self.assertTrue(two.running())
+        self.assertEqual(two.leg, "periodic")
+        self.assertFalse(self.c.lines.line("plld", 1).running())
+        self.assertTrue(any("Q2 testing at 0.20" in a
+                            for a in self.done["applied"]))
+
+
+TANK_206 = """OCT  7, 2026  9:42 AM
+
+TANK ALARM HISTORY
+
+TANK 1  TANK ONE
+
+     HIGH WATER ALARM         JUL  7, 2026 12:34 PM
+                              JUL  7, 2025  9:47 AM
+                              JUL 11, 2024 11:22 AM
+
+"""
+
+LINES_382 = """OCT  7, 2026  9:42 AM
+
+PRESSURE LINE LEAK ALARM HISTORY REPORT
+
+Q 1:LINE ONE
+     JUL 22, 2026 12:29 PM    PLLD SHUTDOWN ALARM
+     JUL 22, 2026 12:29 PM    GROSS LINE FAIL
+     JUL  7, 2025 11:16 AM    PLLD SHUTDOWN ALARM
+
+"""
+
+
+class TheDeviceHistories(unittest.TestCase):
+    """206 and 382 outlast 111 and 112's fifty rows on a real console, and
+    a backup brings them in: a version 23 site's tank alarms from 2023 and
+    line shutdowns from 2024 loaded as NO ALARM HISTORY."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Two-tank retail site")
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"206": TANK_206, "382": LINES_382})
+        self.c = Console(os.path.join(d, "dst.json"))
+        self.c.modules = dict(src.modules)
+        sitebackup.load(self.c, path)
+        self.h = wire.Handler(self.c, verbose=False)
+
+    def report(self, code):
+        return self.h.handle(f"\x01I{code}00\r".encode()).decode("latin-1")
+
+    def test_the_tank_history_comes_in(self):
+        text = self.report("206")
+        self.assertIn("HIGH WATER ALARM         JUL  7, 2026 12:34 PM", text)
+        self.assertIn(" " * 30 + "JUL 11, 2024 11:22 AM", text)
+
+    def test_the_line_history_comes_in(self):
+        text = self.report("382")
+        self.assertIn("JUL 22, 2026 12:29 PM    GROSS LINE FAIL", text)
+        self.assertIn("JUL  7, 2025 11:16 AM    PLLD SHUTDOWN ALARM", text)
+
+    def test_three_of_a_type_on_a_tank_and_ten_on_a_line(self):
+        for i in range(5):
+            self.c.keep_device_history({"aa": "02", "nn": "03", "tt": "01",
+                                        "at": f"26080{i}1200", "state": "02"})
+        for i in range(15):
+            self.c.keep_device_history({"aa": "21", "nn": "01", "tt": "01",
+                                        "at": f"2608{i:02d}1200",
+                                        "state": "02"})
+        water = [r for r in self.c.alarm_history("02")
+                 if r["tt"] == "01" and r["nn"] == "03"]
+        self.assertEqual(len(water), 3)
+        line = [r for r in self.c.alarm_history("21") if r["tt"] == "01"]
+        self.assertEqual(len(line), 10)
+
+    def test_a_long_111_does_not_push_them_out(self):
+        for i in range(120):
+            self.c._log_alarms([f"0101{0:02d}"], "02")
+        self.assertIn("JUL 11, 2024 11:22 AM", self.report("206"))
+
+
+class TheTwoHistoriesSplit(unittest.TestCase):
+    """Which of 111 and 112 an alarm goes in, where a real console's own
+    filing settles it."""
+
+    def test_printer_error_and_high_product_are_non_priority(self):
+        c = Console()
+        for aa, nn in (("01", "02"), ("02", "07")):
+            self.assertFalse(c.priority({"aa": aa, "nn": nn, "tt": "01"}),
+                             (aa, nn))
+
+
+RESULTS_208 = """OCT  7, 2026  9:42 AM
+
+PREVIOUS IN TANK LEAK TEST RESULTS
+
+TANK 1    TANK ONE
+TEST TYPE  START TIME              RESULT     RATE  HOURS  VOLUME
+ ANNUAL    NO TEST DATA AVAILABLE
+ PERIODIC  NO TEST DATA AVAILABLE
+ GROSS     OCT  7, 2026  5:04 AM   PASSED    -0.04          4681
+
+"""
+
+HISTORY_207 = """OCT  7, 2026  9:42 AM
+
+TANK LEAK TEST HISTORY
+
+T 1:TANK ONE
+
+LAST GROSS TEST PASSED:
+TEST START TIME            HOURS    VOLUME   % VOLUME   TEST TYPE
+OCT  7, 2026  5:04 AM                4681       47.1    STANDARD
+
+LAST PERIODIC TEST PASS:
+TEST START TIME            HOURS    VOLUME   % VOLUME   TEST TYPE
+OCT  7, 2026  4:59 AM       30       8219       82.8      CSLD
+
+
+FULLEST PERIODIC TEST
+PASSED EACH MONTH:
+
+TEST START TIME            HOURS    VOLUME   % VOLUME   TEST TYPE
+JAN 25, 2026  4:07 AM       32       8597       86.6      CSLD
+DEC  2, 2025 12:29 AM       31       8581       86.4      CSLD
+"""
+
+
+class TheTankLeakReports(unittest.TestCase):
+    """208, 203 and 207 as a version 23 site prints them, and what its
+    backup brings in: a negative gross rate, each test's own method and
+    percentage, and the monthly list in month-of-year order."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Two-tank retail site")
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"208": RESULTS_208, "207": HISTORY_207})
+        self.c = Console(os.path.join(d, "dst.json"))
+        self.c.modules = dict(src.modules)
+        sitebackup.load(self.c, path)
+        # no 201 in this backup, so the tanks report what the source's did
+        self.c.tank_level = {k: dict(v) for k, v in src.tank_level.items()}
+        self.h = wire.Handler(self.c, verbose=False)
+
+    def report(self, code):
+        return self.h.handle(f"\x01I{code}01\r".encode()).decode("latin-1")
+
+    def test_a_negative_gross_rate_comes_in(self):
+        self.assertIn(" GROSS     OCT  7, 2026  5:04 AM   PASSED    -0.04"
+                      "          4681", self.report("208"))
+
+    def test_every_test_type_has_its_row(self):
+        text = self.report("208")
+        self.assertIn(" ANNUAL    NO TEST DATA AVAILABLE", text)
+        self.assertIn(" PERIODIC  NO TEST DATA AVAILABLE", text)
+
+    def test_a_tank_with_no_test_running(self):
+        text = self.report("203")
+        self.assertIn("\r\n    TEST STATUS: OFF\r\n"
+                      "LEAK DATA NOT AVAILABLE ON THIS TANK\r\n", text)
+
+    def test_207_keeps_each_tests_method_and_percent(self):
+        text = self.report("207")
+        self.assertIn("OCT  7, 2026  4:59 AM       30       8219       82.8"
+                      "      CSLD", text)
+        self.assertIn("OCT  7, 2026  5:04 AM                4681       47.1"
+                      "    STANDARD", text)
+
+    def test_207_lists_the_months_january_to_december(self):
+        text = self.report("207")
+        self.assertLess(text.index("JAN 25, 2026"), text.index("DEC  2, 2025"))
+
+    def test_207_has_the_station_header_and_its_title(self):
+        lines = self.report("207").split("\r\n")
+        title = lines.index("TANK LEAK TEST HISTORY")
+        self.assertEqual(lines[title - 2:title], ["", ""])
+        self.assertEqual(lines[title + 1], "")
+        self.assertTrue(lines[title + 2].startswith("T 1:"))
+        self.assertEqual(lines[title + 3], "")
+
+
+CSLD_251 = """OCT  7, 2026  9:41 AM
+
+CSLD TEST RESULTS
+TANK PRODUCT                RESULT
+  1  TANK ONE               PER: OCT  7, 2026 PASS
+
+"""
+
+
+class TheCsldResults(unittest.TestCase):
+    """A tank on CSLD is a CSLD tank whatever the length of its 611, and
+    251 is its table. A version 23 site on CSLD loaded as CSLD NOT ENABLED
+    on every tank, and its four passes were never read."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Compliance site, CSLD and sensors")
+        src.values["S61101"] = "010207"      # 2 hours, 0.2, method 7: CSLD
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"251": CSLD_251})
+        self.c = Console(os.path.join(d, "dst.json"))
+        self.c.modules = dict(src.modules)
+        sitebackup.load(self.c, path)
+        self.c.tank_level = {k: dict(v) for k, v in src.tank_level.items()}
+
+    def test_a_six_character_611_is_csld(self):
+        self.assertEqual(self.c.values["S61101"], "010207")
+        self.assertTrue(self.c.csld.enabled(1))
+
+    def test_251_is_a_table_with_the_sites_result(self):
+        text = wire.Handler(self.c, verbose=False).handle(
+            b"\x01I25101\r").decode("latin-1")
+        self.assertIn("CSLD TEST RESULTS\r\nTANK PRODUCT                RESULT",
+                      text)
+        row = next(l for l in text.split("\r\n") if l.startswith("  1  "))
+        self.assertEqual(row[28:], "PER: OCT  7, 2026 PASS")
+
+
+SHIFT_204 = """OCT  7, 2026  9:42 AM
+
+ SHIFT REPORT
+
+SHIFT 1 TIME:  4:30 AM
+
+TANK PRODUCT
+
+  1  TANK ONE               VOLUME TC VOLUME  ULLAGE  HEIGHT  WATER   TEMP
+SHIFT  1 STARTING VALUES      6844      6773    3088   62.47   0.00  74.65
+         ENDING VALUES        8175      8089    1757   73.63   0.00  74.82
+         DELIVERY VALUE       2063
+         TOTALS                732
+
+"""
+
+
+class TheLastShift(unittest.TestCase):
+    """204 is System Setup's Last-Shift Inventory and answers without BIR;
+    a backup brings the shift in, and TOTALS is the shift's sales."""
+
+    def setUp(self):
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        presets.load(src, "Two-tank retail site")
+        src.software.pop("bir", None)
+        src.values["S50201"] = "0430"
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"204": SHIFT_204})
+        self.c = Console(os.path.join(d, "dst.json"))
+        self.c.modules = dict(src.modules)
+        sitebackup.load(self.c, path)
+        self.c.software.pop("bir", None)
+        self.c.tank_level = {k: dict(v) for k, v in src.tank_level.items()}
+
+    def test_the_shift_comes_in_and_prints_as_the_site_did(self):
+        text = wire.Handler(self.c, verbose=False).handle(
+            b"\x01I20401\r").decode("latin-1")
+        for line in (" SHIFT REPORT", "SHIFT 1 TIME:  4:30 AM",
+                     "SHIFT  1 STARTING VALUES      6844      6773    3088"
+                     "   62.47   0.00  74.65",
+                     "         ENDING VALUES        8175      8089    1757"
+                     "   73.63   0.00  74.82",
+                     "         DELIVERY VALUE       2063",
+                     "         TOTALS                732"):
+            self.assertIn(line, text)
+
+
+class TheAdjustedDeliveryAndTankerReports(unittest.TestCase):
+    """20A, 20B and 391 as a version 23 site with no BIR printed them:
+    headings over nothing, 20B in its own columns, and the tanker load
+    report titled, with NO DATA HISTORY under a tank with none."""
+
+    def setUp(self):
+        self.c = Console()
+        presets.load(self.c, "Two-tank retail site")
+        self.c.software.pop("bir", None)
+        self.c.tick()
+        self.h = wire.Handler(self.c, verbose=False)
+
+    def report(self, code):
+        return self.h.handle(f"\x01I{code}00\r".encode()).decode("latin-1")
+
+    def test_20a_without_bir_has_headings_and_no_rows(self):
+        lines = self.report("20A").split("\r\n")
+        self.assertIn("ADJUSTED DELIVERY REPORT", lines)
+        head = next(i for i, l in enumerate(lines) if l.startswith("TANK  1"))
+        self.assertTrue(lines[head + 2].startswith("INCREASE DATE/TIME"))
+        self.assertEqual(lines[head + 3:head + 6], ["", "", ""])
+
+    def test_20b_is_its_own_report(self):
+        text = self.report("20B")
+        self.assertIn("BIR ADJUSTED DELIVERY REPORT", text)
+        self.assertIn("DELIVERY START   DATE   DELIVERY  END    DATE  VOLUME"
+                      "  VOLUME   DELIV   DELIV", text)
+
+    def test_391_titled_and_says_when_there_is_nothing(self):
+        text = self.report("391")
+        self.assertIn("TANKER LOAD REPORT", text)
+        self.assertIn("T 1:", text)
+        self.assertIn("NO START DATE/TIME  GALLON  TEMP    END DATE/TIME"
+                      "  GALLON  TEMP   TOTAL\r\nNO DATA HISTORY", text)
+
+
+def cage_102(rows):
+    """A 102 in the shape a version 23 site prints it, from (slot, name,
+    POR, CURRENT); a slot of 0 or less is COMM -slot."""
+    out = ["OCT  7, 2026  9:31 AM", "", "SYSTEM CONFIGURATION",
+           "SLOT  BOARD TYPE                    POWER ON RESET     CURRENT"]
+    for slot, name, por, now in rows:
+        where = f"{slot:3d}   " if slot > 0 else f"      COMM {-slot} "
+        out.append(f"{(where + name)[:36]:<36s}{por:9d}{now:17d}")
+    return "\n".join(out) + "\n"
+
+
+class TheSitesCage(unittest.TestCase):
+    """102 places the cards where the site has them and reads what the
+    site read; a version 23 site's PLLD power boards in slots 11 and 12
+    came out at 9 and 10, and its empty slots at 15,000,000 against its own
+    ten million."""
+
+    def setUp(self):
+        rows = [(1, "4 PROBE / G.T.", 164230, 162486),
+                (2, "PLLD SENSOR BD", 3930, 3932)]
+        rows += [(n, "UNUSED", 10010000 + n, 9600000 + n)
+                 for n in range(3, 11)]
+        rows += [(11, "PLLD POWER BD", 99375, 99366),
+                 (12, "PLLD POWER BD", 100162, 100016)]
+        rows += [(n, "UNUSED", 10010000 + n, 9600000 + n)
+                 for n in range(13, 17)]
+        rows += [(-1, "UNUSED", 9998474, 9603509),
+                 (-2, "UNUSED", 9998474, 9603509),
+                 (-3, "RS232 SERIAL BD", 14924, 14908)]
+        rows += [(-n, "UNUSED", 9998474, 9603509) for n in (4, 5, 6)]
+        d = tempfile.mkdtemp()
+        src = Console(os.path.join(d, "src.json"))
+        path = os.path.join(d, "site.vrset")
+        with_reports(src, path, {"102": cage_102(rows)})
+        self.c = Console(os.path.join(d, "dst.json"))
+        sitebackup.load(self.c, path)
+
+    def lines(self):
+        return wire.Handler(self.c, verbose=False).handle(
+            b"\x01I10200\r").decode("latin-1").split("\r\n")
+
+    def test_the_cards_are_in_the_sites_slots(self):
+        text = "\n".join(self.lines())
+        self.assertIn(" 11   PLLD POWER BD                     99375"
+                      "            99366", text)
+        self.assertIn("  9   UNUSED", text)
+
+    def test_the_empty_slots_read_what_the_site_read(self):
+        self.assertIn("  3   UNUSED                         10010003"
+                      "          9600003", "\n".join(self.lines()))
+
+    def test_a_changed_cage_is_packed_again(self):
+        self.c.modules["plldctl"] = 1
+        self.assertIn("  9   PLLD POWER BD", "\n".join(self.lines()))
+
+
+class WhatASiteAnswersEmpty(unittest.TestCase):
+    """Four reports a version 23 site with tanks reporting, no BIR and no
+    Fuel Manager answered with the frame and nothing in it, and this
+    console filled."""
+
+    def setUp(self):
+        self.c = Console()
+        presets.load(self.c, "Two-tank retail site")
+        for key in ("bir", "fuelman"):
+            self.c.software.pop(key, None)
+        self.c.tick()
+        self.h = wire.Handler(self.c, verbose=False)
+
+    def body(self, cmd):
+        reply = self.h.handle(("\x01" + cmd + "\r").encode()).decode("latin-1")
+        self.assertNotIn("9999", reply, cmd)
+        return [l for l in reply.strip("\x01\x03\r\n").split("\r\n")[2:]
+                if l.strip()]
+
+    def test_ticketed_deliveries_need_bir(self):
+        self.assertEqual(self.body("I22100"), [])
+
+    def test_a_tank_chart_needs_a_step(self):
+        self.assertEqual(self.body("I21100"), [])
+        self.assertNotEqual(self.body("I21100001000"), [])
+
+    def test_no_inventory_is_stored(self):
+        self.assertEqual(self.body("I2E200"), [])
+
+    def test_the_fls_volume_table_needs_fuel_manager(self):
+        self.assertEqual(self.body("I28200"), [])
+
+
+class TheLineDiagnostics(unittest.TestCase):
+    """B87 to B8A, which the Multitool backs up since its 830c86d, bring
+    the measurements back that the 3.0, MID, 0.20 and 0.10 DIAG printouts
+    are made of. Without them a loaded site's diagnostic printed nothing."""
+
+    DIAG = ["B87", "B88", "B89", "B8A"]
+
+    def setUp(self):
+        held = time.time()
+        patcher = unittest.mock.patch("time.time", lambda: held)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        d = tempfile.mkdtemp()
+        self.src = Console(os.path.join(d, "src.json"))
+        presets.load(self.src, "Two-tank retail site")
+        self.src.tick()
+        self.src.lines.start("plld", 1, "annual")
+        for _ in range(400):
+            self.src.clock_offset += 30.0
+            self.src.leaks.tick()
+            if not self.src.lines.line("plld", 1).running():
+                break
+        path = os.path.join(d, "site.vrset")
+        snapshot(self.src, path, codes=PULLED + self.DIAG)
+        self.dst = Console(os.path.join(d, "dst.json"))
+        self.done = sitebackup.load(self.dst, path)
+        self.dst.clock_offset = self.src.clock_offset
+
+    def test_there_was_something_to_carry(self):
+        line = self.src.lines.line("plld", 1)
+        self.assertTrue(line.readings["gross"])
+        self.assertTrue(line.cycles["periodic"])
+
+    def test_each_diagnostic_reads_as_the_sites(self):
+        a = wire.Handler(self.src, verbose=False)
+        b = wire.Handler(self.dst, verbose=False)
+        for code in self.DIAG:
+            with self.subTest(code=code):
+                self.assertEqual(_body(a.handle(f"\x01I{code}00\r".encode())),
+                                 _body(b.handle(f"\x01I{code}00\r".encode())))
+
+    def test_the_3_0_diag_printout_has_the_tests(self):
+        from tls350sim import printer
+        text = "\n".join(str(l) for l in printer.line_diag(
+            self.dst, "plld", 1, "gross"))
+        # PON P1 P2 under 3.0 TEST PASSES, as the paper prints a reading
+        passes = text.split("3.0 TEST PASSES")[1].split("3.0 TEST FAILS")[0]
+        self.assertRegex(passes, r"\n\d+\.\d \d+\.\d \d+\.\d\n")
+        self.assertTrue(any("line diagnostic measurement" in a
+                            for a in self.done["applied"]))
+
+
+class TheHistoriesSurviveARestart(unittest.TestCase):
+    """What a backup brings in, and what the console records itself, is
+    still there after the program is closed and started again -- a real
+    console keeps it through a power cycle. It used to be held in memory
+    alone, and only the raw report blocks were saved."""
+
+    CODES = ["111", "112", "206", "207", "208", "202", "373", "374",
+             "382", "204", "102", "B87", "B89"]
+
+    def test_every_report_reads_the_same_after_a_restart(self):
+        held = time.time()
+        with unittest.mock.patch("time.time", lambda: held):
+            d = tempfile.mkdtemp()
+            src = busy_site(os.path.join(d, "src.json"),
+                            "Truck stop, four tanks and BIR")
+            src.values["S50201"] = "0430"
+            src.shifts.begin(1, held - 3600)
+            src.shifts.begin(1, held)
+            src.lines.start("plld", 1, "periodic")
+            for _ in range(400):
+                src.clock_offset += 30.0
+                src.leaks.tick()
+                if not src.lines.line("plld", 1).running():
+                    break
+            src.save()
+            back = Console(src.state_path)
+            back.load()
+            a = wire.Handler(src, verbose=False)
+            b = wire.Handler(back, verbose=False)
+            for code in self.CODES:
+                with self.subTest(code=code):
+                    self.assertEqual(
+                        _body(a.handle(f"\x01I{code}00\r".encode())),
+                        _body(b.handle(f"\x01I{code}00\r".encode())))
+
+
 def modules_header(console, cap=24):
     """The `# INSTALLED MODULES` block the multitool (v0.62.0) writes: the
     102's non-blank lines, stripped, cut at `cap` with a count of the rest."""

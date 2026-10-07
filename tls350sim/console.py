@@ -53,6 +53,7 @@ from . import masks
 from . import pressure as _pressure
 from . import packed
 from . import groundtemp
+from . import memory as _memory
 from . import readings
 from . import units as _units
 from . import versions
@@ -1232,6 +1233,9 @@ class Console:
         # for function 102's POWER ON RESET column; None where not known
         # (`power_on_reading`)
         self.reset_cage = None
+        # {position: (card key or None, power-on reset, current)} off a
+        # site backup's 102 -- see `slot_readings`
+        self.site_cage = None
         # The wiring harness a dual-port module needs before it does
         # anything: "connect the 4-pin connector (of the included wiring
         # harness) to J4 on the Module ... the 8-pin connector of the harness
@@ -1255,6 +1259,10 @@ class Console:
         # between them they decide what is on the menus at all.
         self.version = DEFAULT_VERSION
         self.board = DEFAULT_BOARD
+        # The exact SOFTWARE# a real console reported, where one came in
+        # with a site backup (`346123-100-C`). None means the part number
+        # is derived from the version and board (`versions.info`).
+        self.software_part = None
         self.tank_level = {}      # tank -> {"volume", "water"}
         self.sensor_state = {}    # (module, number) -> state
         self.siphon_shut = set()  # tanks whose siphon valve the bench shut
@@ -1270,6 +1278,9 @@ class Console:
         # back, and what it is holding on. See ALARM_FILTER_SECONDS.
         self._filtered = {}
         self.alarm_log = []       # {aa, nn, tt, at} newest first, for I206
+        # the tanks' and the lines' own histories, apart from 111/112's
+        # fifty: see `DEVICE_HISTORY`
+        self.device_alarm_log = []
         self.service_entries = []  # what a contractor entered, for 116/11A
         self.autodial_alarm = {}   # receiver -> whether 52D says it is in alarm
         self._submerged = {}       # (tank, volume) -> which thermistors are wet
@@ -1579,6 +1590,7 @@ class Console:
         self.posted.clear()
         self._seen.clear()
         self.alarm_log.clear()
+        self.device_alarm_log.clear()
         self.vmc_serials.clear()
         self.settings.clear()
         self.vmc_state.clear()
@@ -1644,6 +1656,9 @@ class Console:
         # for function 102's POWER ON RESET column; None where not known
         # (`power_on_reading`)
         self.reset_cage = None
+        # {position: (card key or None, power-on reset, current)} off a
+        # site backup's 102 -- see `slot_readings`
+        self.site_cage = None
         # The wiring harness a dual-port module needs before it does
         # anything: "connect the 4-pin connector (of the included wiring
         # harness) to J4 on the Module ... the 8-pin connector of the harness
@@ -1907,6 +1922,7 @@ class Console:
             self.e2_accuchart = {int(k): v for k, v
                                  in blob.get("e2_accuchart", {}).items()}
             self.version = int(blob.get("version", self.version))
+            self.software_part = blob.get("software_part")
             self.board = blob.get("board", self.board)
             # `meter_key` takes both forms, so a state file written
             # before the map could hold a fueling position still loads: a
@@ -1920,6 +1936,8 @@ class Console:
             self.settings = self._settings_from(blob.get("settings"))
             self._stores_load(blob)
             self.site_backup = blob.get("site_backup") or {}
+            # the histories a real console keeps through a power cycle
+            _memory.restore(self, blob.get("memory"))
             if not blob.get("limits_in_gallons"):
                 self._percent_limits_to_gallons()
         except Exception as e:
@@ -1988,6 +2006,7 @@ class Console:
                            "software": self.software,
                            "e2_accuchart": self.e2_accuchart,
                            "version": self.version,
+                           "software_part": self.software_part,
                            "limits_in_gallons": True,
                            "board": self.board,
                            "meters": self.meters.as_json(),
@@ -1995,6 +2014,7 @@ class Console:
                            "traffic": self.traffic.state(),
                            "site_backup": self.site_backup,
                            "settings": self._settings_json(),
+                           "memory": _memory.dump(self),
                            **self._stores_json()},
                           fh, indent=1)
         except Exception as e:
@@ -2147,9 +2167,22 @@ class Console:
 
     # ---- the board and the software on it ----------------------------------
     def software_info(self):
-        """The revision block this console prints: version, part, date."""
+        """The revision block this console prints: version, part, date.
+
+        A site backup's header names the chip the site runs, `sw=346123-
+        100-C`, and that part number is the site's own where `versions.info`
+        can only derive one -- every version but the bench's 26 carries a
+        stand-in `-102-B`. So an imported part is printed as it came, and
+        its platform digit, which is the first digit of VERSION, with it.
+        """
         info = versions.info(self.version, self.board)
         info["smodule"] = self.s_module_number()
+        part = re.match(r"^346(\d)(\d\d)-\d{3}-[A-Z]$",
+                        self.software_part or "")
+        if part and int(part.group(2)) == self.version:
+            info["number"] = self.software_part
+            info["version"] = (part.group(1) + part.group(2)
+                               + info["version"][3:])
         return info
 
     # 330160-000 Rev V sheet 2, the units digit's subsets (UNKNOWNS A77)
@@ -2236,6 +2269,7 @@ class Console:
         if not versions.known(version):
             return False
         self.version = version
+        self.software_part = None     # a different chip; see software_info
         self.save()
         return True
 
@@ -2244,6 +2278,7 @@ class Console:
         if board not in versions.BOARD:
             return False
         self.board = board
+        self.software_part = None
         self.save()
         return True
 
@@ -3270,8 +3305,15 @@ class Console:
             key = time.strftime("%Y%m", time.localtime(record.started))
             if key not in months or record.volume > months[key].volume:
                 months[key] = record
-        for number, key in enumerate(sorted(months)[-12:], start=1):
-            out.append(("02", number, months[key]))
+        # Twelve slots, one for each month of the YEAR, each holding that
+        # month's latest: a version 23 site printed JAN to OCT 2026 and then
+        # NOV and DEC 2025, in that order (2026-10-07). This listed the last
+        # twelve in date order.
+        slots = {}
+        for key in sorted(months):
+            slots[int(key[4:])] = months[key]
+        for number in sorted(slots):
+            out.append(("02", number, slots[number]))
         return out
 
     def leak_test_method(self, tank, rate_key):
@@ -3313,30 +3355,43 @@ class Console:
     )
 
     def leak_history_lines(self, tank):
-        """The same history, in the columns I207 prints it in."""
+        """The same history, in the columns and the spacing I207 prints.
+
+        Both off a version 23 site's 207 (2026-10-07). HOURS ends at column
+        30, VOLUME at 41, % VOLUME at 52, and the TEST TYPE is centred in
+        the nine columns of its heading -- `    STANDARD`, `      CSLD`.
+        A block with passes runs its heading straight under its title, a
+        block without one has a blank line either side of NO TEST PASSED,
+        the LAST PERIODIC block is followed by two blank lines, and the
+        monthly title by one. A test's method and percentage are the ones
+        the console printed for it where a backup brought them in.
+        """
         full = self.full_volume(tank) or 0.0
         head = ("TEST START TIME            HOURS    VOLUME"
                 "   % VOLUME   TEST TYPE")
 
-        def block(title, records):
+        def block(title, records, monthly):
             out = list(title)
             if not records:
-                out.append("NO TEST PASSED")
-                return out
+                return out + ["", "NO TEST PASSED", ""]
+            if monthly:
+                out.append("")
             out.append(head)
             for record in records:
-                pct = (record.volume / full * 100.0) if full else 0.0
-                kind = self.leak_test_method(tank, record.rate_key)
+                pct = (record.percent if record.percent is not None
+                       else (record.volume / full * 100.0) if full else 0.0)
+                kind = (record.method
+                        or self.leak_test_method(tank, record.rate_key))
                 # A GROSS test's HOURS column is blank on the manual's own
                 # paper, in both the 207 and the 208 sample, where this
                 # printed `0`. A three-gallon-an-hour test is over in
                 # minutes and the console does not report its length.
-                hours = ("%8.0f" % record.hours
-                         if record.rate_key != "gross" else " " * 8)
-                out.append(f"{clock_words(record.started):22s}"
-                           f"{hours}{record.volume:10.0f}"
-                           f"{pct:11.1f}{kind:>12s}")
-            return out
+                hours = ("%9.0f" % record.hours
+                         if record.rate_key != "gross" else " " * 9)
+                out.append((f"{clock_words(record.started):21s}"
+                            f"{hours}{record.volume:11.0f}{pct:11.1f}   "
+                            + kind.center(9)).rstrip())
+            return out + ([] if monthly else [""])
 
         found = self.leak_history_records(tank)
         out = []
@@ -3344,7 +3399,9 @@ class Console:
             rows = [r for kind, _n, r in found
                     if kind == what and (rate_key is None
                                          or r.rate_key == rate_key)]
-            out += block(title, rows)
+            out += block(title, rows, monthly=rate_key is None)
+            if (rate_key, what) == ("periodic", "00"):
+                out.append("")
         return out
 
     # The panel's VAPOR PROCESSOR TYPE screen and V40 are ONE field. It was
@@ -5114,10 +5171,14 @@ class Console:
             out.append("TEST TYPE  START TIME              "
                        "RESULT     RATE  HOURS  VOLUME")
             results = self.leaks.results.get(("tank", tank)) or {}
-            if not results:
-                out.append("  NO TEST DATA AVAILABLE")
-            for _key, res in leaktest.in_report_order(results):
-                out.append(res.line())
+            # every type in its row, NO TEST DATA AVAILABLE where it has no
+            # result: a version 23 site's 208 printed all three under each
+            # of its four tanks, a tank with none as three such rows
+            # (2026-10-07)
+            for key in leaktest.REPORT_ORDER:
+                res = results.get(key)
+                out.append(res.line() if res is not None
+                           else f" {key.upper():<10s}NO TEST DATA AVAILABLE")
             out.append("")
         return chr(10).join(out)
 
@@ -5151,13 +5212,15 @@ class Console:
             label = self.text("602", tank) or f"TANK {tank}"
             run = self.leaks.active("tank", tank)
             out.append(f"TANK {tank:<5d}{label}")
+            # four in, and a line saying there is nothing to show, then two
+            # blank lines: a version 23 site, every tank (2026-10-07)
             if run is None:
-                out.append("           TEST STATUS: OFF")
-                out.append("")
+                out += ["    TEST STATUS: OFF",
+                        "LEAK DATA NOT AVAILABLE ON THIS TANK", "", ""]
                 continue
             now = time.mktime(self.now())
             started = clock_words(run.started)
-            out.append(f"           TEST STATUS: ON "
+            out.append(f"    TEST STATUS: ON "
                        f"{leaktest_rate(run.rate_key)} TEST")
             out.append(f"TEST START TIME: {started}"
                        f"     DURATION: {run.hours:g} HOURS")
@@ -6231,6 +6294,14 @@ class Console:
         card cage met two SLOT 1s and two SLOT 2s. One cage, one numbering,
         and it is this one. See FIDELITY X5.
         """
+        layout = self._site_layout()
+        if layout is not None:
+            # where the site has its cards, slot for slot (`site_cage`)
+            return [(slot, "is" if slot <= BAY_SLOTS["is"] else "power",
+                     layout[slot], self.slot_name(layout[slot], paper)
+                     if layout[slot] else "UNUSED")
+                    for slot in range(1, BAY_SLOTS["is"]
+                                      + BAY_SLOTS["power"] + 1)]
         out, base = [], 0
         for bay in ("is", "power"):
             slot, last = base, base + BAY_SLOTS[bay]
@@ -6245,6 +6316,39 @@ class Console:
             out += [(n, bay, None, "UNUSED") for n in range(slot + 1, last + 1)]
             base = last
         return out
+
+    def _site_layout(self):
+        """{slot: key or None} as a site backup's 102 placed the cards, or
+        None where there is none or the cards fitted no longer match it.
+
+        A version 23 site had its PLLD power boards in slots 11 and 12,
+        and `cage_slots` packs a bay from its first slot, so they came out
+        at 9 and 10 (2026-10-07). The site's layout stands for as long as
+        the same cards are fitted; change them on the bench and the cage is
+        packed again."""
+        if not self.site_cage:
+            return None
+        layout = {}
+        for slot in range(1, BAY_SLOTS["is"] + BAY_SLOTS["power"] + 1):
+            entry = self.site_cage.get(f"S{slot}")
+            layout[slot] = entry[0] if entry else None
+        wanted = {}
+        for key in layout.values():
+            if key:
+                wanted[key] = wanted.get(key, 0) + 1
+        fitted = {key: self.count(key) for key, _n, _p, bay, _w, _m
+                  in MODULES if bay in ("is", "power") and self.count(key)}
+        return layout if wanted == fitted else None
+
+    def _site_reading(self, where, key, por, now):
+        """The site's own POR and CURRENT for a position whose card is the
+        one the site had there, as the backup read them. The site's empty
+        positions read about 10,000,000, where the bench's read 15,000,000,
+        so they are the site's too."""
+        entry = (self.site_cage or {}).get(where)
+        if not entry or entry[0] != key or entry[1] is None:
+            return por, now
+        return entry[1], entry[2] or entry[1]
 
     def current_cage(self):
         """{position: card key or None} across both bays, as fitted now:
@@ -6304,6 +6408,7 @@ class Console:
             por, now = (self.empty_slot_reading(bay, slot) if key is None
                         else self.module_id_resistance(key, slot))
             por = self.power_on_reading(f"S{slot}", key, por, bay, slot)
+            por, now = self._site_reading(f"S{slot}", key, por, now)
             out.append((slot, key, name, float(por), float(now)))
         # Same again for the communication bay: its cards have ID resistances
         # too -- RS-232 15K, SiteFax 47K, MT 402K, WPLLD Comm 200K -- and the
@@ -6313,6 +6418,8 @@ class Console:
         for port in range(1, BAY_SLOTS["comm"] + 1):
             seat = self.comm_positions().get(port)
             name, por, now = self.port_reading(port, paper=True)
+            por, now = self._site_reading(f"C{port}",
+                                          seat[1] if seat else None, por, now)
             out.append((-port, seat[1] if seat else None, name,
                         float(por), float(now)))
         return out
@@ -8331,7 +8438,9 @@ class Console:
         if fitted:
             return f"0x{fitted}"
         raw = (self.values.get(f"S611{tank:02d}") or "")
-        body = raw[2:] if len(raw) > 8 else raw
+        # off the prefix, not the length: a CSLD entry is six characters
+        # (`csld.CSLD.enabled`)
+        body = raw[2:] if self.is_prefixed("611") else raw
         rate = "0.10" if body[2:3] == "1" else "0.20"
         return readings.PROBE_CIRCUIT.get(rate, "0xD004")
 
@@ -10991,9 +11100,10 @@ class Console:
         """What I111, I112 and I206 read: when each alarm came and went."""
         when = time.strftime("%y%m%d%H%M", self.now())
         for record in records:
-            self.alarm_log.insert(0, {"aa": record[:2], "nn": record[2:4],
-                                      "tt": record[4:6], "at": when,
-                                      "state": state})
+            row = {"aa": record[:2], "nn": record[2:4], "tt": record[4:6],
+                   "at": when, "state": state}
+            self.alarm_log.insert(0, row)
+            self.keep_device_history(row)
         kept, out = {True: 0, False: 0}, []
         for row in self.alarm_log:
             which = bool(self.priority(row))
@@ -11003,14 +11113,66 @@ class Console:
             out.append(row)
         self.alarm_log[:] = out
 
+    # A tank's and a line's alarm histories are their own, and outlast the
+    # fifty rows 111 and 112 keep: a version 23 site's 206 listed tank
+    # alarms from 2023 and its 382 ten shutdowns a line back to 2024, all of
+    # them long gone from its 111 and 112 (2026-10-07). 206 keeps the three
+    # newest of each alarm type on a tank -- the bench and the site agree --
+    # and 382 and 387 the ten newest on a line, every line on the site
+    # holding exactly ten. Only the alarms; a clear is not an entry on
+    # either. Other categories read 111 and 112's rows, as before.
+    DEVICE_HISTORY = {"02": ("type", 3), "21": ("device", 10),
+                      "26": ("device", 10)}
+
+    def keep_device_history(self, row):
+        """File one alarm row in its device's own history, if it has one."""
+        rule = self.DEVICE_HISTORY.get(row["aa"])
+        if rule is None or row.get("state", "02") == "01":
+            return
+        log = self.device_alarm_log
+        if any(r == row for r in log):
+            return
+        log.append(dict(row))
+        kept = self._capped(log, row["aa"])
+        log[:] = [r for r in log if r["aa"] != row["aa"]] + kept
+
+    def _capped(self, rows, aa):
+        """`aa`'s alarm rows newest first, at its device history's depth."""
+        by, depth = self.DEVICE_HISTORY[aa]
+        counts, out = {}, []
+        for r in sorted((r for r in rows if r["aa"] == aa
+                         and r.get("state", "02") != "01"),
+                        key=lambda r: r.get("at") or "", reverse=True):
+            key = (r["tt"], r["nn"]) if by == "type" else r["tt"]
+            counts[key] = counts.get(key, 0) + 1
+            if counts[key] <= depth:
+                out.append(r)
+        return out
+
+    def alarm_history(self, aa):
+        """The alarm rows a category's history report reads, newest first:
+        its devices' own history where it has one -- with 111/112's rows
+        merged in, so nothing they hold is missing from it -- and 111/112's
+        rows alone where it has none."""
+        if aa not in self.DEVICE_HISTORY:
+            return [r for r in self.alarm_log if r["aa"] == aa]
+        merged = list(self.device_alarm_log)
+        merged += [r for r in self.alarm_log if r not in merged]
+        return self._capped(merged, aa)
+
     # The alarms i10100's own list calls warnings rather than alarms. The
     # panel abbreviates some of them, "DELIVERY NEEDED" for what the serial
     # manual calls "Tank Delivery Needed Warning": so the split cannot be
     # read off the displayed message alone.
+    #
+    # Where the list's naming and a real console disagree, the console
+    # wins: a version 23 site filed PRINTER ERROR (01/02) and HIGH PRODUCT
+    # ALARM (02/07) under NON-PRIORITY ALARM HISTORY, neither named a
+    # warning (2026-10-07).
     WARNING_NUMBERS = {
-        "01": {"01", "06", "07", "10", "11", "13", "14", "15", "17"},
-        "02": {"01", "10", "11", "16", "17", "20", "21", "22", "23", "24",
-               "25", "27", "28", "30"},
+        "01": {"01", "02", "06", "07", "10", "11", "13", "14", "15", "17"},
+        "02": {"01", "07", "10", "11", "16", "17", "20", "21", "22", "23",
+               "24", "25", "27", "28", "30"},
     }
 
     def priority(self, record):

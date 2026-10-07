@@ -1466,10 +1466,13 @@ class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
         """What the manual's own sample leaves under the frame, or one --
         or, for a code no manual draws, what the bench TLS-350 left under it
         (2026-09-18): 904 and 5FA run straight on under the stamp."""
-        from tls350sim.wire import WIRE_TITLES
+        from tls350sim.wire import MEASURED_FRAME, WIRE_TITLES
         from tls350sim import wiretables
         if tok in ("904", "5FA"):
             return 0
+        if tok in MEASURED_FRAME:
+            # measured on a real console, which wins over the page
+            return MEASURED_FRAME[tok]["head_gap"]
         entry = WIRE_TITLES.get(wiretables.SHOWN_AS.get(tok, tok)) or {}
         return 1 if entry.get("head_gap") is None else int(entry["head_gap"])
 

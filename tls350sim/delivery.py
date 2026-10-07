@@ -407,6 +407,10 @@ class Deliveries:
             records = self.records.get(tank) or []
             if not records:
                 out.append("  NO DELIVERY DATA AVAILABLE")
+            else:
+                # a blank line under the heading before the first END: a
+                # version 23 site's 202 and 20C, every tank (2026-10-07)
+                out.append("")
             for record in (records[:1] if most_recent else records):
                 for name, snap in (("END", record.end),
                                    ("START", record.start)):

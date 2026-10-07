@@ -477,6 +477,9 @@ class Line:
         # speed motors, and STP contactors". BENCH.md L11.
         self.noise = False
         self.result = {}            # rate_key -> True/False, the last verdict
+        # (aborts, tests) as a site backup's 373 reported them, for the
+        # tests this console has no readings of (`wirelines._no_vent`)
+        self.no_vent_seed = None
         # The transducer's own zero error, which the offset test measures and
         # function codes 089 and 090 reset. It has to be STORED rather than
         # derived, because a reset has to be able to change it -- a value that
@@ -1602,6 +1605,28 @@ class Lines:
             return "TEST STARTED"
         ln.state = "RUNNING PUMP"
         ln.run_pump()
+        return "TEST STARTED"
+
+    def resume(self, kind, number, rate_key):
+        """Carry on a test a site backup shows running.
+
+        The status report says which rate the line was testing at, and not
+        how far in it was, so a precision leg starts its first cycle now
+        and a 3.0 test starts from the pump. Through `_claim` like any
+        other start, so it holds the tester the others wait for.
+        """
+        if rate_key == "gross":
+            return self.start(kind, number, rate_key)
+        ln = self.line(kind, number)
+        if ln.handle or ln.running():
+            return self.start(kind, number, rate_key)
+        self._last = time.mktime(self.c.now())
+        ln.begin(rate_key, self._last, stage="pump")
+        if not self._claim(ln):
+            self._queue(ln)
+            return "TEST STARTED"
+        ln.leg = rate_key
+        self._begin_cycle(ln, self._last)
         return "TEST STARTED"
 
     def stop(self, kind, number):

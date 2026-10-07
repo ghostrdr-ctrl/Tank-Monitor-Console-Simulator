@@ -415,6 +415,39 @@ def parse_cage(lines):
     return modules, comm_slots, flags, unplaced
 
 
+def parse_cage_positions(lines):
+    """{"S<slot>" or "C<port>": (card key or None, POR, CURRENT)} off a
+    102, every position the report prints, UNUSED ones included."""
+    names, out, below = _card_names(), {}, False
+    comm_names = {}
+    for line in lines:
+        if "SYSTEM CONFIGURATION" in line:
+            below = True
+            continue
+        if not below:
+            continue
+        m = _COMM_ROW.match(line)
+        if m:
+            where, bay = f"C{int(m.group(1))}", "comm"
+        else:
+            m = _SLOT_ROW.match(line)
+            if not m or not 1 <= int(m.group(1)) <= 16:
+                continue
+            slot = int(m.group(1))
+            where = f"S{slot}"
+            bay = "is" if slot <= _console.BAY_SLOTS["is"] else "power"
+        por = float(m.group(3)) if m.group(3) else None
+        now = float(m.group(4)) if m.group(4) else None
+        key = None
+        if _squash(m.group(2)) != "UNUSED":
+            hit = _card(m.group(2), por, bay, names)
+            key = hit[0] if hit else "?"
+            if bay == "comm":
+                comm_names[where] = key
+        out[where] = (key, por, now)
+    return out
+
+
 def _reset_cage(console, lines):
     """What was in the cage at the site's last cold start, off 102's POWER ON
     RESET column, or None where the report carries no readings.
@@ -646,6 +679,192 @@ def parse_alarm_rows(lines, active=False, date_format="01"):
     return rows, unplaced
 
 
+_TANK_HISTORY_HEAD = re.compile(r"^TANK\s+(\d{1,2})\b")
+
+
+def parse_tank_alarm_history(lines, date_format="01"):
+    """[alarm row] off a 206: each type named once at column five, its
+    dates from column thirty, three to a type."""
+    out, tank, nn = [], None, None
+    for line in lines:
+        m = _TANK_HISTORY_HEAD.match(line)
+        if m:
+            tank, nn = int(m.group(1)), None
+            continue
+        if tank is None or len(line) < 31:
+            continue
+        name, stamp = line[:30].strip(), line[30:].strip()
+        if name:
+            found = _alarm_number(["02"], name)
+            nn = found[1] if found else None
+        at = parse_when(stamp, date_format)
+        if nn and at is not None:
+            out.append({"aa": "02", "nn": nn, "tt": f"{tank:02d}",
+                        "at": _packed(at), "state": "02"})
+    return out
+
+
+_LINE_HISTORY_ROW = re.compile(r"^\s+(\S.*?[AP]M)\s{2,}(\S.*\S)\s*$")
+
+
+def parse_line_alarm_history(lines, date_format="01"):
+    """[alarm row] off a 382 or 387: under each line's head, a stamp and
+    the alarm's name, newest first."""
+    out, aa, tt = [], None, None
+    for line in lines:
+        m = _LINE_HEAD.match(line)
+        if m:
+            aa = "21" if m.group(1) == "Q" else "26"
+            tt = int(m.group(2))
+            continue
+        m = _LINE_HISTORY_ROW.match(line)
+        if not m or aa is None:
+            continue
+        at = parse_when(m.group(1), date_format)
+        found = _alarm_number([aa], m.group(2))
+        if at is not None and found:
+            out.append({"aa": aa, "nn": found[1], "tt": f"{tt:02d}",
+                        "at": _packed(at), "state": "02"})
+    return out
+
+
+_SHIFT_TIME = re.compile(r"^SHIFT\s+(\d)\s+TIME:\s*(\d{1,2}):(\d{2})\s*([AP]M)?")
+_SHIFT_TANK = re.compile(r"^\s*(\d{1,2})\s+\S.*\bVOLUME TC VOLUME")
+_SHIFT_VALUES = re.compile(r"^(?:SHIFT\s+\d+\s+)?\s*(STARTING|ENDING) VALUES"
+                           r"\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?[\d.]+)"
+                           r"\s+(-?[\d.]+)\s+(-?[\d.]+)\s*$")
+_SHIFT_DELIVERY = re.compile(r"^\s*DELIVERY VALUE\s+(-?\d+)")
+
+
+def parse_shift_report(lines):
+    """{shift: {"time": (h, m), "tanks": {tank: {"start", "end", "delivery"}}}}
+    off a 204, each "start"/"end" the six figures as `shifts` keeps them."""
+    out, shift, tank = {}, None, None
+    for line in lines:
+        m = _SHIFT_TIME.match(line)
+        if m:
+            hour = int(m.group(2)) % 12 + (12 if m.group(4) == "PM" else 0)
+            shift = int(m.group(1))
+            out[shift] = {"time": (hour, int(m.group(3))), "tanks": {}}
+            continue
+        m = _SHIFT_TANK.match(line)
+        if m and shift is not None:
+            tank = int(m.group(1))
+            out[shift]["tanks"][tank] = {"start": None, "end": None,
+                                         "delivery": 0.0}
+            continue
+        if shift is None or tank is None:
+            continue
+        m = _SHIFT_VALUES.match(line)
+        if m:
+            vol, tc, ullage, height, water, temp = (float(g) for g
+                                                    in m.groups()[1:])
+            out[shift]["tanks"][tank]["start" if m.group(1) == "STARTING"
+                                      else "end"] = {
+                "volume": vol, "tc": tc, "ullage": ullage, "height": height,
+                "water": water, "temp": temp}
+            continue
+        m = _SHIFT_DELIVERY.match(line)
+        if m:
+            out[shift]["tanks"][tank]["delivery"] = float(m.group(1))
+    return out
+
+
+def load_shifts(console, report, taken):
+    """Put a 204's last shift into `shifts`: closed at its own start time's
+    last occurrence before the report was printed, opened a day before
+    that, and the shift running now starting from where it closed."""
+    sh = console.shifts
+    for shift, entry in sorted(report.items()):
+        hour, minute = entry["time"]
+        t = time.localtime(taken)
+        end = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, hour, minute, 0,
+                           0, 0, -1))
+        if end > taken:
+            end -= 86400.0
+        start_snap = {"at": end - 86400.0, "tanks": {}}
+        end_snap = {"at": end, "tanks": {}}
+        adjust = {}
+        for tank, figs in entry["tanks"].items():
+            if figs["start"]:
+                start_snap["tanks"][tank] = dict(figs["start"])
+            if figs["end"]:
+                end_snap["tanks"][tank] = dict(figs["end"])
+            adjust[tank] = figs["delivery"]
+        sh.closed[shift] = {"start": start_snap, "end": end_snap,
+                            "adjust": adjust}
+        sh.open = {"shift": shift, "start": end_snap, "adjust": {}}
+    return len(report)
+
+
+# ---------------------------------------------------------------------------
+# B87 to B8E: the pressure line diagnostics behind the 3.0 DIAG printout
+# ---------------------------------------------------------------------------
+# Which store each code's rows go back into: (kind, readings or cycles, leg)
+LINE_DIAGNOSTICS = {"B87": ("plld", "readings", "gross"),
+                    "B88": ("plld", "readings", "mid"),
+                    "B8B": ("wplld", "readings", "gross"),
+                    "B8C": ("wplld", "readings", "mid"),
+                    "B89": ("plld", "cycles", "periodic"),
+                    "B8A": ("plld", "cycles", "annual"),
+                    "B8D": ("wplld", "cycles", "periodic"),
+                    "B8E": ("wplld", "cycles", "annual")}
+
+_PUMPOFF_ROW = re.compile(r"^(.*[AP]M)\s+(-?[\d.]+) PSI\s+(-?[\d.]+) PSI"
+                          r"\s+(-?[\d.]+) PSI\s*$")
+_PRECISION_ROW = re.compile(r"^(.*[AP]M)\s+(-?[\d.]+) PSI\s+(-?[\d.]+)"
+                            r"\s+(\d+)\s+(PASSED|FAILED)\s*$")
+
+
+def parse_line_diagnostic(code, lines):
+    """{line: [Reading or Cycle], oldest first} off one of B87 to B8E, in
+    the display form `wirelines` prints and the Multitool backs up since
+    its 830c86d. A pump-Off row is Pon, P1 and P2 under TEST PASSES, TEST
+    FAILS or HI PRESSURE EVENTS; a precision row is Pon, the ratio, the
+    minutes and the verdict. The ratio is the rate over the rate's own
+    threshold ("Ratio <1 Pass, >1 Fail"), so the rate is worked back from
+    it; P1 and P2 are not on a precision row and are left at Pon."""
+    from . import pressure
+    _kind, store, leg = LINE_DIAGNOSTICS[code]
+    out, line, passed = {}, None, None
+    for text in lines:
+        m = _LINE_HEAD.match(text)
+        if m:
+            line, passed = int(m.group(2)), None
+            out.setdefault(line, [])
+            continue
+        upper = text.upper()
+        if "TEST PASSES" in upper:
+            passed = True
+            continue
+        if "TEST FAILS" in upper:
+            passed = False
+            continue
+        if "HI PRESSURE" in upper:
+            passed = True        # an event, told apart by its Pon (`high`)
+            continue
+        if line is None:
+            continue
+        if store == "readings":
+            m = _PUMPOFF_ROW.match(text.strip())
+            at = parse_when(m.group(1)) if m else None
+            if m and at is not None and passed is not None:
+                out[line].append(pressure.Reading(
+                    at, float(m.group(2)), float(m.group(3)),
+                    float(m.group(4)), passed))
+            continue
+        m = _PRECISION_ROW.match(text.strip())
+        at = parse_when(m.group(1)) if m else None
+        if m and at is not None:
+            pon, ratio = float(m.group(2)), float(m.group(3))
+            out[line].append(pressure.Cycle(
+                at, pon, pon, pon, ratio * pressure.THRESHOLD[leg], ratio,
+                int(m.group(4)), m.group(5) == "PASSED"))
+    for rows in out.values():
+        rows.sort(key=lambda r: r.when)
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 202: deliveries
 # ---------------------------------------------------------------------------
@@ -681,7 +900,7 @@ def parse_deliveries(lines):
 # Leak tests: 208 results, 207 history, 251 CSLD
 # ---------------------------------------------------------------------------
 _RESULT_ROW = re.compile(r"^\s*(ANNUAL|PERIODIC|GROSS)\s+(.*?)\s+"
-                         r"(PASSED|FAILED|INVALID)\s+(\d+\.\d+)"
+                         r"(PASSED|FAILED|INVALID)\s+(-?\d+\.\d+)"
                          r"(?:\s+(\d+))?\s+(\d+)\s*$")
 
 
@@ -732,17 +951,27 @@ def parse_leak_history(lines):
         out.append(leaktest.Result(
             "tank", tank, rate_key, leaktest.PASSED,
             leaktest.RATES[rate_key], float(m.group(2) or 0),
-            float(m.group(3)), started))
+            float(m.group(3)), started, method=m.group(5),
+            percent=float(m.group(4))))
     return out
 
 
 _CSLD_ROW = re.compile(r"^\s*PER:\s+(.*\d{4})\s+(PASS|FAIL|INCR|WARN)\s*$")
+# I251's own form, a row a tank: `  1  REGULAR UNLEADED   PER: OCT  7, 2026 PASS`
+_CSLD_TABLE_ROW = re.compile(r"^\s*(\d{1,2})\s+.*?\bPER:\s+(.*\d{4})\s+"
+                             r"(PASS|FAIL|INCR|WARN)\s*$")
 
 
 def parse_csld(lines):
     """{tank: (result, epoch)} off an I251."""
     out, tank = {}, None
     for line in lines:
+        m = _CSLD_TABLE_ROW.match(line)
+        if m:
+            when = parse_when(m.group(2))
+            if when is not None:
+                out[int(m.group(1))] = (m.group(3), when)
+            continue
         m = _TANK_HEAD.match(line)
         if m:
             tank = int(m.group(1))
@@ -757,13 +986,20 @@ def parse_csld(lines):
 
 _LINE_HEAD = re.compile(r"^\s*([QW])\s*(\d{1,2}):")
 _LINE_RATE = {"3.0": "gross", "0.20": "periodic", "0.10": "annual"}
+_LINE_RATE_WORD = {v: k for k, v in _LINE_RATE.items()}
 _LINE_VERDICT = re.compile(r"^(.*[AP]M)\s+(PASS|FAIL|INVALID)\s*$")
 _LINE_WORD = {"PASS": leaktest.PASSED, "FAIL": leaktest.FAILED,
               "INVALID": leaktest.INVALID}
 
 
 def parse_line_results(lines):
-    """[Result] off a 373, 383 or 388: the last verdict at each rate."""
+    """[Result] off a 373, 383 or 388: every verdict listed at each rate.
+
+    The 3.0 block has one, LAST TEST. Each precision rate is a list, newest
+    first -- a version 23 site printed ten 0.20 results and eight 0.10 under
+    each line, and 576013-635 Rev AA counts them ("NN - Number of 0.10
+    gal/hr test results ... to follow"). This took the first and stopped.
+    """
     out, kind, number, rate_key = [], None, None, None
     for line in lines:
         m = _LINE_HEAD.match(line)
@@ -775,6 +1011,9 @@ def parse_line_results(lines):
         if m:
             rate_key = _LINE_RATE[m.group(1)]
             continue
+        if line.strip().startswith(("NUMBER OF TESTS", "NO-VENT")):
+            rate_key = None
+            continue
         m = _LINE_VERDICT.match(line.strip())
         if m and kind and rate_key:
             started = parse_when(m.group(1))
@@ -782,7 +1021,133 @@ def parse_line_results(lines):
                 out.append(leaktest.Result(
                     kind, number, rate_key, _LINE_WORD[m.group(2)],
                     leaktest.RATES[rate_key], 0.0, 0.0, started))
-            rate_key = None
+    return out
+
+
+_LINE_COUNT = re.compile(r"^\s*(PREV 24 HOURS|SINCE MIDNIGHT)\s*:\s*(\d+)")
+
+
+def parse_line_counts(lines):
+    """{(kind, line): (passed in the previous 24 hours, since midnight)} off
+    a 373 or 383's NUMBER OF TESTS PASSED, which is the 3.0 test's."""
+    out, key, day = {}, None, None
+    for line in lines:
+        m = _LINE_HEAD.match(line)
+        if m:
+            key = ("plld" if m.group(1) == "Q" else "wplld", int(m.group(2)))
+            continue
+        m = _LINE_COUNT.match(line)
+        if m and key:
+            if m.group(1) == "PREV 24 HOURS":
+                day = int(m.group(2))
+            elif day is not None:
+                out[key] = (day, int(m.group(2)))
+                day = None
+    return out
+
+
+_NO_VENT = re.compile(r"^\s*(\d+) OUT OF (\d+) TESTS?\s*$")
+
+
+def parse_no_vent(lines):
+    """{(kind, line): (aborts, tests)} off a 373 or 388's NO-VENT TEST
+    ABORTS, the line under its heading."""
+    out, key, armed = {}, None, False
+    for line in lines:
+        m = _LINE_HEAD.match(line)
+        if m:
+            key = ("plld" if m.group(1) == "Q" else "wplld", int(m.group(2)))
+            armed = False
+            continue
+        if line.strip().startswith("NO-VENT TEST ABORTS"):
+            armed = True
+            continue
+        m = _NO_VENT.match(line)
+        if m and armed and key:
+            out[key] = (int(m.group(1)), int(m.group(2)))
+            armed = False
+    return out
+
+
+_LINE_TESTING = re.compile(r"\bTESTING (?:AT )?(3\.00?|0\.20|0\.10) GAL/HR")
+
+
+def parse_line_status(lines):
+    """{(kind, line): rate_key} for the lines a 381 or 386 shows testing."""
+    out = {}
+    for line in lines:
+        m = _LINE_HEAD.match(line)
+        t = _LINE_TESTING.search(line)
+        if m and t:
+            rate = "3.0" if t.group(1).startswith("3") else t.group(1)
+            out[("plld" if m.group(1) == "Q" else "wplld",
+                 int(m.group(2)))] = _LINE_RATE[rate]
+    return out
+
+
+_LINE_FIRST = re.compile(r"^\s*(?:LAST\s+(3\.0)|FIRST\s+(0\.10|0\.20))"
+                         r"\s+PASS(?: EACH MONTH)?:\s*(.*)$")
+
+
+def parse_line_history(lines):
+    """[Result] off a 374, 384 or 389: the last 3.0 pass, and the first
+    0.10 and 0.20 pass of each month, every one of them a PASS. A month
+    after the first is a date alone on its line, under the one before."""
+    out, kind, number, rate_key = [], None, None, None
+
+    def add(text):
+        started = parse_when(text)
+        if started is not None and kind and rate_key:
+            out.append(leaktest.Result(
+                kind, number, rate_key, leaktest.PASSED,
+                leaktest.RATES[rate_key], 0.0, 0.0, started))
+
+    for line in lines:
+        m = _LINE_HEAD.match(line)
+        if m:
+            kind = "plld" if m.group(1) == "Q" else "wplld"
+            number, rate_key = int(m.group(2)), None
+            continue
+        m = _LINE_FIRST.match(line)
+        if m:
+            rate_key = _LINE_RATE[m.group(1) or m.group(2)]
+            if m.group(3).strip():
+                add(m.group(3))
+            continue
+        if not line.strip():
+            continue
+        if rate_key and line.startswith(" ") and _WORDS.search(line):
+            add(line.strip())
+    return out
+
+
+def gross_passes(kind, number, counts, last, taken):
+    """The 3.0 passes a 373 counts and does not list, put back as results.
+
+    The report gives the last test and two counts, and this console works
+    both counts out of its history; a site loaded with one gross pass read
+    `PREV 24 HOURS : 1` where the site's read 60. So the passes it counted
+    are spread evenly through the windows they were counted in -- before
+    midnight for the day's count less the night's, after it for the rest --
+    and the last one is the LAST TEST the report names. When each of the
+    others happened is not on the report; how many there were is.
+    """
+    day, since = counts
+    midnight = time.mktime(time.localtime(taken)[:3] + (0, 0, 0, 0, 1, -1))
+    out = []
+
+    def spread(n, start, end):
+        if n <= 0 or end <= start:
+            return
+        step = (end - start) / (n + 1)
+        out.extend(leaktest.Result(kind, number, "gross", leaktest.PASSED,
+                                   leaktest.RATES["gross"], 0.0, 0.0,
+                                   start + step * (i + 1)) for i in range(n))
+
+    tonight = since - (1 if last is not None and last >= midnight else 0)
+    spread(tonight, midnight, last if last is not None else taken)
+    before = day - since - (1 if last is not None and last < midnight else 0)
+    spread(before, taken - 86400.0, midnight)
     return out
 
 
@@ -844,13 +1209,20 @@ def load(console, path, now=None):
     console.reset(keep_clock=True)
     console.version, console.board = version, board
     swver = head.get("swver")
+    console.software_part = None
     if swver and swver.isdigit() and versions.known(int(swver)):
         console.version = int(swver)
         if console.board not in versions.boards_for(console.version):
             boards = versions.boards_for(console.version)
             if boards:
                 console.board = boards[0]
-        applied.append(f"software version {console.version}")
+        # the site's own SOFTWARE#, which the header carries as `sw=`
+        sw = (head.get("sw") or "").strip().upper()
+        if re.match(rf"^346\d{int(swver):02d}-\d{{3}}-[A-Z]$", sw):
+            console.software_part = sw
+        applied.append(f"software version {console.version}"
+                       + (f", SOFTWARE# {sw}" if console.software_part
+                          else ""))
     keys = _decode_smodule(head.get("smodule", ""))
     if keys is not None:
         console.software = {k: v for k, v in keys.items() if v}
@@ -886,6 +1258,20 @@ def load(console, path, now=None):
         console.probe_gt = bool(flags.get("probe_gt"))
         console.smart_press = bool(flags.get("smart_press"))
         console.reset_cage = _reset_cage(console, cage_lines)
+        # where each card sits and what each position read, so the cage
+        # prints as the site's did while those cards stay fitted
+        positions = parse_cage_positions(cage_lines)
+        if positions and "?" not in [k for k, _p, _n in positions.values()]:
+            # the comm bay's halves are the console's to name: take its own
+            # key for each fitted position rather than the name's guess
+            seats = console.comm_positions()
+            for port in range(1, _console.BAY_SLOTS["comm"] + 1):
+                where = f"C{port}"
+                if where in positions and positions[where][0] is not None:
+                    seat = seats.get(port)
+                    _k, por, now = positions[where]
+                    positions[where] = (seat[1] if seat else None, por, now)
+            console.site_cage = positions
         applied.append("cards from " + where + ": " + (", ".join(
             f"{n} x {k}" if n > 1 else k
             for k, n in sorted(found.items())) or "none"))
@@ -942,7 +1328,25 @@ def load(console, path, now=None):
     console.alarm_log[:] = history
     if history:
         applied.append(f"{len(history)} alarm history row(s)")
+    # The tanks' and the lines' own histories, which go back further than
+    # 111 and 112 do: theirs, and the rows 111 and 112 hold
+    device_rows = (parse_tank_alarm_history(lines_of("206"), date_format)
+                   + parse_line_alarm_history(lines_of("382"), date_format)
+                   + parse_line_alarm_history(lines_of("387"), date_format))
+    for row in history + device_rows:
+        console.keep_device_history(row)
+    if device_rows:
+        applied.append(f"{len(device_rows)} tank and line alarm history "
+                       "row(s)")
     skipped += [f"alarm history row not recognised: {u}" for u in unplaced]
+
+    taken_204 = parse_when((lines_of("204") or [""])[0])
+    if taken_204 is not None:
+        shifts = parse_shift_report(lines_of("204"))
+        if shifts and load_shifts(console, shifts, taken_204):
+            applied.append(f"the last shift's inventory for "
+                           f"{len(next(iter(shifts.values()))['tanks'])} "
+                           "tank(s)")
 
     deliveries = parse_deliveries(lines_of("202") or lines_of("20C"))
     for tank, drops in deliveries.items():
@@ -960,7 +1364,37 @@ def load(console, path, now=None):
                + parse_line_results(lines_of("373"))
                + parse_line_results(lines_of("383"))
                + parse_line_results(lines_of("388")))
-    history_results = parse_leak_history(lines_of("207"))
+    history_results = (parse_leak_history(lines_of("207"))
+                       + parse_line_history(lines_of("374"))
+                       + parse_line_history(lines_of("384"))
+                       + parse_line_history(lines_of("389")))
+    # The 3.0 passes the results reports count and do not list, as of the
+    # moment the report was printed -- its own date line
+    for codes in (("373", "383"), ("388",)):   # 373 and 383 count alike
+        code = next((c for c in codes if lines_of(c)), None)
+        taken = parse_when((lines_of(code) or [""])[0]) if code else None
+        if taken is None:
+            continue
+        for (kind, number), counts in parse_line_counts(
+                lines_of(code)).items():
+            last = max((r.started for r in results
+                        if (r.kind, r.device, r.rate_key)
+                        == (kind, number, "gross")), default=None)
+            history_results += gross_passes(kind, number, counts, last,
+                                            taken)
+    for code in ("373", "388"):
+        for (kind, number), counts in parse_no_vent(lines_of(code)).items():
+            console.lines.line(kind, number).no_vent_seed = counts
+    # the measurements behind the 3.0, MID, 0.20 and 0.10 DIAG printouts
+    diagnosed = 0
+    for code, (kind, store, leg) in LINE_DIAGNOSTICS.items():
+        for number, rows in parse_line_diagnostic(code,
+                                                  lines_of(code)).items():
+            if rows:
+                getattr(console.lines.line(kind, number), store)[leg] = rows
+                diagnosed += len(rows)
+    if diagnosed:
+        applied.append(f"{diagnosed} line diagnostic measurement(s)")
     seen = set()
     for result in sorted(history_results + results, key=lambda r: r.started):
         key = (result.kind, result.device, result.rate_key, result.started)
@@ -969,7 +1403,9 @@ def load(console, path, now=None):
         seen.add(key)
         console.leaks.history.setdefault(
             (result.kind, result.device), []).append(result)
-    for result in results:
+    # the newest at each rate is the one a results screen shows; a report
+    # lists newest first, so the last one read is the OLDEST
+    for result in sorted(results, key=lambda r: r.started):
         console.leaks.results.setdefault(
             (result.kind, result.device), {})[result.rate_key] = result
     if results or history_results:
@@ -1006,6 +1442,7 @@ def load(console, path, now=None):
                                  and r["state"] == "02"
                                  for r in console.alarm_log):
             console.alarm_log.insert(0, dict(row))
+            console.keep_device_history(row)
     if standing:
         applied.append(f"{len(standing)} standing alarm(s)"
                        + (f", {len(posted)} posted" if posted else ""))
@@ -1028,6 +1465,18 @@ def load(console, path, now=None):
             console._filtered[record] = {"since": stamp, "on": True}
         seen.add(record)
     console._seen = seen
+
+    # A line the status report shows testing carries on testing, so it
+    # holds the tester and the other lines read TEST COMPLETE, as the
+    # site's did. Before this every repetitive line started at once.
+    for code in ("381", "386"):
+        for (kind, number), rate_key in parse_line_status(
+                lines_of(code)).items():
+            if console.has(kind):
+                console.lines.resume(kind, number, rate_key)
+                applied.append(f"{'Q' if kind == 'plld' else 'W'}{number} "
+                               f"testing at {_LINE_RATE_WORD[rate_key]} "
+                               "gal/hr, as the site was")
 
     # a site that was working when its backup was taken has its tank checks
     # armed, as the bench TLS-350 has (FIDELITY S35)

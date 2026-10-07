@@ -229,6 +229,18 @@ REPORTS |= {"7B0", "7B3"}
 # ...and none of the three draws the station header on the bench, which a
 # code with no page to read it off would otherwise be given for being here
 NO_PAGE_NO_HEADER = {"7C3", "7B0", "7B3"}
+# Reports whose frame was measured on a real console where the manual's
+# typeset sample says otherwise: whether the station header is drawn, how
+# many blank lines follow it, and -- by being here -- that the report draws
+# its own blank lines and the sample's are not added (`wiretables.lead`).
+# 207 off a version 23 site (2026-10-07): the header, two blank lines, and
+# the title over every tank, where the sample has none of the three.
+# 212 is the same report on the page (p.74 against p.65) and follows it.
+# 20A and 391, the same site: the header and two blank lines.
+MEASURED_FRAME = {"207": {"station": True, "head_gap": 2},
+                  "212": {"station": True, "head_gap": 2},
+                  "20A": {"station": True, "head_gap": 2},
+                  "391": {"station": True, "head_gap": 2}}
 # and three more with no page, answered with what the bench holds:
 # `Handler.FIXED`
 REPORTS |= {"51F", "55D", "535"}
@@ -587,7 +599,8 @@ class Handler:
         # and one line ending rather than two: the header block was joined
         # with CR/LF and several report bodies with a bare line feed, so one
         # reply carried both. See FIDELITY S6.
-        body = wiretables.lead(code[1:4], body)
+        if code[1:4] not in MEASURED_FRAME:
+            body = wiretables.lead(code[1:4], body)
         text = SEP.join(lines) + SEP + body.replace(SEP, chr(10)).replace(
             chr(13), chr(10)).replace(chr(10), SEP)
         # and the trailing spaces the bench keeps, which every comparison
@@ -776,6 +789,124 @@ class Handler:
                 self.c.tc_volume_at(tank, volume, temp),
                 self.c.height_at(tank, volume), water, temp]
 
+    def _adjusted_delivery_report(self, tok, tanks, records_of):
+        """20A and 20B's display body, headed and spaced as a version 23
+        site printed them (2026-10-07). They are two reports: 20A heads a
+        tank `TANK  1  REGULAR UNLEADED      MAG` over INCREASE columns and
+        leaves three blank lines after it; 20B is BIR ADJUSTED DELIVERY
+        REPORT, `T 1:` and its own START/END columns. This printed 20A's
+        for both. The site had no BIR and no rows, so a row is this
+        console's own layout under the site's headings."""
+        if tok == "20A":
+            rows = ["ADJUSTED DELIVERY REPORT", ""]
+            for tank in tanks:
+                label = self.c.text("602", tank) or f"TANK {tank}"
+                kind = (self.c.probe_type(tank) or "").split()[:1]
+                rows.append(f"TANK {tank:2d}  {label:<22.22s}"
+                            + (kind[0] if kind else "").rstrip())
+                rows.append("                       INCREASE   INCREASE"
+                            "            DELIVERY  DELIVERY")
+                rows.append("INCREASE DATE/TIME       VOLUME  TC VOLUME"
+                            "  ADJUSTMENT  VOLUME TC VOLUME")
+                for record in records_of(tank):
+                    rows.append(f"{clock_words(record.end['at']):22s}"
+                                f"{record.amount:9.0f}"
+                                f"{record.tc_amount:11.0f}"
+                                f"{record.sold:12.0f}"
+                                f"{record.amount + record.sold:8.0f}"
+                                f"{record.tc_amount + record.sold:10.0f}")
+                rows += ["", "", ""]
+            return SEP.join(rows)
+        rows = ["BIR ADJUSTED DELIVERY REPORT", "", ""]
+        for tank in tanks:
+            label = self.c.text("602", tank) or f"TANK {tank}"
+            rows.append(f"T {tank}:{label}")
+            rows.append(" " * 48 + "START    END     ADJ   ADJ TC")
+            rows.append("DELIVERY START   DATE   DELIVERY  END    DATE  "
+                        "VOLUME  VOLUME   DELIV   DELIV")
+            for record in records_of(tank):
+                start = time.strftime("%m/%d/%y %H:%M",
+                                      time.localtime(record.start["at"]))
+                end = time.strftime("%m/%d/%y %H:%M",
+                                    time.localtime(record.end["at"]))
+                rows.append(f"{start:<23s}{end:<24s}"
+                            f"{record.start['volume']:7.0f}"
+                            f"{record.end['volume']:8.0f}"
+                            f"{record.amount + record.sold:8.0f}"
+                            f"{record.tc_amount + record.sold:8.0f}")
+        return SEP.join(rows)
+
+    def _tanker_row(self, n, one):
+        """One 391 row under the site's headings: the number to column 2,
+        each stamp at its DATE/TIME (4 and 36), and the figures held right
+        against the end of GALLON, TEMP and TOTAL -- 26, 32, 57, 63, 71."""
+        row = f"{n:2d}  {self._tanker_stamp(one['start'])}"
+        row = f"{row:<19s}{one['start_vol']:7.0f}{one['start_temp']:6.1f}"
+        row = f"{row:<36s}{self._tanker_stamp(one['end'])}"
+        row = f"{row:<50s}{one['end_vol']:7.0f}{one['end_temp']:6.1f}"
+        return f"{row}{one['total']:8.0f}"
+
+    def _shift_records(self):
+        """[(shift, record)]: each programmed shift's last closed occurrence,
+        and the one running where none has closed yet."""
+        sh = self.c.shifts
+        out = [(n, sh.closed[n]) for n in sh.programmed() if n in sh.closed]
+        if not out and sh.open is not None:
+            out = [(sh.open["shift"], {"start": sh.open["start"],
+                                       "end": None,
+                                       "adjust": sh.open["adjust"]})]
+        return out
+
+    @staticmethod
+    def _snap_values(snap, tank):
+        """Volume, ullage, TC volume, height, water and temperature, in the
+        order 204's computer format numbers them."""
+        t = ((snap or {}).get("tanks") or {}).get(tank) or {}
+        return [t.get("volume", 0.0), t.get("ullage", 0.0), t.get("tc", 0.0),
+                t.get("height", 0.0), t.get("water", 0.0), t.get("temp", 0.0)]
+
+    def _shift_gauges(self, record, tank):
+        """(start, end, total, delivery) for one tank of one shift. TOTALS is
+        the shift's sales -- opening, plus delivered, less closing: 6844 +
+        2063 - 8175 = 732 on a version 23 site (2026-10-07)."""
+        start = self._snap_values(record.get("start"), tank)
+        end = self._snap_values(record.get("end"), tank)
+        delivered = (record.get("adjust") or {}).get(tank, 0.0)
+        total = (start[0] + delivered - end[0]) if record.get("end") else 0.0
+        return start, end, total, delivered
+
+    def _shift_report(self, tanks, shifts):
+        """204's display body as a version 23 site printed it (2026-10-07):
+        ` SHIFT REPORT`, each shift's start time, TANK PRODUCT, and a block a
+        tank with VOLUME at column 28 and its figures ending at 34, 44, 52,
+        60, 67 and 74. The manual's sample (p.65) has no title and a shift a
+        line under each tank; the site had one shift programmed, so how a
+        console with several heads them is not seen."""
+        rows = [" SHIFT REPORT", ""]
+        for shift, record in shifts:
+            hhmm = (self.c.shifts.hhmm(shift) or "").strip()
+            when = (f"{int(hhmm[:2]) % 12 or 12}:{hhmm[2:4]} "
+                    f"{'AM' if int(hhmm[:2]) < 12 else 'PM'}"
+                    if hhmm[:4].isdigit() else "")
+            rows += [f"SHIFT {shift} TIME: {when:>8s}", "",
+                     "TANK PRODUCT", ""]
+            for tank in tanks:
+                label = self.c.text("602", tank) or f"TANK {tank}"
+                start, end, total, delivered = self._shift_gauges(record,
+                                                                  tank)
+                rows.append(f"{tank:3d}  {label:<23.23s}VOLUME TC VOLUME"
+                            "  ULLAGE  HEIGHT  WATER   TEMP")
+
+                def line(name, v):
+                    vol, ullage, tc, height, water, temp = v
+                    return (f"{name:<26s}{vol:8.0f}{tc:10.0f}{ullage:8.0f}"
+                            f"{height:8.2f}{water:7.2f}{temp:7.2f}")
+                rows += [line(f"SHIFT {shift:2d} STARTING VALUES", start),
+                         line("         ENDING VALUES", end),
+                         f"{'         DELIVERY VALUE':<26s}{delivered:8.0f}",
+                         f"{'         TOTALS':<26s}{total:8.0f}", ""]
+        return SEP.join(rows)
+
     def _shift_lines(self, tank, number, row):
         """One shift's block of the I204 display report."""
         def line(name, values):
@@ -872,8 +1003,11 @@ class Handler:
                     f"{share} ULLAGE  HEIGHT    WATER     TEMP"]
             widths = "{:10.0f}{:10.0f}{:12.0f}{:8.2f}{:9.2f}{:9.2f}"
         else:
-            rows = ["TANK PRODUCT             VOLUME TC VOLUME   ULLAGE"
-                    "   HEIGHT    WATER     TEMP"]
+            # titled, with a blank line under it: a version 23 site's 201
+            # (2026-10-07), where the manual's sample has no title
+            rows = (["IN-TANK INVENTORY", ""] if tok == "201" else []) + [
+                "TANK PRODUCT             VOLUME TC VOLUME   ULLAGE"
+                "   HEIGHT    WATER     TEMP"]
             widths = "{:10.0f}{:10.0f}{:9.0f}{:9.2f}{:9.2f}{:9.2f}"
         for tank in tanks:
             label = self.c.text("602", tank) or ""
@@ -2030,6 +2164,8 @@ class Handler:
 
         See FIDELITY L5.
         """
+        if tok in MEASURED_FRAME:
+            return MEASURED_FRAME[tok]["station"]
         drawn = wiretables.station_header(tok)
         if drawn is None and tok in NO_PAGE_NO_HEADER:
             return False
@@ -3362,7 +3498,11 @@ class Handler:
                 # the bench TLS-350 (2026-09-24)
                 rows = ["TANK   PRODUCT                 STATUS"] + (
                     [""] if tanks else [])
-                for tank in tanks:
+                for i, tank in enumerate(tanks):
+                    if i:
+                        # and one between tanks: a version 23 site with four
+                        # (2026-10-07); the bench had one
+                        rows.append("")
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     names = [a["description"].upper()
                              for a in describe_alarms(
@@ -3402,8 +3542,8 @@ class Handler:
                 tanks = on
             else:
                 tanks = [int(dev)] if int(dev) in on else []
-            log = [r for r in self.c.alarm_log
-                   if r["aa"] == "02" and r.get("state", "02") != "01"]
+            log = [r for r in self.c.alarm_history("02")
+                   if r.get("state", "02") != "01"]
 
             def grouped(tank):
                 """[(nn, [record, ...])] -- three newest of each type."""
@@ -3426,6 +3566,9 @@ class Handler:
                     # type's group: the bench TLS-350 on 2026-09-24,
                     # `TANK 1  REGULAR UNLEADED    ` then SETUP DATA WARNING
                     # and PROBE OUT each under a blank line
+                    # and a blank line before the tank: a version 23 site
+                    # with four tanks in alarm history (2026-10-07)
+                    rows.append("")
                     rows.append(f"TANK {tank}  {label:<20.20s}")
                     for nn, records in blocks:
                         rows.append("")
@@ -3501,7 +3644,7 @@ class Handler:
                      else sorted(self.c.tank_level))
             if tok == "251":
                 if code[0].isupper():
-                    text = "\n" + self.c.csld.report(tanks) + "\n"
+                    text = "\n" + self.c.csld.results_table(tanks) + "\n"
                     return self._frame(code, text), "CSLD results"
                 body = "".join(f"{t:02d}{self.c.csld.result_code(t)}"
                                for t in tanks)
@@ -3603,6 +3746,11 @@ class Handler:
                 return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.tank_level))
+            if not self.c.licensed("bir"):
+                # Tickets are BIR's. A version 23 site with no BIR key
+                # answered I22100 with the frame and nothing in it
+                # (2026-10-07), not a refusal.
+                return self._frame(code, ""), "ticketed delivery report"
             text = self.c.deliveries.ticketed_report(tanks)
             if code[0].isupper():
                 if not tanks:
@@ -3777,30 +3925,28 @@ class Handler:
             lines = self.c.line_setup_lines(kind, self._devices_of(kind, dev))
             return self._frame(code, SEP.join(lines)), "line leak setup"
         if tok == "204":
-            # In-Tank Shift Inventory Report, one block per shift held
-            if not self.c.licensed("bir"):
-                return self._absent(code), "BIR not installed"
+            # In-Tank Shift Inventory Report: the Last-Shift Inventory of
+            # System Setup's shift start times (S502, `shifts.Shifts`), not
+            # BIR's shifts. A version 23 site with no BIR key answered it
+            # (2026-10-07); this answered nothing without the key.
+            if not self.c.has("probe"):
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
+            shifts = self._shift_records()
+            if not tanks or not shifts:
+                # nothing to report, so the frame and nothing in it: the
+                # bench TLS-350 with no tank reporting, in every capture
+                return self._frame(code, ""), "shift inventory"
             if code[0].isupper():
-                rows = []
-                for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append("TANK PRODUCT")
-                    rows.append(f"{tank:3d}  {label:<18.18s}"
-                                "  VOLUME TC VOLUME  ULLAGE  HEIGHT"
-                                "  WATER   TEMP")
-                    for n, row in enumerate(self._shift_rows(tank), start=1):
-                        rows += self._shift_lines(tank, n, row)
-                return self._frame(code, SEP.join(rows)), "shift inventory"
+                return (self._frame(code, self._shift_report(tanks, shifts)),
+                        "shift inventory")
             body = ""
             for tank in tanks:
                 pcode = (self.c.text("603", tank) or " ")[:1] or " "
-                for n, row in enumerate(self._shift_rows(tank), start=1):
-                    values = (self._gauges(tank, row, "opening")
-                              + self._gauges(tank, row, "physical")
-                              + [row["physical"] - row["opening"]])
-                    body += f"{tank:02d}{pcode}{n:02d}"
-                    body += packed.hexfloats(values)
+                for shift, record in shifts:
+                    start, end, total, _dlv = self._shift_gauges(record, tank)
+                    body += f"{tank:02d}{pcode}{shift:02d}0D"
+                    body += packed.hexfloats(start + end + [total])
             return self._frame(code, body), "shift inventory"
         if tok == "207":
             # In-Tank Leak Test History Report
@@ -3808,19 +3954,17 @@ class Handler:
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = ["TANK LEAK TEST HISTORY"]
-                for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"T {tank}:{label}")
-                    rows += self.c.leak_history_lines(tank)
-                return self._frame(code, SEP.join(rows)), "leak test history"
+                return (self._frame(code, self._leak_history_display(tanks)),
+                        "leak test history")
             body = ""
             for tank in tanks:
                 records = self.c.leak_history_records(tank)
                 body += f"{tank:02d}{len(records):02X}"
                 for kind_code, number, result in records:
                     full = self.c.full_volume(tank) or 0.0
-                    pct = (result.volume / full * 100.0) if full else 0.0
+                    pct = (result.percent if result.percent is not None
+                           else (result.volume / full * 100.0) if full
+                           else 0.0)
                     body += (kind_code + f"{number:02d}"
                              + TEST_TYPE_CODE.get(result.rate_key, "00")
                              + time.strftime("%y%m%d%H%M",
@@ -3834,29 +3978,21 @@ class Handler:
             if not self.c.has("probe"):
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
+            # An adjusted delivery is BIR's: a version 23 site with no BIR
+            # key printed both reports' headings over nothing at all
+            # (2026-10-07), where this adjusted every delivery the gauge saw.
+            adjusted = self.c.licensed("bir")
+
+            def adjusted_records(tank):
+                return [r for r in (self.c.deliveries.records.get(tank)
+                                    or []) if r.end] if adjusted else []
             if code[0].isupper():
-                rows = ["ADJUSTED DELIVERY REPORT"]
-                for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"T {tank}:{label}")
-                    rows.append("                       INCREASE   INCREASE"
-                                "            DELIVERY  DELIVERY")
-                    rows.append("INCREASE DATE/TIME       VOLUME  TC VOLUME"
-                                "  ADJUSTMENT  VOLUME TC VOLUME")
-                    for record in self.c.deliveries.records.get(tank) or []:
-                        if not record.end:
-                            continue
-                        rows.append(f"{clock_words(record.end['at']):22s}"
-                                    f"{record.amount:9.0f}{record.tc_amount:11.0f}"
-                                    f"{record.sold:12.0f}"
-                                    f"{record.amount + record.sold:8.0f}"
-                                    f"{record.tc_amount + record.sold:10.0f}")
-                return self._frame(code, SEP.join(rows)), "adjusted delivery"
+                return (self._frame(code, self._adjusted_delivery_report(
+                    tok, tanks, adjusted_records)), "adjusted delivery")
             body = ""
             for tank in tanks:
                 pcode = (self.c.text("603", tank) or " ")[:1] or " "
-                records = [r for r in (self.c.deliveries.records.get(tank)
-                                       or []) if r.end]
+                records = adjusted_records(tank)
                 body += f"{tank:02d}{pcode}00{len(records):02d}"
                 for record in records:
                     values = [record.amount, record.tc_amount, record.sold,
@@ -4649,6 +4785,10 @@ class Handler:
             if not self.c.has("probe"):
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
+            if not (data or "").strip():
+                # No step, no chart: a version 23 site answered a bare
+                # I21100 with the frame and nothing in it (2026-10-07).
+                return self._frame(code, ""), "tank chart"
             step = self._chart_step(data, code)
             if step is None:
                 return self._nine(code), "REJECTED: bad step size"
@@ -4770,6 +4910,13 @@ class Handler:
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             record = ((data or "").strip()[:2] or "01") if tok == "2E2" else ""
+            if tok == "2E2":
+                # A STORED inventory, and this console stores none: it
+                # answered with the live one dressed as record 01. A
+                # version 23 site with four tanks reporting answered the
+                # frame and nothing in it (2026-10-07); what makes a console
+                # store one is not on the shelf.
+                tanks = []
             if code[0].isupper() and not tanks and tok == "2E2":
                 # The bench TLS-350, every tank off: I2E200 is the frame and
                 # the stamp alone (site snapshot, 2026-09-22), as I201 is.
@@ -4970,6 +5117,11 @@ class Handler:
             if tok == "281" and not self.c.licensed("fuelman"):
                 return self._absent(code), "Fuel Manager not installed"
             tanks = self._tanks(dev)
+            if tok == "282" and not self.c.licensed("fuelman"):
+                # Fuel Manager's, like 281, but answered bare rather than
+                # refused: a version 23 site with no Fuel Manager key
+                # (2026-10-07)
+                return self._frame(code, ""), "FLS volumes"
             if tok == "282":
                 if code[0].isupper():
                     rows = ["FLS DIAGNOSTICS: VOLUME TABLE"]
@@ -5279,27 +5431,35 @@ class Handler:
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = []
+                if not tanks:
+                    # the frame and nothing in it, on the bench with no tank
+                    # reporting (`cap_coldstart`)
+                    return self._frame(code, ""), "tanker load"
+                rows = ["TANKER LOAD REPORT", ""] if tok == "391" else []
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
+                    loads = self._loads_of(tank)
+                    if tok == "391":
+                        # A version 23 site (2026-10-07): the title, `T 1:`,
+                        # a blank line, GALLON columns, NO DATA HISTORY on a
+                        # tank with none, and a blank line after. p.146's
+                        # sample heads it `TANK  1 ...` over VOLUME, and has
+                        # no title. A row is placed under the site's
+                        # headings; the site had no loads to show one.
+                        rows += [f"T {tank}:{label}", "",
+                                 "NO START DATE/TIME  GALLON  TEMP    "
+                                 "END DATE/TIME  GALLON  TEMP   TOTAL"]
+                        for n, one in loads:
+                            rows.append(self._tanker_row(n, one))
+                        if not loads:
+                            rows.append("NO DATA HISTORY")
+                        rows.append("")
+                        continue
                     # p.146 and p.147 head a tank with the number held right
                     # against column 6 and the label at 8, which is NOT how
                     # p.64 and p.71 head one
                     rows.append(f"TANK {tank:2d} {label}")
-                    loads = self._loads_of(tank)
-                    if tok == "391":
-                        rows.append("NO START DATE/TIME VOLUME  TEMP   "
-                                    "END DATE/TIME VOLUME  TEMP  TOTAL")
-                        for n, one in loads:
-                            rows.append(
-                                f"{n:2d}  {self._tanker_stamp(one['start'])}"
-                                f"{one['start_vol']:7.0f}"
-                                f"{one['start_temp']:6.1f}  "
-                                f"{self._tanker_stamp(one['end'])}"
-                                f"{one['end_vol']:7.0f}"
-                                f"{one['end_temp']:6.1f}"
-                                f"{one['total']:7.0f}")
-                    else:
+                    if tok == "392":
                         rows.append("NO         DATE/TIME      VOLUME  TEMP"
                                     "  TC VOLUME")
                         for n, one in loads:
@@ -5658,12 +5818,8 @@ class Handler:
                 return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
-                rows = ["TANK LEAK TEST HISTORY"]
-                for tank in tanks:
-                    label = self.c.text("602", tank) or f"TANK {tank}"
-                    rows.append(f"T {tank}:{label}")
-                    rows += self.c.leak_history_lines(tank)
-                return self._frame(code, SEP.join(rows)), "leak test history"
+                return (self._frame(code, self._leak_history_display(tanks)),
+                        "leak test history")
             body = ""
             for tank in tanks:
                 records = self.c.leak_history_records(tank)
@@ -6162,6 +6318,22 @@ class Handler:
             out.append(f"{indent}{shown}")
         return self._frame(code, SEP.join(out)), "a label-over-value group"
 
+    def _leak_history_display(self, tanks):
+        """207's and 212's display body, which the manual prints alike.
+
+        The title over every tank, a blank line either side of the tank's
+        head, and three blank lines between tanks: a version 23 site
+        (2026-10-07). The sample prints the title once.
+        """
+        rows = []
+        for i, tank in enumerate(tanks):
+            label = self.c.text("602", tank) or f"TANK {tank}"
+            if i:
+                rows += ["", "", ""]
+            rows += ["TANK LEAK TEST HISTORY", "", f"T {tank}:{label}", ""]
+            rows += self.c.leak_history_lines(tank)
+        return SEP.join(rows)
+
     def _head_gap(self, tok):
         """Blank lines between the frame and the first line of the body.
 
@@ -6173,6 +6345,8 @@ class Handler:
         position, and it is `head_gap` in `wiretitles.json`. A code the
         manual does not draw keeps the commoner answer. See FIDELITY S6.
         """
+        if tok in MEASURED_FRAME:
+            return MEASURED_FRAME[tok]["head_gap"]
         entry = WIRE_TITLES.get(wiretables.SHOWN_AS.get(tok, tok))
         if entry is None or entry.get("head_gap") is None:
             return 1

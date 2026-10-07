@@ -341,7 +341,13 @@ class CSLD:
         if self.c.probe_leak_rating(tank) != CSLD_PROBE_RATING:
             return False
         raw = self.c.values.get(f"S611{tank:02d}") or ""
-        body = raw[2:] if len(raw) > 8 else raw
+        # the tank prefix comes off because 611 is prefixed, not because the
+        # value is long: `010207` is tank 1, 02 hours, rate 0, method 7, and
+        # a CSLD or AUTOMATIC entry has no time after it, so it is six
+        # characters and `len(raw) > 8` read its method from the hours. A
+        # version 23 site on CSLD loaded as CSLD NOT ENABLED (2026-10-07);
+        # the same mistake as FIDELITY R17's in `Console.limit`.
+        body = raw[2:] if self.c.is_prefixed("611") else raw
         return body[3:4] == "7"          # 7 = CSLD, from S611's method field
 
     def report_only(self, tank):
@@ -1197,6 +1203,22 @@ class CSLD:
                 out.append(f"  {len(samples)} TESTS, AVERAGE "
                            f"{sum(rates) / len(rates):.3f} GAL/HR")
             out.append("")
+        return chr(10).join(out)
+
+    def results_table(self, tanks):
+        """I251's display body: CSLD TEST RESULTS, a row a tank.
+
+        576013-635 Rev AA p.97's own sample for 251, and a version 23 site
+        printed exactly it (2026-10-07): the tank number ending at column
+        2, the label from 5, and the result from 28 --
+        `  1  REGULAR UNLEADED       PER: OCT  7, 2026 PASS`. This answered
+        251 with `report`'s block a tank and the probe's serial number,
+        which is the paper's form and 576013-635 A56's.
+        """
+        out = ["CSLD TEST RESULTS", "TANK PRODUCT                RESULT"]
+        for tank in tanks:
+            label = self.c.text("602", tank) or f"TANK {tank}"
+            out.append(f"{tank:3d}  {label:<23.23s}{self.status_line(tank)}")
         return chr(10).join(out)
 
     def delete_table(self, tank):

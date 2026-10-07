@@ -312,8 +312,8 @@ def _alarms(console, kind, number, log):
     """
     want = CATEGORY[kind]
     if log:
-        return [r for r in console.alarm_log
-                if r["aa"] == want and r["tt"] == f"{number:02d}"]
+        return [r for r in console.alarm_history(want)
+                if r["tt"] == f"{number:02d}"]
     return [r for r in console.compute_alarms()
             if r[:2] == want and r[4:6] == f"{number:02d}"]
 
@@ -388,11 +388,24 @@ def _no_vent(ln):
     "Test aborts if Pon = P1 (P1 should be lower since pump is shut off before
     P1 is measured)", so the count is every measurement whose Pon and P1 came
     out the same. 373 and 388 print one figure for the line rather than one
-    per rate, so every measurement the line holds is counted.
+    per rate, so every measurement the line holds is counted -- over the
+    last ten: a version 23 site printed `0 OUT OF 10 TEST` on a line that
+    had run sixty 3.0 tests that day (2026-10-07), so the second figure is
+    a window and not a total. A site backup's own figures stand in for the
+    tests this console holds no readings of.
     """
-    rows = (ln.readings["gross"] + ln.readings["mid"]
-            + ln.cycles["periodic"] + ln.cycles["annual"])
-    return sum(1 for r in rows if abs(r.pon - r.p1) < 0.001), len(rows)
+    rows = sorted(ln.readings["gross"] + ln.readings["mid"]
+                  + ln.cycles["periodic"] + ln.cycles["annual"],
+                  key=lambda r: r.when)[-NO_VENT_WINDOW:]
+    aborts = sum(1 for r in rows if abs(r.pon - r.p1) < 0.001)
+    if len(rows) < NO_VENT_WINDOW and ln.no_vent_seed:
+        seeded, tests = ln.no_vent_seed
+        return (min(aborts + seeded, NO_VENT_WINDOW),
+                min(len(rows) + tests, NO_VENT_WINDOW))
+    return aborts, len(rows)
+
+
+NO_VENT_WINDOW = 10
 
 
 def _result_word(result, rate=None):
@@ -566,6 +579,16 @@ SHOWN_RATES = {"373": ("annual", "periodic"), "383": ("annual",),
                "375": ("annual", "periodic"), "385": ("periodic", "annual"),
                "388": ("periodic", "annual")}
 RATE_NAME = {"periodic": "0.20", "annual": "0.10"}
+# How many results at a precision rate the results report lists. A version
+# 23 site listed ten 0.20 on each of four lines with more behind them, so
+# ten is the depth; its 0.10 lists held eight, every one it had, and are
+# kept to the same ten.
+RESULTS_KEPT = 10
+# How many months the history report's FIRST ... PASS EACH MONTH lists run
+# to. The same site printed twelve 0.20 months and five 0.10 on all four
+# lines, where its 0.10 results went back eight passes: fitted to that one
+# console, whose rule for the 0.10 depth is not known.
+MONTHS_KEPT = {"periodic": 12, "annual": 5}
 
 
 def _pressure_results(handler, code, kind, lines, tok):
@@ -605,27 +628,42 @@ def _pressure_results(handler, code, kind, lines, tok):
         for rate_key in SHOWN_RATES[tok]:
             rows.append(f"{RATE_NAME[rate_key]} GAL/HR RESULTS:")
             rows.append("")
-            rows.append(_result_word(c.leaks.result(kind, number, rate_key),
-                                     RATE_NAME[rate_key]))
-            rows.append("")
+            # Every result kept, newest first, and two blank lines under
+            # the list: a version 23 site printed ten 0.20 and eight 0.10
+            # under each line (2026-10-07). With none it is the one line
+            # and one blank the bench TLS-350 printed (`cap_site`).
+            recent = c.leaks.recent(kind, number, rate_key, RESULTS_KEPT)
+            if recent:
+                rows += [_result_word(r) for r in recent] + ["", ""]
+                if tok in ("383", "385"):
+                    # no NO-VENT block follows on these, and the site's
+                    # 383 left three blank lines where 373 prints it
+                    rows.append("")
+            else:
+                rows += [_result_word(None, RATE_NAME[rate_key]), ""]
         aborts, total = _no_vent(ln)
         if tok not in ("383", "385") and total:
             # "NO-VENT TEST ABORTS: 3 OUT OF 10 TESTS (Added in V19)", which
             # 383's own sample does not print -- and the bench, with no test
             # run, does not print on 373 or 375 either: kept for a line that
             # has run one, which is a reading and not a measurement
+            # `  0 OUT OF 10 TEST` and two blank lines, as a version 23
+            # site printed it (2026-10-07); the manual's typeset sample has
+            # three spaces and TESTS
             rows.append("NO-VENT TEST ABORTS:")
-            rows.append(f"   {aborts} OUT OF {total} TESTS")
-            rows.append("")
+            rows.append(f"  {aborts} OUT OF {total} TEST")
+            rows += ["", ""]
         body += (f"{number:02d}{_stamp(gross.started if gross else 0)}"
                  + (leaktest.RESULT_CODE[gross.result] if gross else "00")
                  + "00" + f"{min(day, 0xFFFF):04X}{min(since, 0xFFFF):04X}")
         for rate_key in RESULT_RATES[tok]:
-            result = c.leaks.result(kind, number, rate_key)
-            body += "01" if result else "00"
-            if result:
-                body += (_stamp(result.started)
-                         + leaktest.RESULT_CODE[result.result] + "00")
+            # "NN - Number of 0.10 gal/hr test results (14 character groups)
+            # to follow", newest first as the display lists them
+            recent = c.leaks.recent(kind, number, rate_key, RESULTS_KEPT)
+            body += f"{len(recent):02X}"
+            body += "".join(_stamp(r.started)
+                            + leaktest.RESULT_CODE[r.result] + "00"
+                            for r in recent)
         if tok == "375":
             # four characters more than 373's on the bench, all 0 with no
             # test run: `i37500`, `cap_site`. What they count is not known.
@@ -657,18 +695,25 @@ def _pressure_history(handler, code, kind, lines, tok):
         # with no pass the date's field stands empty to column 54, and a
         # month with none leaves its heading at thirty: the bench TLS-350
         # with Q1 on and never tested (2026-09-24)
-        rows += [_head(c, kind, number), "",
-                 f"{'LAST  3.0 PASS:':<28s}" + clock_words(last) if last
-                 else f"{'LAST  3.0 PASS:':<54s}", ""]
+        # A date stands at column 30 under its heading, newest first, and
+        # two blank lines follow anything with a date in it: a version 23
+        # site (2026-10-07). The bench's empty field to 54 and its empty
+        # heading to 30 are the same column with nothing in it, followed
+        # by the one blank line it printed then.
+        rows += [_head(c, kind, number), ""]
+        rows += ([f"{'LAST  3.0 PASS:':<30s}" + clock_words(last), "", ""]
+                 if last else [f"{'LAST  3.0 PASS:':<54s}", ""])
         body += f"{number:02d}{_stamp(last)}00"
         for rate_key in RESULT_RATES[tok]:
-            months = c.leaks.first_pass_each_month(kind, number, rate_key)
+            months = c.leaks.first_pass_each_month(
+                kind, number, rate_key)[::-1][:MONTHS_KEPT[rate_key]]
             head = f"FIRST {RATE_NAME[rate_key]} PASS EACH MONTH:"
-            rows.append(f"{head:<28s}" + clock_words(months[0]) if months
-                        else f"{head:<30s}")
-            for when in months[1:]:
-                rows.append(" " * 28 + clock_words(when))
-            rows.append("")
+            if months:
+                rows.append(f"{head:<30s}" + clock_words(months[0]))
+                rows += [" " * 30 + clock_words(w) for w in months[1:]]
+                rows += ["", ""]
+            else:
+                rows += [f"{head:<30s}", ""]
             body += f"{min(len(months), 255):02X}"
             body += "".join(_stamp(w) + "00" for w in months)
     if code[0].isupper():
@@ -686,22 +731,25 @@ def _line_status(handler, code, kind, lines, tok):
     c = handler.c
     title = ("WPLLD LINE LEAK STATUS" if kind == "wplld"
              else "PRESSURE LINE LEAK STATUS")
-    rows, body, standing = [title, "", LINE_HEADER], "", []
-    for number in lines:
+    rows, body = [title, "", LINE_HEADER], ""
+    for i, number in enumerate(lines):
         ln = c.lines.line(kind, number)
-        rows.append(_line_row(c, ln, kind, number))
         records = _alarms(c, kind, number, log=False)
-        standing += records
+        if i:
+            # Each line is its own block, its alarms under it, two blank
+            # lines between: a version 23 site with four lines on
+            # (2026-10-07). The bench had one line on, which reads the same
+            # either way. (How the reply closes is `replytails.BODY_TAIL`'s.)
+            rows += ["", ""]
+        # three in, and the name in nineteen: `   PLLD OPEN ALARM    ` on
+        # the bench TLS-350 (`cap_q1on`, `cap_site`, and 2026-09-24), where
+        # every comparison stripped the four spaces
+        rows += [_line_row(c, ln, kind, number), "", "ACTIVE ALARMS:"]
+        rows += [f"   {_alarm_text(r[:2], r[2:4]):<19s}" for r in records]
         tt, _words_ = _test_status(ln, kind)
         body += (f"{number:02d}{_status_bits(c, ln, kind, number)}{tt}"
                  f"{min(len(records), 255):02X}")
         body += "".join(_alarm_code(r[2:4]) for r in records)
-    rows += ["", "ACTIVE ALARMS:"]
-    # three in, and the name in nineteen: `   PLLD OPEN ALARM    ` on the
-    # bench TLS-350 (`cap_q1on`, `cap_site`, and 2026-09-24), where every
-    # comparison stripped the four spaces. (How the reply closes is
-    # `replytails.BODY_TAIL`'s.)
-    rows += [f"   {_alarm_text(r[:2], r[2:4]):<19s}" for r in standing]
     if code[0].isupper():
         return _display(handler, code, rows, tok), "line leak status"
     return handler._frame(code, body), "line leak status"

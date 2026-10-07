@@ -1554,6 +1554,39 @@ class EveryLineOnTheCardIsScheduled(unittest.TestCase):
         self.assertIsNotNone(c.leaks.active("plld", 5))
 
 
+class RepetitiveLinesTakeTurns(unittest.TestCase):
+    """On repetitive testing a real console tests one PLLD line and leaves
+    the others idle: a version 23 site read TESTING 0.20 GAL/HR on Q4 and
+    TEST COMPLETE on Q1 to Q3 (2026-10-07). The schedule queued all four."""
+
+    def test_one_line_tests_and_the_rest_wait_idle(self):
+        c = a_console()
+        for n in (1, 2, 3, 4):
+            c.values[f"S78C{n:02d}"] = f"{n:02d}1"
+        c.leaks.tick()
+        c.clock_offset += 60.0
+        c.leaks.tick()
+        busy = [n for n in (1, 2, 3, 4) if c.lines.line("plld", n).running()]
+        self.assertEqual(len(busy), 1, busy)
+        for n in (1, 2, 3, 4):
+            if n not in busy:
+                self.assertNotEqual(c.lines.line("plld", n).state,
+                                    "TEST PENDING", n)
+
+    def test_the_next_turn_goes_to_the_line_that_waited_longest(self):
+        c = a_console()
+        for n in (1, 2):
+            c.values[f"S78C{n:02d}"] = f"{n:02d}1"
+        c.leaks.tick()
+        c.clock_offset += 60.0
+        c.leaks.tick()
+        first = next(n for n in (1, 2) if c.lines.line("plld", n).running())
+        run_out(c, 2)
+        c.leaks.tick()
+        second = next(n for n in (1, 2) if c.lines.line("plld", n).running())
+        self.assertNotEqual(first, second)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
 

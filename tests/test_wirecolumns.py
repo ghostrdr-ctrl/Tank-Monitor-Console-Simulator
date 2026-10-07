@@ -96,7 +96,9 @@ class TheRowsUnderThemAreToo(unittest.TestCase):
 
     def test_208_prints_the_manuals_own_row(self):
         """576013-635 Rev AA p.71, with this site's product label in place of
-        the sample's. The stamp is the TWENTY-TWO character one."""
+        the sample's. The page's stamp is twenty-two characters and two
+        spaces; a version 23 site's is `clock_words`, twenty-one, and three
+        (2026-10-07), which puts RESULT at the same column 35."""
         c, h = a_full_site()
         c.values["S60201"] = "01REGULAR UNLEADED"
         when = time.mktime((1995, 11, 21, 8, 34, 0, 0, 0, -1))
@@ -107,7 +109,7 @@ class TheRowsUnderThemAreToo(unittest.TestCase):
         self.assertIn("TANK 1    REGULAR UNLEADED", rows)
         self.assertIn("TEST TYPE  START TIME              "
                       "RESULT     RATE  HOURS  VOLUME", rows)
-        self.assertIn(" ANNUAL    NOV 21, 1995   8:34 AM  "
+        self.assertIn(" ANNUAL    NOV 21, 1995  8:34 AM   "
                       "PASSED     0.00    12    9088", rows)
 
     def test_621_prints_the_manuals_own_row(self):

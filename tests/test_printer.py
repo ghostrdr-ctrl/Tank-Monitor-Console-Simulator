@@ -179,6 +179,10 @@ class TheAlarmHistoryReports(unittest.TestCase):
         c.alarm_log = [{"aa": aa, "nn": "01", "tt": "01",
                         "at": "9512221531", "state": "02"}
                        for aa in ("02", "12", "21", "35", "36")]
+        # and into the tanks' and lines' own histories, as `_log_alarms`
+        # files a live alarm
+        for row in c.alarm_log:
+            c.keep_device_history(row)
         self.assertIn("TANK 1  DIESEL", self.lines(c, "T"))
         self.assertIn("SENSOR  LOCATION", self.lines(c, "H"))
         self.assertIn("DEVICE  ALARMS", self.lines(c, "X"))

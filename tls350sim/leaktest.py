@@ -317,7 +317,13 @@ class Result:
     """One finished test, as function 208 reports it."""
 
     def __init__(self, kind, device, rate_key, result, rate, hours, volume,
-                 started, flags=(), manifolded=False):
+                 started, flags=(), manifolded=False, method=None,
+                 percent=None):
+        # STANDARD or CSLD, and % VOLUME, as a real console printed them for
+        # this test on a 207 a site backup brought in. None for a test this
+        # console ran, which works both out (`Console.leak_history_lines`).
+        self.method = method
+        self.percent = percent
         # why the console called it invalid, in Table 29-4's own words; the
         # slip prints them under a FLAGS heading
         self.flags = tuple(flags)
@@ -337,19 +343,22 @@ class Result:
     def line(self):
         """One row of I208, in 576013-635 Rev AA p.71's own columns.
 
-        The type at column 1, the stamp at 11 -- and it is the TWENTY-TWO
-        character stamp, not `clock_words` -- then the result at 35 and the
-        rate, hours and volume held right against 49, 55 and 63.
+        The type at column 1, the stamp at 11, then the result at 35 and
+        the rate, hours and volume held right against 49, 55 and 63. The
+        stamp is `clock_words`, twenty-one characters, and three spaces:
+        ` GROSS     OCT  7, 2026  5:21 AM   PASSED` on a version 23 site
+        (2026-10-07). The manual's typeset sample has a twenty-two
+        character stamp and two, which puts RESULT at the same column.
 
         The GROSS row carries no HOURS. The sample's other two print 12
         under that heading and its gross row leaves the column empty, which
         is the one thing on the page that says what a gross test IS: it is
         not measured over a period, it is a level read against a level.
         """
-        from .clock import clock_wide
+        from .clock import clock_words
         hours = "" if self.rate_key == "gross" else f"{self.hours:.0f}"
         return (f" {self.rate_key.upper():<10s}"
-                f"{clock_wide(self.started):22s}  "
+                f"{clock_words(self.started):21s}   "
                 f"{self.result:<10s}{self.rate:5.2f}{hours:>6s}"
                 f"{self.volume:8.0f}")
 
@@ -636,12 +645,28 @@ class Engine:
                 continue
             # every line the card carries, and not the first four: a PLLD
             # has six. FIDELITY H16.
+            due = []
             for line in range(1, self.c.capacity(kind) + 1):
                 raw = self.c.values.get(f"S{code}{line:02d}")
                 if not raw or not raw.strip().endswith("1"):
                     continue          # 1 = REPETITIVE, and only repetitive
                 if (kind, line) not in self.running:
-                    self.start(kind, line, "periodic", origin="schedule")
+                    due.append(line)
+            if kind in self.c.lines.SERIAL and due:
+                # One line at a time, and the others are not queued behind
+                # it: a version 23 site on repetitive testing read TESTING
+                # 0.20 GAL/HR on Q4 and TEST COMPLETE on the other three
+                # (2026-10-07). So the schedule starts the next line only
+                # when the tester is free, the one that has waited longest.
+                if any(ln.running() for (k, _n), ln
+                       in self.c.lines.lines.items() if k == kind):
+                    continue
+                def waited(n):
+                    last = self.recent(kind, n, "periodic", 1)
+                    return (last[0].started if last else 0.0, n)
+                due = [min(due, key=waited)]
+            for line in due:
+                self.start(kind, line, "periodic", origin="schedule")
 
     # Where the start TIME sits in S611's data, per method, and how long the
     # schedule in front of it is. 576013-635 Rev AA writes the whole command
@@ -672,7 +697,8 @@ class Engine:
         raw = self.c.values.get(f"S611{tank:02d}")
         if not raw:
             return None
-        body = raw[2:] if len(raw) > 8 else raw
+        # off the prefix, not the length (`csld.CSLD.enabled`)
+        body = raw[2:] if self.c.is_prefixed("611") else raw
         if len(body) < 8 or not body[:2].isdigit():
             return None
         hours = int(body[:2]) or 2
@@ -965,7 +991,15 @@ class Engine:
         # each month"
         log = self.history.setdefault((result.kind, result.device), [])
         log.append(result)
-        del log[:-200]
+        # Kept per RATE. One cap across them all let a line passing sixty
+        # 3.0 tests a day push its twice-yearly 0.10 results out inside a
+        # week, and the results report lists those back years.
+        same = [r for r in log if r.rate_key == result.rate_key]
+        if len(same) > self.HISTORY_PER_RATE:
+            log.remove(same[0])
+
+    #: how many results of one rate a device's history keeps
+    HISTORY_PER_RATE = 200
 
     def last_pass(self, kind, device, rate_key):
         """When that rate last passed on that device, or None."""
@@ -973,6 +1007,11 @@ class Engine:
             if result.rate_key == rate_key and result.result == PASSED:
                 return result.started
         return None
+
+    def recent(self, kind, device, rate_key, most):
+        """The latest results at that rate, newest first."""
+        log = self.history.get((kind, device)) or []
+        return [r for r in reversed(log) if r.rate_key == rate_key][:most]
 
     def first_pass_each_month(self, kind, device, rate_key):
         """The first pass in each month it passed in, oldest first."""
