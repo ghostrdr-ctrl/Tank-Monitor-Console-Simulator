@@ -53,6 +53,7 @@ import threading
 
 from . import atomicfile
 from . import exposed
+from . import listen
 from .exposed import BENCH as BENCH_LEVEL
 from . import xportrec as R
 
@@ -960,12 +961,23 @@ class Discovery:
             self.log("-- XPort 77FE also bound to %s:%d for directed reads"
                      % (ip, DISCOVERY_PORT))
         while not self._stop:
+            # `wait_readable` rather than `listen.recvfrom`, so the
+            # ConnectionResetError below keeps its own meaning: swallowing
+            # it as "the socket has gone" is the Z3 defect. FIDELITY R30.
+            if not listen.wait_readable(sock, lambda: not self._stop):
+                try:
+                    sock.close()
+                except OSError:
+                    pass
+                return
             try:
                 data, addr = sock.recvfrom(1024)
             except ConnectionResetError:
                 continue            # the same as `serve`'s, FIDELITY Z3
             except OSError:
                 return
+            if self._stop:
+                return              # arrived in the gap; do not answer it
             if self._already_answered(data, addr):
                 continue
             reply = self.answer(data) if self.powered() else None
@@ -998,6 +1010,13 @@ class Discovery:
         if self.log:
             self.log("-- XPort discovery on udp/%d" % DISCOVERY_PORT)
         while not self._stop:
+            # See the directed listener above, and FIDELITY R30.
+            if not listen.wait_readable(self.sock, lambda: not self._stop):
+                try:
+                    self.sock.close()
+                except OSError:
+                    pass
+                return
             try:
                 data, addr = self.sock.recvfrom(1024)
             except ConnectionResetError:
@@ -1009,6 +1028,8 @@ class Discovery:
                 continue
             except OSError:
                 return
+            if self._stop:
+                return              # arrived in the gap; do not answer it
             if self._already_answered(data, addr):
                 continue
             reply = self.answer(data) if self.powered() else None
@@ -1241,10 +1262,16 @@ class Discovery:
         if self.log:
             self.log("-- XPort 77FE also on tcp/%d" % DISCOVERY_PORT)
         while not self._stop:
-            try:
-                conn, addr = srv.accept()
-            except OSError:
+            # See `listen.accept` and FIDELITY R30: `self._stop` alone
+            # never reached a thread already blocked inside the accept.
+            got = listen.accept(srv, lambda: not self._stop)
+            if got is None:
+                try:
+                    srv.close()
+                except OSError:
+                    pass
                 return
+            conn, addr = got
             if not self.powered():
                 try:
                     conn.close()

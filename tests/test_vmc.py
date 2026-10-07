@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tls350sim.console import Console
 from tls350sim.wire import Handler, SOH
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_forecourt(controllers=2):
@@ -196,7 +197,7 @@ class TheTwoAlarmHistoryReports(unittest.TestCase):
     def test_no_module_no_report(self):
         c = Console()
         c.modules["rs232"] = 1
-        self.assertIn("9999", self.ask(c, b"I41200"))
+        self.assertTrue(is_bare(self.ask(c, b"I41200")))
 
 
 class TheDeviceNumberHasACeilingWherethePagePrintsOne(unittest.TestCase):

@@ -34,7 +34,9 @@
  "60A": {
   "_from": "I60A00.bin",
   "_note": "The rows run straight under the heading. p.253 draws a blank line there, and none of 60A's five siblings on this shelf -- 604, 612, 625, 634, 635 -- has one on the page either.",
-  "rowgap": 0
+  "rowgap": 0,
+  "_note_2": "bench-2026-09-18/cap_site: the page's own sample row, `1 REGULAR UNLEADED 1 PT 10000`, had been kept as a line to lead with a blank -- so a site programmed exactly like the sample got one. The bench leads with none.",
+  "leads": {"TANK PRODUCT LABEL TANK PROFILE GALLONS": 1}
  },
  "612": {
   "_from": "I61200.bin",
@@ -75,6 +77,368 @@
   "_note": "Two spaces after TANK, and no blank line between the title and the heading. The page has one space and a blank line.",
   "title": "TANK  STICK HEIGHT OFFSET",
   "gap": 0,
-  "leads": null
+  "leads": null,
+  "_note_2": "bench-2026-09-18/transcripts/setsweep.jsonl: a negative offset's sign is drawn one column past the edge, -144.00 ending at 39 where 144.00 ends at 38.",
+  "columns": [{"align": "right", "end": 1, "head": "TANK", "start": 1}, {"align": "left", "end": 22, "head": "PRODUCT LABEL", "start": 7}, {"align": "right", "end": 38, "head": "INCHES", "places": 2, "start": 35, "minus_out": true}]
+ },
+ "789": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I78900.bin",
+  "_note": "The bench console titles it LINE LENGTH, as its own heading and 7A9's title do, where p.397 says PIPE LENGTH. The value is right-aligned to end at column 38 with FEET on it: `Q 1:` and 27 spaces put 501 at column 31, and a 20 foot line prints its 20 at 32.",
+  "title": "PRESSURE LINE LEAK LINE LENGTH",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "right", "end": 38, "head": "LINE LENGTH", "start": 31, "number_end": 33}]
+ },
+ "776": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I77600.bin",
+  "_note": "The console's title carries the family's name in front, like 775's: PRESSURE LINE LEAK PROFILE LINE TEST REFERENCE PRESSURE. p.378 prints the last five words only.",
+  "title": "PRESSURE LINE LEAK PROFILE LINE TEST REFERENCE PRESSURE",
+  "_note_2": "bench-2026-09-18/transcripts/setsweep.jsonl: the pressure is a number ending at column 35 with PSI after it, 10.00 from 31 and 5.00 from 32.",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "left", "end": 39, "head": "TEST REF PRESSURE", "places": 2, "start": 31, "number_end": 35}]
+ },
+ "788": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I78800.bin",
+  "_note": "The heading is TYP: at column 30, and the pipe name sits under it at 30 -- the abbreviation 780's own TYP: line uses. p.396 draws PIPE TYPE: at 28.",
+  "heading": "LINE                          TYP:",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "left", "end": 49, "head": "TYP:", "start": 30}]
+ },
+ "63A": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I63A00.bin",
+  "_note": "The tank number ends at column 1, where every other tank table puts it, and the threshold ends at column 38: 10.00% from 33 in the cold start, 0.00% from 34 in the Set sweep (transcripts/setsweep.jsonl). p.301's sample has the number a column to the right.",
+  "columns": [{"align": "right", "end": 1, "head": "TANK", "start": 1}, {"align": "left", "end": 22, "head": "PRODUCT LABEL", "start": 7}, {"align": "right", "end": 38, "head": "PUMP THRESHOLD", "start": 33}]
+ },
+ "61B": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I61B00.bin",
+  "_note": "The console's title is IN-TANK LEAK GROSS TEST AUTO-CONFIRM, with no colon. p.273 prints IN-TANK STATIC GROSS TEST AUTO-CONFIRM:.",
+  "title": "IN-TANK LEAK GROSS TEST AUTO-CONFIRM"
+ },
+ "785": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I78500.bin and cap_unprogrammed/raw/I78500.bin",
+  "_note": "A line with no tank prints NONE from column 31, and a line on tank 1 prints its 1 at column 33: a four-column field at 31 with the number right-aligned in three. p.371 ends its sample's 3 at 33 and never draws NONE.",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "left", "end": 34, "head": "TANK NUMBER", "start": 31}]
+ },
+ "78A": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I78A00.bin",
+  "_note": "PUMP heads column 30 and NON-VENTED sits under it, as 788's TYP: does. p.401 draws both at 28.",
+  "heading": "LINE                          PUMP",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "left", "end": 39, "head": "PUMP", "start": 30}]
+ },
+ "78F": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I78F00.bin",
+  "_note": "A line at 0 PSI prints its 0 at column 31, and the Set sweep (transcripts/setsweep.jsonl) prints 12 and 25 from 30: a number ending at 31 with PSI after it. p.407's sample has 15 PSI from 28.",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "left", "end": 37, "head": "LOW PRESSURE", "start": 31, "number_end": 31}]
+ },
+ "779": {
+  "_from": "bench-2026-09-18/transcripts/e26_77x/05_I77900.bin",
+  "_note": "A USER DEFINED line's bulk modulus of 0 prints its 0 at column 35 and PSI after it: a six-digit field from 30. p.380 starts the value at 31.",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "right", "end": 39, "head": "1ST BULK MODULUS", "start": 30}]
+ },
+ "77A": {
+  "_from": "bench-2026-09-18/transcripts/e26_77x/06_I77A00.bin",
+  "_note": "779's column, for the second size.",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "right", "end": 39, "head": "2ND BULK MODULUS", "start": 30}]
+ },
+ "77B": {
+  "_from": "bench-2026-09-18/transcripts/e26_77x/07_I77B00.bin",
+  "_note": "The heading is THERMAL COEFF, cut short, under the full word in the title. p.382 prints THERMAL COEFFICIENT in both.",
+  "heading": "LINE                        THERMAL COEFF",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "right", "end": 37, "head": "THERMAL COEFF", "places": 6, "start": 30}]
+ },
+ "77F": {
+  "_from": "bench-2026-09-18/transcripts/e26_77x/09_I77F00.bin",
+  "_note": "The console's report is PRESSURE LINE LEAK LINE LENGTH LARGE, one LINE LENGTH column set out as 789's, and it holds the second length alone: 351 FEET on a line whose first is 200. p.370 draws a two-column PIPE LENGTH table of both.",
+  "title": "PRESSURE LINE LEAK LINE LENGTH LARGE",
+  "heading": "LINE                        LINE LENGTH",
+  "columns": [{"align": "left", "end": 19, "head": "LINE", "start": 0}, {"align": "right", "end": 38, "head": "LINE LENGTH", "start": 31, "number_end": 33}]
+ },
+ "63C": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I63C00.bin",
+  "_note": "The heading is GALLONS at 33, with the label column at 7 like every tank table, and the value ends under the S at 38 (0 on a blank console). p.304 draws VOLUME at 42 and the label at 8.",
+  "heading": "TANK   PRODUCT LABEL             GALLONS",
+  "columns": [{"align": "right", "end": 1, "head": "TANK", "start": 1}, {"align": "left", "end": 26, "head": "PRODUCT LABEL", "start": 7}, {"align": "right", "end": 38, "head": "GALLONS", "start": 33}]
+ },
+ "BA0": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/IBA000.bin",
+  "_note": "MDIM TOTALIZER with one space, straight under the stamp, on a console with no MDIM; p.571 spaces it twice.",
+  "title": "MDIM TOTALIZER",
+  "head_gap": 0
+ },
+ "52E": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I52E00.bin",
+  "_note": "Two blank lines below the station header block, as 206 has, where p.198 draws one: seven blank lines between the stamp and the title on a console with no header set. The delay starts at column 32 whatever its width: 48 there in the cold start, and 1 there in the Set sweep (transcripts/setsweep.jsonl).",
+  "head_gap": 2,
+  "columns": [{"align": "right", "end": 1, "head": "RCVR", "start": 1}, {"align": "left", "end": 22, "head": "LOCATION LABEL", "start": 7}, {"align": "left", "end": 33, "head": "DELAY PERIOD", "start": 32}]
+ },
+ "63B": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I63B00.bin",
+  "_note": "With no tank programmed the console answers the title alone, straight under the stamp with no blank line between.",
+  "head_gap": 0
+ },
+ "639": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I63900.bin",
+  "_note": "p.300's sample line had been read as this report's title. The console's title is ACCU CHART END SHAPE FACTOR over a TANK PRODUCT LABEL heading, a blank line above it like every other report.",
+  "title": "ACCU CHART END SHAPE FACTOR",
+  "gap": 1,
+  "head_gap": 1
+ },
+ "61E": {
+  "_from": "bench-2026-09-18/transcripts/e11_density/06_S61E010_7400_r.bin, cap_tank1_probeout/raw/I61E00.bin",
+  "_note": "No blank line between the stamp and the title, one under it, and DENSITY at column 31 with the value ending under its Y at 37. p.276 draws the heading four columns wider and a blank above the title.",
+  "head_gap": 0,
+  "heading": "TANK   PRODUCT LABEL           DENSITY",
+  "columns": [{"align": "right", "end": 1, "head": "TANK", "start": 1}, {"align": "left", "end": 22, "head": "PRODUCT LABEL", "start": 7}, {"align": "right", "end": 37, "head": "DENSITY", "places": 4, "start": 32}]
+ },
+ "5BD": {
+  "_from": "bench-2026-09-18/cap_coldstart/raw/I5BD00.bin",
+  "_note": "A blank line between the title and the value, which p.243 draws run together.",
+  "gap": 1
+ },
+ "526": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "A receiver's retry number starts at column 32 whatever its width: `S5260103` answers 3 there and `S5260151` 51 from there. The page's one sample is right-aligned.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "RCVR",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 17,
+    "head": "LOCATION LABEL",
+    "start": 7
+   },
+   {
+    "align": "left",
+    "end": 33,
+    "head": "RETRY NUMBER",
+    "start": 32
+   }
+  ]
+ },
+ "527": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "As 526: the retry delay starts at column 32, 30 and 60 alike.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "RCVR",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 17,
+    "head": "LOCATION LABEL",
+    "start": 7
+   },
+   {
+    "align": "left",
+    "end": 33,
+    "head": "RETRY DELAY",
+    "start": 32
+   }
+  ]
+ },
+ "610": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The delivery delay starts at column 33: 1 and 50 both begin there.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "TANK",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 22,
+    "head": "PRODUCT LABEL",
+    "start": 7
+   },
+   {
+    "align": "left",
+    "end": 34,
+    "head": "",
+    "start": 33
+   }
+  ]
+ },
+ "608": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "A negative tilt's sign is drawn one column past the edge the positive values end on: 0.00 and 144.00 end at 38, -100.00 and -144.00 at 39.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "TANK",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 22,
+    "head": "PRODUCT LABEL",
+    "start": 7
+   },
+   {
+    "align": "right",
+    "end": 38,
+    "head": "INCHES",
+    "places": 2,
+    "start": 35,
+    "minus_out": true
+   }
+  ]
+ },
+ "60F": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "As 608: -144.00 ends at 39 where 144.00 ends at 38.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "TANK",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 22,
+    "head": "PRODUCT LABEL",
+    "start": 7
+   },
+   {
+    "align": "right",
+    "end": 38,
+    "head": "INCHES",
+    "places": 2,
+    "start": 35,
+    "minus_out": true
+   }
+  ]
+ },
+ "632": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The flag ends at column 37: ON from 36 and OFF from 35. The page's one sample starts at 35.",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "TANK",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 22,
+    "head": "PRODUCT LABEL",
+    "start": 7
+   },
+   {
+    "align": "right",
+    "end": 37,
+    "head": "SIPHON BREAK",
+    "start": 35
+   }
+  ]
+ },
+ "77D": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The offset is a number ending at column 33 with its unit after it: 5.0 PSI from 31, -5.0 PSI from 30.",
+  "columns": [
+   {
+    "align": "left",
+    "end": 19,
+    "head": "LINE",
+    "start": 0
+   },
+   {
+    "align": "left",
+    "end": 37,
+    "head": "PRESSURE OFFSET",
+    "places": 1,
+    "start": 31,
+    "number_end": 33
+   }
+  ]
+ },
+ "775": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The rate is a number ending at column 35 with GPH after it: 3.00 from 32, 10.00 from 31.",
+  "columns": [
+   {
+    "align": "left",
+    "end": 19,
+    "head": "LINE",
+    "start": 0
+   },
+   {
+    "align": "left",
+    "end": 39,
+    "head": "TEST LEAK RATE",
+    "places": 2,
+    "start": 32,
+    "number_end": 35
+   }
+  ]
+ },
+ "783": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "REPETITIVE is printed cut to nine characters, REPETITIV.",
+  "columns": [
+   {
+    "align": "left",
+    "end": 19,
+    "head": "LINE",
+    "start": 0
+   },
+   {
+    "align": "left",
+    "end": 38,
+    "head": "0.10 GPH TEST",
+    "start": 31,
+    "cut": 9
+   }
+  ]
+ },
+ "78C": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "As 783: REPETITIV.",
+  "columns": [
+   {
+    "align": "left",
+    "end": 19,
+    "head": "LINE",
+    "start": 0
+   },
+   {
+    "align": "left",
+    "end": 37,
+    "head": "0.20 GPH TEST",
+    "start": 31,
+    "cut": 9
+   }
+  ]
+ },
+ "784": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The rate is a number ending at column 33 with GPH after it -- 3.0 from 31, 0.20 and 0.10 from 30 -- and NONE fills the same four columns.",
+  "columns": [
+   {
+    "align": "left",
+    "end": 19,
+    "head": "LINE",
+    "start": 0
+   },
+   {
+    "align": "left",
+    "end": 37,
+    "head": "SHUTDOWN RATE",
+    "start": 31,
+    "number_end": 33
+   }
+  ]
+ },
+ "796": {
+  "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
+  "_note": "The period is a number ending at column 9 with DAYS after it: LENGTH:  1 DAYS and LENGTH: 16 DAYS. The page's one sample, 31, cannot show it.",
+  "line": {"align": "left", "end": 14, "label": "LENGTH:", "start": 8, "number_end": 9}
  }
 }

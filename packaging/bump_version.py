@@ -21,9 +21,10 @@ What each level means is in RELEASING.md. Briefly: major breaks how you use
 it or what a tool sees, minor adds a capability without breaking anything,
 patch fixes or polishes without changing how you use it.
 
-Updates `tls350sim/__init__.py` and rolls the changelog's Unreleased section
-into a dated section for the new version. Run the tests and commit, then tag
-`v<version>` to release.
+Updates `tls350sim/__init__.py` and rolls BOTH changelogs' Unreleased
+sections into dated sections for the new version: `CHANGELOG.md`, the long
+private one, and `CHANGES.md`, the short public one that ships. Run the
+tests and commit, then tag `v<version>` to release.
 """
 import argparse
 import datetime
@@ -34,6 +35,11 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 INIT = os.path.join(ROOT, "tls350sim", "__init__.py")
 CHANGELOG = os.path.join(ROOT, "CHANGELOG.md")
+# The short public record. It ships; CHANGELOG.md does not. Both are
+# rolled at a release so the two never disagree about what a version
+# contained -- and so the public file cannot quietly keep collecting
+# under "Unreleased" while the private one moves on.
+CHANGES = os.path.join(ROOT, "CHANGES.md")
 
 
 def current():
@@ -60,19 +66,33 @@ def write_init(new):
     open(INIT, "w", encoding="utf-8", newline="\n").write(text)
 
 
-def roll_changelog(new, today):
-    """Turn the Unreleased heading into a dated version heading, and start a
-    fresh empty Unreleased above it."""
-    if not os.path.exists(CHANGELOG):
-        return
-    text = open(CHANGELOG, encoding="utf-8").read()
-    marker = "## [Unreleased]"
+def _roll(path, marker, fresh):
+    """Turn an Unreleased heading into a dated one, and start a fresh
+    Unreleased above it. Silent when the file or the heading is absent, so
+    a tree without one is not an error."""
+    if not os.path.exists(path):
+        return False
+    text = open(path, encoding="utf-8").read()
     if marker not in text:
-        return
-    fresh = (f"## [Unreleased]\n\n"
-             f"## [{new}] - {today}")
-    text = text.replace(marker, fresh, 1)
-    open(CHANGELOG, "w", encoding="utf-8", newline="\n").write(text)
+        return False
+    open(path, "w", encoding="utf-8", newline="\n").write(
+        text.replace(marker, fresh, 1))
+    return True
+
+
+def roll_changelog(new, today):
+    """Roll both records: the long private one and the short public one.
+
+    They use different heading shapes because they are different documents
+    -- CHANGELOG.md follows Keep a Changelog and brackets its versions,
+    CHANGES.md is a plain list for a reader who just wants to know what
+    changed -- so each gets its own marker rather than one being made to
+    look like the other.
+    """
+    _roll(CHANGELOG, "## [Unreleased]",
+          f"## [Unreleased]\n\n## [{new}] - {today}")
+    _roll(CHANGES, "## Unreleased",
+          f"## Unreleased\n\n## {new} - {today}")
 
 
 def main():

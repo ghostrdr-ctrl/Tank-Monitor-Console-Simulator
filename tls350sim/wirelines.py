@@ -126,6 +126,9 @@ KIND = {
     "B50": "vlld", "B51": "vlld", "B52": "vlld",
     "373": "plld", "374": "plld", "381": "plld", "382": "plld",
     "383": "plld", "384": "plld",
+    # 375 and 385 are in no revision on this shelf; with a line on, the
+    # bench answers both with the results report, 0.10 first and 0.20 first
+    "375": "plld", "385": "plld",
     "B7B": "plld", "B7C": "plld", "B7E": "plld", "B81": "plld",
     "B87": "plld", "B88": "plld", "B89": "plld", "B8A": "plld",
     "386": "wplld", "387": "wplld", "388": "wplld", "389": "wplld",
@@ -138,7 +141,8 @@ CODES = set(KIND)
 # Section 7.2's reports print the station header and section 7.4's diagnostics
 # do not: every 351 to 389 sample carries "STATION HEADER 1...." through
 # "STATION HEADER 4...." under the date, and no B-code sample has one.
-HEADED = {"351", "352", "353", "373", "374", "381", "382", "383", "384",
+HEADED = {"351", "352", "353", "373", "374", "375", "381", "382", "383",
+          "384", "385",
           "386", "387", "388", "389"}
 
 # "tt - Test status" as 381, 383 and B81 number it, which is the console's own
@@ -184,6 +188,18 @@ PIPE_NAME = {
     "19": "PETROTECHNIK UPP EXTRA 63MM",
 }
 USER_DEFINED = "18"
+
+# Which config function switches each family's lines on, the same pairs
+# `Console.LINE_CODES` holds, named here so this module does not import the
+# console back (`_line_alarm_history`).
+LINE_CONFIG = {"plld": "781", "wplld": "7A1", "vlld": "751"}
+
+# What the bench TLS-350 packs where a line diagnostic has nothing to report
+# (`cap_q1on`, 2026-09-19): a date of 70-01-01 00:00, a bulk modulus of
+# 999999.9, and 99.9 for a pressure nothing has measured.
+NO_DATE = "7001010000"
+NO_MODULUS = 999999.9
+UNKNOWN_PSI = 99.9
 
 # "Numbers in "TYP" column above and "TT" below refer to 0.20 GPH tests (7-10)
 # or 0.10 GPH tests (11-14)", and B51's own sample uses 3 to 6 for the gross
@@ -251,17 +267,25 @@ def _words(packed):
 
 
 def _head(console, kind, number):
-    """"Q 1:REGULAR UNLEADED", the line every one of these reports opens with."""
+    """"Q 1:REGULAR UNLEADED", the line every one of these reports opens with,
+    its label in its twenty: `Q 1:REG TURBINE` and nine spaces over I373 to
+    I385 and the line diagnostics on the bench TLS-350 (2026-09-24), where
+    this stopped at the label's last letter."""
     label = console.text(LABEL[kind], number) or ""
-    return f"{LETTER[kind]} {number}:{label}".rstrip()
+    return f"{LETTER[kind]} {number}:{label:<20.20s}"
 
 
 def _display(handler, code, rows, tok):
     """The display format, with the station header where the manual shows one."""
     text = SEP.join(rows)
-    if tok in HEADED:
-        # all four, programmed or not; see FIDELITY W5
-        header = [handler.c.text("503", n) or "" for n in range(1, 5)]
+    if tok in HEADED and not handler._draws_station(tok):
+        # all four, programmed or not; see FIDELITY W5. Only where the frame
+        # does not draw them itself: it does for the line reports, and this
+        # copy only ever vanished because four empty lines are stripped as
+        # leading blanks -- once a set header line kept its twenty spaces
+        # (S41) the block came out twice, where the bench TLS-350 printed it
+        # once over `I37300` with Q1 on (2026-09-24)
+        header = [handler.c.header_line(n) for n in range(1, 5)]
         text = SEP.join(header) + SEP + text
     return handler._frame(code, text)
 
@@ -310,7 +334,7 @@ def _status_bits(console, ln, kind, number):
     Off, 1=Handle On)."
     """
     bits = 0
-    if (kind, number) not in console.leaks.disabled:
+    if _dispensing(console, kind, number) == "ENABLED":
         bits |= 1
     if ln.pump:
         bits |= 2
@@ -329,16 +353,25 @@ def _test_status(ln, kind):
 
 
 def _dispensing(console, kind, number):
-    """"DISPENSING" column: what the shutdown output is doing to the line."""
-    return "DISABLED" if (kind, number) in console.leaks.disabled else "ENABLED"
+    """"DISPENSING" column: what the shutdown output is doing to the line.
+
+    `Lines.dispensing_enabled` is the flag itself, because the line leak
+    diagnostic puts the same answer on the glass.
+    """
+    return ("ENABLED" if console.lines.dispensing_enabled(kind, number)
+            else "DISABLED")
 
 
 def _line_row(console, ln, kind, number):
     """One row of the status table 381, 386, B81 and B82 all share."""
     _tt, words = _test_status(ln, kind)
-    return (f"{_head(console, kind, number):<25.25s}"
-            f"{_dispensing(console, kind, number):<12s}{words:<22s}"
-            f"{'ON' if ln.pump else 'OFF':<6s}"
+    # at the heading's own columns, 26, 38, 61 and 69: the bench TLS-350's
+    # `Q 1:                      DISABLED    TEST ABORTED           OFF     OFF`
+    # (`cap_q1on`, 2026-09-19). This drew them at 25, 37, 59 and 65 under a
+    # heading that was right.
+    return (f"{_head(console, kind, number):<26.26s}"
+            f"{_dispensing(console, kind, number):<12s}{words:<23s}"
+            f"{'ON' if ln.pump else 'OFF':<8s}"
             f"{'ON' if ln.handle else 'OFF'}")
 
 
@@ -362,10 +395,14 @@ def _no_vent(ln):
     return sum(1 for r in rows if abs(r.pon - r.p1) < 0.001), len(rows)
 
 
-def _result_word(result):
-    """"JAN 24, 1996 2:49 PM PASS", which is how these reports print a verdict."""
+def _result_word(result, rate=None):
+    """"JAN 24, 1996 2:49 PM PASS", which is how these reports print a verdict.
+
+    No result is `NO TEST DATA AVAILABLE`, or, given the rate as the report
+    heads it, the bench TLS-350's `NO  3.0 DATA AVAILABLE` (`cap_site`)."""
     if result is None:
-        return "NO TEST DATA AVAILABLE"
+        return (f"NO {rate:>4s} DATA AVAILABLE" if rate
+                else "NO TEST DATA AVAILABLE")
     word = {leaktest.PASSED: "PASS", leaktest.FAILED: "FAIL"}.get(
         result.result, "INVALID")
     return f"{clock_words(result.started)} {word}"
@@ -462,11 +499,25 @@ def _line_alarm_history(handler, code, kind, lines, tok):
               "387": "WPLLD LINE LEAK ALARM HISTORY REPORT"}
     rows = [titles[tok], ""] if titles[tok] else []
     body = ""
+    # A line is on this report while its config screen has it ON: Q2 with
+    # four cycles of SETUP DATA WARNING behind it printed six rows, and the
+    # moment it was switched off the report was its title and nothing else
+    # (the bench TLS-350, 2026-09-19, `transcripts/hist382.log`). This
+    # listed whatever line was asked for.
+    on = list(c.configured(LINE_CONFIG[kind], c.capacity(kind)))
     for number in lines:
-        records = _alarms(c, kind, number, log=True)
+        if number not in on:
+            continue
+        # and the CLEARs are not entries: every cycle cleared, and only the
+        # alarms were printed, newest first, one row each -- no grouping,
+        # where 206 groups a tank's by type
+        records = [r for r in _alarms(c, kind, number, log=True)
+                   if r.get("state", "02") != "01"]
         rows.append(_head(c, kind, number))
         for r in records:
-            rows.append(f"   {_words(r['at']):<22s}"
+            # `     JAN 16, 2006  8:10 AM    PLLD OPEN ALARM` on the bench
+            # TLS-350 (`cap_q1on`): five in, the stamp, four spaces
+            rows.append(f"     {_words(r['at'])}    "
                         f"{_alarm_text(r['aa'], r['nn'])}")
         if not records:
             rows.append("   NO ALARM HISTORY")
@@ -501,16 +552,18 @@ def _vlld_pump_status(handler, code, kind, lines, tok):
 # ---------------------------------------------------------------------------
 # 7.2.4, the pressure line leak reports
 # ---------------------------------------------------------------------------
-# Which rates each results and history report carries, and in which order the
-# COMPUTER format carries them, which is not the display's order for PLLD:
+# Which rates each results and history report carries, and in which order.
 # 373 and 374 count "NN - Number of 0.10 gal/hr test results" before
-# "nn - Number of 0.20 gal/hr test results" and print the two the other way
-# up, where 388 and 389 are 0.20 first in both halves.
+# "nn - Number of 0.20 gal/hr test results", and 388 and 389 are 0.20 first.
+# The page prints 373 the other way up, 0.20 first; the bench TLS-350 prints
+# it 0.10 first, as it counts, and 385 0.20 first (`cap_site`, 2026-09-19).
 RESULT_RATES = {"373": ("annual", "periodic"), "383": ("annual",),
+                "375": ("annual", "periodic"), "385": ("periodic", "annual"),
                 "388": ("periodic", "annual"),
                 "374": ("annual", "periodic"), "384": ("annual",),
                 "389": ("periodic", "annual")}
-SHOWN_RATES = {"373": ("periodic", "annual"), "383": ("annual",),
+SHOWN_RATES = {"373": ("annual", "periodic"), "383": ("annual",),
+               "375": ("annual", "periodic"), "385": ("periodic", "annual"),
                "388": ("periodic", "annual")}
 RATE_NAME = {"periodic": "0.20", "annual": "0.10"}
 
@@ -542,19 +595,25 @@ def _pressure_results(handler, code, kind, lines, tok):
         # p.131 hangs the 3.0 heading one column in, where the two
         # precision rates start at nought -- the manual's own way of lining
         # up a one digit rate with a two digit one
+        # The bench TLS-350 (326.01, 2026-09-19, `cap_site`): a rate with no
+        # result says so by name -- `NO  3.0 DATA AVAILABLE` -- the two
+        # counts run together six wide, and two blank lines close the block
         rows += [_head(c, kind, number), "", " 3.0 GAL/HR RESULTS:", "",
-                 "LAST TEST:", _result_word(gross), "",
-                 "NUMBER OF TESTS PASSED", f"   PREV 24 HOURS : {day}", "",
-                 f" SINCE MIDNIGHT : {since}", ""]
+                 "LAST TEST:", _result_word(gross, " 3.0"), "",
+                 "NUMBER OF TESTS PASSED", f"  PREV 24 HOURS :{day:6d}",
+                 f" SINCE MIDNIGHT :{since:6d}", "", ""]
         for rate_key in SHOWN_RATES[tok]:
             rows.append(f"{RATE_NAME[rate_key]} GAL/HR RESULTS:")
             rows.append("")
-            rows.append(_result_word(c.leaks.result(kind, number, rate_key)))
+            rows.append(_result_word(c.leaks.result(kind, number, rate_key),
+                                     RATE_NAME[rate_key]))
             rows.append("")
-        if tok != "383":
+        aborts, total = _no_vent(ln)
+        if tok not in ("383", "385") and total:
             # "NO-VENT TEST ABORTS: 3 OUT OF 10 TESTS (Added in V19)", which
-            # 383's own sample does not print
-            aborts, total = _no_vent(ln)
+            # 383's own sample does not print -- and the bench, with no test
+            # run, does not print on 373 or 375 either: kept for a line that
+            # has run one, which is a reading and not a measurement
             rows.append("NO-VENT TEST ABORTS:")
             rows.append(f"   {aborts} OUT OF {total} TESTS")
             rows.append("")
@@ -567,6 +626,10 @@ def _pressure_results(handler, code, kind, lines, tok):
             if result:
                 body += (_stamp(result.started)
                          + leaktest.RESULT_CODE[result.result] + "00")
+        if tok == "375":
+            # four characters more than 373's on the bench, all 0 with no
+            # test run: `i37500`, `cap_site`. What they count is not known.
+            body += "0000"
     if code[0].isupper():
         return _display(handler, code, rows, tok), "line leak test results"
     return handler._frame(code, body), "line leak test results"
@@ -583,19 +646,26 @@ def _pressure_history(handler, code, kind, lines, tok):
     c = handler.c
     title = ("WPLLD LINE LEAK TEST HISTORY" if kind == "wplld"
              else "PRESSURE LINE LEAK TEST HISTORY")
-    rows, body = [title, ""], ""
+    # The bench TLS-350 (`cap_site`, 2026-09-19): three blank lines under the
+    # title, `LAST  3.0 PASS:` with the rate four wide as the results
+    # report heads it, and nothing at all where there is no pass -- not NO
+    # TEST PASSED. Where a date goes when there is one was not seen; it is
+    # kept at the page's column.
+    rows, body = [title, "", "", ""], ""
     for number in lines:
         last = c.leaks.last_pass(kind, number, "gross")
+        # with no pass the date's field stands empty to column 54, and a
+        # month with none leaves its heading at thirty: the bench TLS-350
+        # with Q1 on and never tested (2026-09-24)
         rows += [_head(c, kind, number), "",
-                 f"{'LAST 3.0 PASS:':<28s}"
-                 + (clock_words(last) if last else "NO TEST PASSED"), ""]
+                 f"{'LAST  3.0 PASS:':<28s}" + clock_words(last) if last
+                 else f"{'LAST  3.0 PASS:':<54s}", ""]
         body += f"{number:02d}{_stamp(last)}00"
         for rate_key in RESULT_RATES[tok]:
             months = c.leaks.first_pass_each_month(kind, number, rate_key)
             head = f"FIRST {RATE_NAME[rate_key]} PASS EACH MONTH:"
-            rows.append(f"{head:<28s}"
-                        + (clock_words(months[0]) if months
-                           else "NO TEST PASSED"))
+            rows.append(f"{head:<28s}" + clock_words(months[0]) if months
+                        else f"{head:<30s}")
             for when in months[1:]:
                 rows.append(" " * 28 + clock_words(when))
             rows.append("")
@@ -627,7 +697,11 @@ def _line_status(handler, code, kind, lines, tok):
                  f"{min(len(records), 255):02X}")
         body += "".join(_alarm_code(r[2:4]) for r in records)
     rows += ["", "ACTIVE ALARMS:"]
-    rows += ["     " + _alarm_text(r[:2], r[2:4]) for r in standing]
+    # three in, and the name in nineteen: `   PLLD OPEN ALARM    ` on the
+    # bench TLS-350 (`cap_q1on`, `cap_site`, and 2026-09-24), where every
+    # comparison stripped the four spaces. (How the reply closes is
+    # `replytails.BODY_TAIL`'s.)
+    rows += [f"   {_alarm_text(r[:2], r[2:4]):<19s}" for r in standing]
     if code[0].isupper():
         return _display(handler, code, rows, tok), "line leak status"
     return handler._frame(code, body), "line leak status"
@@ -866,7 +940,8 @@ def _profile_line_test(handler, code, kind, lines, tok):
     without has not.
     """
     c = handler.c
-    rows, body = ["PRESSURE LINE LEAK PROFILE LINE TEST", ""], ""
+    # the title with a space after it, as the bench sends it (2026-09-24)
+    rows, body = ["PRESSURE LINE LEAK PROFILE LINE TEST ", ""], ""
     for number in lines:
         ln = c.lines.line(kind, number)
         measured = c.limit("779", number)
@@ -880,6 +955,19 @@ def _profile_line_test(handler, code, kind, lines, tok):
                   c.limit("777", number) or _diameter(ln.pipe()[1]),
                   c.limit("77F", number) or 0.0,
                   c.limit("778", number) or _second_diameter(ln)]
+        if not measured:
+            # The bench TLS-350 with no profile line test behind it
+            # (`cap_q1on`, 2026-09-19): the line, `LAST PROFILE LINE TEST:
+            # NO TEST DATA AVAILABLE` and nothing else -- and packed, the
+            # invalid flag, a date of 70-01-01 00:00, pipe type 01 -- the
+            # empty record's, not the line's, which was 19 -- and seven
+            # floats of which only the bulk modulus is not 0, at 999999.9.
+            # This printed the setup values as though a test had read them.
+            rows += [_head(c, kind, number),
+                     "LAST PROFILE LINE TEST: NO TEST DATA AVAILABLE"]
+            body += (f"{number:02d}0" + NO_DATE + "01" + "07"
+                     + _float(NO_MODULUS) + _float(0.0) * 6)
+            continue
         rows += [_head(c, kind, number),
                  "LAST PROFILE LINE TEST: "
                  + (clock_words(when) if when else "NONE"),
@@ -920,16 +1008,26 @@ def _offset_test(handler, code, kind, lines, tok):
     # puts the same four spaces in a DIFFERENT place; both are reproduced
     # where they fall. The PLLD forms carry no gap at all.
     title = ("WPLLD    LINE LEAK PRESSURE OFFSET TEST" if kind == "wplld"
-             else "PRESSURE LINE LEAK PRESSURE OFFSET TEST")
+             else "PRESSURE LINE LEAK PRESSURE OFFSET TEST ")
     rows, body = [title, ""], ""
     for number in lines:
-        psi = readings.wander(c, -1.8, 1.8, "offset", kind, number, swing=0.15)
-        when = c._commissioned
+        ln = c.lines.line(kind, number)
+        psi, when = ln.offset, ln.offset_at
+        if psi is None:
+            # Never run: the bench TLS-350 printed the line alone and `LAST
+            # PRESSURE OFFSET TEST: NO TEST DATA AVAILABLE`, and packed the
+            # invalid flag, 99.9 and a date of 70-01-01 00:00 (`cap_q1on`,
+            # 2026-09-19). This drew a figure out of `readings` and dated it
+            # at commissioning, so every line had been tested.
+            rows += [_head(c, kind, number),
+                     "LAST PRESSURE OFFSET TEST: NO TEST DATA AVAILABLE"]
+            body += f"{number:02d}0" + _float(99.9) + NO_DATE
+            continue
         rows.append(f"{_head(c, kind, number):<38s}"
-                    + (clock_words(when) if when else ""))
+                    + (clock_words(time.localtime(when)) if when else ""))
         rows.append(f"LAST PRESSURE OFFSET TEST: {psi:+.1f} PSI")
-        body += (f"{number:02d}" + ("1" if when else "0") + _float(psi)
-                 + _stamp(when))
+        body += (f"{number:02d}1" + _float(psi)
+                 + (_stamp(time.localtime(when)) if when else NO_DATE))
     if code[0].isupper():
         return _display(handler, code, rows, tok), "pressure offset test"
     return handler._frame(code, body), "pressure offset test"
@@ -962,35 +1060,44 @@ def _offset_monitor(handler, code, kind, lines, tok):
         ln = c.lines.line(kind, number)
         # Pd Ref is "locked into" the pump's own pressure at startup, so it is
         # this line's nominal, and Pd is what the pump is reading now.
-        reference = c.lines.nominal_psi(kind, number)
-        pd = c.lines.pump_psi(kind, number)
         last = (ln.readings["gross"] or [None])[-1]
+        # What nothing has measured reads 99.9, "the unknown state (value
+        # of 99)", 577013-344 Rev H: Pd and its reference before any
+        # dispense, on the bench TLS-350 with Q1 on and no transducer
+        # (`cap_q1on`, 2026-09-19); Pv, Pon and the last test's Pd read 0.0
+        # before any gross test. The day counters are 0 until a gross test
+        # has run.
+        reference = (c.lines.nominal_psi(kind, number) if ln.pd_ref is not None
+                     else UNKNOWN_PSI)
+        pd = (c.lines.pump_psi(kind, number) if ln.pd is not None
+              else UNKNOWN_PSI)
         pv = last.p2 if last else 0.0
         pon = last.pon if last else 0.0
-        p0_days = readings.integer(0, 60, "p0days", kind, number)
-        pd_days = (0 if pd <= reference + PD_MARGIN
+        last_pd = pd if last else 0.0
+        p0_days = (readings.integer(0, 60, "p0days", kind, number) if last
+                   else 0)
+        pd_days = (0 if pd == UNKNOWN_PSI or pd <= reference + PD_MARGIN
                    else readings.integer(0, 60, "pddays", kind, number))
         pd_ok = pd_days <= PD_DAYS
         pv_ok = not (pv > PV_LIMIT and pd > PD_LIMIT)
-        # 576013-635 Rev AA p.554: each monitor's verdict at 2 and its
-        # detail lines at 4, with LAST UPDATE's day count held right against
-        # 19 and every PSI figure right against 15
+        # The bench TLS-350's layout, which is not 576013-635 Rev AA p.554's:
+        # each monitor at 0 and its detail lines at 3 (`cap_q1on`)
         rows += [_head(c, kind, number),
-                 "  P0: PASS",
-                 f"    LAST UPDATE:{p0_days:4d} DAYS",
-                 "  Pd: " + ("PASS" if pd_ok else "FAIL"),
-                 f"    LAST UPDATE:{pd_days:4d} DAYS",
-                 f"    Pd={pd:8.1f} PSI",
-                 f"    Pd Ref={reference:.1f} PSI",
-                 "  Pv: " + ("PASS" if pv_ok else "FAIL"),
-                 f"    Pv ={pv:.1f} PSI",
-                 f"    Pon={pon:.1f} PSI",
-                 f"       Pd ={pd:.1f} PSI", ""]
+                 "P0: PASS",
+                 f"   LAST UPDATE:{p0_days:4d} DAYS",
+                 "Pd: " + ("PASS" if pd_ok else "FAIL"),
+                 f"   LAST UPDATE:{pd_days:4d} DAYS",
+                 f"   Pd ={pd:9.1f} PSI",
+                 f"   Pd REF = {reference:.1f} PSI",
+                 "Pv: " + ("PASS" if pv_ok else "FAIL"),
+                 f"   Pv  ={pv:5.1f} PSI",
+                 f"   Pon ={pon:5.1f} PSI",
+                 f"   Pd  ={last_pd:5.1f} PSI", ""]
         body += (f"{number:02d}01{min(p0_days, 0xFFFF):04X}"
                  + ("01" if pd_ok else "00")
                  + f"{min(pd_days, 0xFFFF):04X}" + _float(pd)
                  + _float(reference) + ("01" if pv_ok else "00")
-                 + _float(pv) + _float(pon) + _float(pd))
+                 + _float(pv) + _float(pon) + _float(last_pd))
     if code[0].isupper():
         return _display(handler, code, rows, tok), "pressure offset monitors"
     return handler._frame(code, body), "pressure offset monitors"
@@ -1006,17 +1113,34 @@ def _plld_diagnostic(handler, code, kind, lines, tok):
     counts. Also the HI counts should always be less than the LO counts."
     """
     c = handler.c
-    rows = ["PRESSURE LINE LEAK DIAGNOSTIC REPORT", "", LINE_HEADER]
+    # The bench TLS-350's own table, one line a line (`cap_q1on`,
+    # 2026-09-19):
+    #
+    #   LINE  DISPENSING  TEST STATUS            PUMP    HANDLE  PSI
+    #   Q 1:  DISABLED    TEST ABORTED           OFF     OFF      0.000
+    #
+    # the label left out, DISPENSING at 6, TEST STATUS 18, PUMP 41, HANDLE
+    # 49, and the pressure right against 62 -- `OFF     23.383` with a
+    # resistor on the input. This drew 381's wide table and then the
+    # pressure and the A/D counts on seven lines of their own; the counts
+    # are the packed form's alone.
+    rows = ["PRESSURE LINE LEAK DIAGNOSTIC REPORT", "",
+            f"{'LINE':<6s}{'DISPENSING':<12s}{'TEST STATUS':<23s}"
+            f"{'PUMP':<8s}{'HANDLE':<8s}PSI"]
     body = ""
     for number in lines:
         ln = c.lines.line(kind, number)
         lo, hi, counts = ln.sensor_counts()
-        values = [ln.pressure, lo, hi, counts]
-        rows.append(_line_row(c, ln, kind, number))
-        rows += [f"{ln.pressure:.3f} PSI", "", "A/D COUNTS",
-                 f" LOW REF={lo:9.0f} CNTS",
-                 f"HIGH REF={hi:9.0f} CNTS",
-                 f"  SENSOR={counts:9.0f} CNTS", ""]
+        # "Diagnostic screen will display 0 when pressures are negative",
+        # 577013-344 Rev H p.20 -- and the packed form carries the 0 too:
+        # the bench packed 0.0 with its transducer open
+        psi = max(0.0, ln.reading)
+        values = [psi, lo, hi, counts]
+        _tt, words = _test_status(ln, kind)
+        rows.append(f"{LETTER[kind]} {number}:".ljust(6)
+                    + f"{_dispensing(c, kind, number):<12s}{words:<23s}"
+                    f"{'ON' if ln.pump else 'OFF':<8s}"
+                    f"{'ON' if ln.handle else 'OFF':<3s}{psi:11.3f}")
         tt, _ = _test_status(ln, kind)
         body += (f"{number:02d}{_status_bits(c, ln, kind, number)}{tt}"
                  f"{len(values):02X}" + "".join(_float(v) for v in values))
@@ -1125,7 +1249,9 @@ def _pumpoff_diagnostic(handler, code, kind, lines, tok):
     # p.560: PUMP ON at 29, FIRST READ at 44 and SECOND READ at 60
     header = (f"{'DATE/TIME':<29s}{'PUMP ON':<15s}{'FIRST READ':<14s}"
               f"{'SECOND READ':>13s}")
-    rows, body = [title, ""], ""
+    # two blank lines under the title on the bench TLS-350's B87 and B88
+    # (`cap_q1on`, 2026-09-19); the WPLLD twins were not captured
+    rows, body = [title, ""] + ([""] if kind == "plld" else []), ""
     for number in lines:
         ln = c.lines.line(kind, number)
         held = ln.readings[which][-30:]
@@ -1177,17 +1303,22 @@ def _precision_diagnostic(handler, code, kind, lines, tok):
     rate = RATE_NAME[which]
     title = ("WPLLD LINE LEAK DIAGNOSTIC REPORT" if kind == "wplld"
              else "PRESSURE LINE LEAK DIAGNOSTIC REPORT")
-    rows, body = [title, ""], ""
+    # two blank lines under the title on the bench's B89 and B8A
+    rows, body = [title, ""] + ([""] if kind == "plld" else []), ""
     for number in lines:
         ln = c.lines.line(kind, number)
         held = ln.cycles[which][-10:]
-        pump_on = ("PMID" if _pipe_key(c, kind, number) == USER_DEFINED
-                   else "PUMP ON")
+        # PMID for Petrotechnik too: with Q1 on type 19 the bench printed
+        # `DATE/TIME                   PMID         RATIO` -- the two pipes
+        # that carry a thermal coefficient (`wiretables._THERMAL`) -- and
+        # set it at 28, where p.562 sets PUMP ON at 27
+        pmid = _pipe_key(c, kind, number) in (USER_DEFINED, "19")
+        pump_head = (f"{'DATE/TIME':<28s}{'PMID':<13s}" if pmid
+                     else f"{'DATE/TIME':<27s}{'PUMP ON':<14s}")
         rows += [_head(c, kind, number), f"{rate} TEST RESULTS",
                  # p.562: the pump column at 27, RATIO at 41,
                  # DURATION at 51 and RESULTS at 64
-                 f"{'DATE/TIME':<27s}{pump_on:<14s}{'RATIO':<10s}"
-                 f"{'DURATION':<13s}RESULTS"]
+                 pump_head + f"{'RATIO':<10s}{'DURATION':<13s}RESULTS"]
         for r in held:
             rows.append(f"{clock_words(r.when):<22s}{r.pon:5.1f} PSI"
                         f"{r.ratio:8.2f}{r.minutes:10d}  "
@@ -1213,6 +1344,7 @@ REPORTS = {
     "352": _line_alarm_history,
     "353": _vlld_pump_status,
     "373": _pressure_results, "383": _pressure_results,
+    "375": _pressure_results, "385": _pressure_results,
     "388": _pressure_results,
     "374": _pressure_history, "384": _pressure_history,
     "389": _pressure_history,
@@ -1241,7 +1373,7 @@ def handle(handler, tok, dev, code, data):
     if not handler.c.has(kind):
         # a card that is not in the cage is a function this console does not
         # have, which is the same answer as a function it has never heard of
-        return handler._nine(code), f"no {kind} module fitted"
+        return handler._absent(code), f"no {kind} module fitted"
     # "QQ - Pressure Line Leak sensor number (Decimal, 00=All)", and the same
     # note heads every report in this family. "All" is all the lines the
     # console HAS, which is what `programmed_lines` means by one: a PLLD

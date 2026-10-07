@@ -772,6 +772,13 @@ class _Handler(BaseHTTPRequestHandler):
     def _send(self, body, status=200, ctype="text/html"):
         if isinstance(body, str):
             body = body.encode("utf-8")
+        # Recorded BEFORE it goes, and recorded at all: no HTTP response
+        # was ever captured, so the file held one side of every exchange
+        # and a reader could not tell a 404 from a served page from a
+        # deflected write. Before rather than after, for the same reason
+        # the tunnel does it -- a client that hangs up mid-write would
+        # otherwise leave no record that it was answered. FIDELITY R28.
+        self._seen_response(status, ctype, body)
         self.send_response(status)
         self.send_header("Content-type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -787,6 +794,12 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(b"ERROR 404\r\n", 404, "text/plain")
 
     def _unauthorized(self):
+        # A 401 is the most interesting response this server sends -- it is
+        # what a scanner meets before it starts guessing -- and it was the
+        # one that went through neither `_send` nor the capture.
+        # FIDELITY R28.
+        self._seen_response(401, None, b"",
+                            extra=(("WWW-Authenticate", "Basic"),))
         self.send_response(401)
         self.send_header("WWW-Authenticate", "Basic")
         self.send_header("Content-Length", "0")
@@ -833,7 +846,7 @@ class _Handler(BaseHTTPRequestHandler):
                 and len(self.client_address) > 1 else None)
         cap.record(what, body, peer=ip, port=port, proto="web", **kw)
 
-    def _seen_request(self, body=b""):
+    def _seen_request(self, body=b"", note=None):
         """The request line and headers, as they arrived.
 
         Rebuilt rather than captured raw because `BaseHTTPRequestHandler`
@@ -848,8 +861,30 @@ class _Handler(BaseHTTPRequestHandler):
         for k, v in self.headers.items():
             head += "%s: %s%s" % (k, v, crlf)
         raw = head.encode("latin-1", "replace") + crlf.encode() + body
-        self._seen("in", raw,
+        self._seen("in", raw, note=note,
                    cmd="%s %s" % (self.command, urlparse(self.path).path))
+
+    def _seen_response(self, status, ctype, body, extra=()):
+        """What went back, rebuilt from what is about to be written.
+
+        Rebuilt for the same reason the request is: `send_response` and
+        `send_header` write straight into the socket's buffer and there is
+        no single place the finished bytes exist. It carries the status
+        line, the headers this server actually sets, and the body.
+        """
+        crlf = chr(13) + chr(10)
+        head = "HTTP/1.0 %d %s%s" % (
+            status, BaseHTTPRequestHandler.responses.get(
+                status, ("", ""))[0], crlf)
+        for k, v in extra:
+            head += "%s: %s%s" % (k, v, crlf)
+        if ctype:
+            head += "Content-type: %s%s" % (ctype, crlf)
+        head += "Content-Length: %d%s" % (len(body), crlf)
+        head += "Connection: close%s" % crlf
+        self._seen("out", head.encode("latin-1", "replace")
+                   + crlf.encode() + body,
+                   cmd="%d" % status)
 
     def do_GET(self):
         self._seen_request()
@@ -860,14 +895,25 @@ class _Handler(BaseHTTPRequestHandler):
         # answer at all, and a negative one read to EOF with no timeout and
         # held the thread. Refused in the shape the card's own 404 takes.
         # FIDELITY Z3.
+        #
+        # Recorded BEFORE it is validated, which is the whole of R28: a
+        # malformed request is the one a scanner sends, and refusing it
+        # with a 400 and recording nothing meant the capture missed exactly
+        # the traffic worth having. `Content-Length: -1` produced an answer
+        # and zero capture rows. FIDELITY R28.
         given = (self.headers.get("Content-Length") or "0").strip()
         if not given.isdigit():
+            self._seen_request(
+                note="refused: Content-Length %r is not a count" % given)
             self._send(b"ERROR 400\r\n", 400, "text/plain")
             return
         length = int(given)
         if length > LONGEST_FORM:
             # `rfile.read` sets aside the whole count before it reads a
             # byte, so one header could ask for gigabytes. CLOSED Z4.
+            self._seen_request(
+                note="refused: Content-Length %d is over the %d byte form "
+                     "limit" % (length, LONGEST_FORM))
             self._send(b"ERROR 400\r\n", 400, "text/plain")
             return
         raw = self.rfile.read(length).decode("latin-1") if length else ""

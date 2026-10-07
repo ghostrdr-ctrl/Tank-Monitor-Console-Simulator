@@ -45,6 +45,7 @@ import time
 
 from . import xportrec as R
 from . import exposed
+from . import listen
 from . import xport as _x
 
 # The two orders the firmware writes a newline in. Named so the screens below
@@ -825,7 +826,8 @@ class SetupSession:
 
 
 def serve_setup(config, host="0.0.0.0", log=None, powered=None,
-                on_socket=None, policy=None, gate=None, capture=None):
+                on_socket=None, policy=None, gate=None, capture=None,
+                running=None):
     """Accept telnet sessions on 9999, one at a time as the card does.
 
     `on_socket` is handed the listening socket, so the card's network
@@ -847,10 +849,16 @@ def serve_setup(config, host="0.0.0.0", log=None, powered=None,
     if log:
         log("-- XPort setup menu on tcp/%d" % _x.SETUP_PORT)
     while True:
-        try:
-            conn, addr = srv.accept()
-        except OSError:
+        # Interruptible, and refusing what arrives after the stop. See
+        # `listen.accept` and FIDELITY R30.
+        got = listen.accept(srv, running)
+        if got is None:
+            try:
+                srv.close()
+            except OSError:
+                pass
             return
+        conn, addr = got
         if not (config.security.get("telnet_setup", True) and powered()):
             conn.close()
             continue
@@ -888,10 +896,26 @@ def _session(config, conn, log=None, peer=None, policy=None, gate=None,
             return
         try:
             conn.settimeout(1.0)
-            s = SetupSession(config, lambda d: conn.sendall(d), log=log,
-                             capture=capture)
-            if capture is not None:
-                capture.event("open", peer=ip, proto="setup")
+            # One recorder for this session, so the menu's own budget is
+            # its own (FIDELITY R32) -- and so that what the card PRINTS
+            # is recorded at all. The capture held everything a stranger
+            # typed at the setup menu and nothing the menu said back: half
+            # an exchange, and the half that does not show what was
+            # disclosed. FIDELITY R28.
+            rec = (capture.session(peer=ip, proto="setup")
+                   if capture is not None else None)
+
+            def send(data):
+                # Before the write, as the tunnel does: a caller that hangs
+                # up part way through would otherwise leave no record that
+                # it was answered.
+                if rec is not None:
+                    rec.record("out", data)
+                conn.sendall(data)
+
+            s = SetupSession(config, send, log=log, capture=capture)
+            if rec is not None:
+                rec.event("open")
             while not s.closed:
                 if deadline is not None and time.monotonic() > deadline:
                     break
@@ -906,15 +930,15 @@ def _session(config, conn, log=None, peer=None, policy=None, gate=None,
                     break
                 if not data:
                     break
-                if capture is not None:
-                    capture.record("in", data, peer=ip, proto="setup")
+                if rec is not None:
+                    rec.record("in", data)
                 if not s.feed_bytes(data):
                     break
         except OSError:
             pass
         finally:
-            if capture is not None:
-                capture.event("close", peer=ip, proto="setup")
+            if rec is not None:
+                rec.event("close")
             try:
                 conn.close()
             except OSError:

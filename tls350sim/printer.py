@@ -3225,6 +3225,79 @@ def _auto_leak_slips(console):
     return out
 
 
+def lvp_slip(console, what, kind, device, when, why=None):
+    """One of the Leak Verification Procedure's own printouts.
+
+    576013-610 Rev AC chapter 29 draws three of the four, and each is the
+    same four-line shape the rest of this chapter's slips use: what
+    happened, the line it happened to, and the stamp.
+
+        PERFORM LVP TEST                (p.29-20, the tail of the report
+        MMM DD, YYYY HH:MM XM            a failed 3.0 gph test prints)
+
+        LVP TEST INTERRUPTED            (p.29-20)
+        UNLEADED SUPER
+        MMM DD, YYYY HH:MM XM
+        DISPENSER ON
+
+        STOP LINE LEAK TEST             (p.29-21, the successful run)
+        P2:UNLEADED SUPER
+        MMM DD, YYYY HH:MM XM
+        TEST RESULT = 3.0 GAL/HR
+        RESULT = PASSED
+
+        SUBMERSIBLE PUMP 2
+        ENABLED
+        MMM DD, YYYY HH:MM XM
+
+    The INTERRUPTED slip is the one oddity and it is the page's: it names
+    the line by LABEL ALONE, with no `P 2:` prefix, where the other two
+    carry the prefix. Kept as drawn. FIDELITY H18.
+
+    The START slip is the fourth and no page draws it -- "the system prints
+    a message to confirm that it has started the test" is all chapter 29
+    says -- so it takes the shape of its neighbours and says what the
+    sentence says. UNKNOWNS-shaped and recorded in the entry.
+    """
+    stamp = clock_words(when)
+    # 760, not 751: `Console.LINE_CODES` gives VLLD ("751", "760") as
+    # (config, label), and reading the config code back gets the
+    # switched-on flag rather than the line's name.
+    label = console.text("760", device) or ""
+    prefixed = f"P{device}:{label}"
+    if what == "perform":
+        return ["PERFORM LVP TEST", stamp]
+    if what == "start":
+        return ["START LVP TEST", prefixed, stamp]
+    if what == "interrupted":
+        return ["LVP TEST INTERRUPTED", label, stamp,
+                leaktest.LVP_INTERRUPTED.get(why, "DISPENSER ON")]
+    # passed and failed both end the line leak test the procedure ran, so
+    # both draw the STOP slip; only the verdict and the pump differ.
+    rate = leaktest.RATES[leaktest.LVP_RATE_KEY]
+    out = ["STOP LINE LEAK TEST", prefixed, stamp,
+           f"TEST RESULT = {rate:.1f} GAL/HR",
+           "RESULT = " + ("PASSED" if what == "passed" else "FAILED")]
+    out.append("")
+    out.append(f"SUBMERSIBLE PUMP {device}")
+    out.append("ENABLED" if what == "passed" else "DISABLED")
+    out.append(stamp)
+    return out
+
+
+def _auto_lvp_slips(console):
+    """The procedure's slips, drained the way the leak test's are."""
+    out = []
+    for slip in console.leaks.lvp_slips:
+        what, kind, device = slip[0], slip[1], slip[2]
+        why = slip[3] if what == "interrupted" else None
+        when = slip[-1]
+        out.append((f"-- PRINT: LVP {what} on {kind.upper()} {device}",
+                    lvp_slip(console, what, kind, device, when, why)))
+    console.leaks.lvp_slips.clear()
+    return out
+
+
 def _auto_sumps(console):
     """Three printouts on one page, 576013-610 Rev AC p.24-1: "The TLS will
     automatically print that the Test Phase was started", "... that the
@@ -3433,6 +3506,7 @@ def automatic(console):
     out = []
     out.extend(_auto_deliveries(console))
     out.extend(_auto_leak_slips(console))
+    out.extend(_auto_lvp_slips(console))
     out.extend(_auto_sumps(console))
     out.extend(_auto_generator(console))
     out.extend(_auto_confirmations(console))

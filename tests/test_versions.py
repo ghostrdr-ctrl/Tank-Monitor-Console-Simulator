@@ -182,8 +182,10 @@ class TheSecondRevisionReport(unittest.TestCase):
         self.assertNotIn("S-MODULE#", self.ask(c, b"i90200"))
 
     def test_nn_is_the_number_of_two_byte_values_that_follow(self):
-        """LL is annotated "(Version 29)", so the count is not a constant."""
-        for version, count in ((28, 11), (33, 12)):
+        """LL is annotated "(Version 29)", so the count is not a constant --
+        but the bench TLS-350's 326.01 sends all twelve (`0C`, 2026-09-18),
+        so it arrived no later than 26, and 25 is where the eleven stop."""
+        for version, count in ((25, 11), (26, 12), (33, 12)):
             flags = fitted(version, "E7").revision_flags()
             self.assertEqual(len(flags), count)
             body = self.ask(fitted(version, "E7"), b"i90500")
@@ -483,3 +485,22 @@ class ARowCanRunOutAsWellAsBegin(unittest.TestCase):
     def test_a_feature_that_is_not_in_the_tables_at_all(self):
         from tls350sim import versions
         self.assertIsNone(versions.withdrawn_in("no-such-feature"))
+
+
+class AlternateHtIsNotInVersion26(unittest.TestCase):
+    """786's MANIFOLDED: ALTERNATE-HT, refused by the bench TLS-350's 326.01
+    (`S786015`, 2026-09-18) and documented by 576013-623 Rev AN. No version
+    table dates it, so the gate is the one measurement: 26 refuses it, and a
+    later console takes it as the manual says."""
+
+    def reply(self, version):
+        c = fitted(version=version)
+        c.values["S78101"] = "011"
+        h = Handler(c, verbose=False)
+        return h.handle(chr(1).encode() + b"S786015" + chr(13).encode())
+
+    def test_version_26_refuses_it(self):
+        self.assertIn(b"?", self.reply(26))
+
+    def test_a_later_console_takes_it(self):
+        self.assertNotIn(b"?", self.reply(33))

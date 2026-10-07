@@ -137,7 +137,9 @@ def _clock(text):
     if text.upper() == DISABLED:
         return "DISABLED"
     hh, mm = int(text[:2]), int(text[2:])
-    ampm = "AM" if hh < 12 else "PM"
+    # hour 24 is midnight: the bench TLS-350 takes `2400` and reads it back
+    # `12:00 AM`, the same as `0000`
+    ampm = "AM" if hh < 12 or hh == 24 else "PM"
     h = hh % 12 or 12
     return f"{h}:{mm:02d} {ampm}"
 
@@ -145,11 +147,13 @@ def _clock(text):
 def _valid_clock(text):
     if text.upper() == DISABLED:
         return True
+    # 00 to 24 for the hour, which the bench accepted, and 00 to 59 for the
+    # minute: `1799` was refused with five `?` (2026-09-18)
     return (len(text) == 4 and text.isdigit()
-            and int(text[:2]) < 24 and int(text[2:]) < 60)
+            and int(text[:2]) <= 24 and int(text[2:]) < 60)
 
 
-def _dial_text(raw):
+def _dial_text(raw, today=None):
     """The DIAL TYPE and START TIME columns for one receiver.
 
     START TIME is TWO values on the ON DATE method and the console keeps them
@@ -158,28 +162,49 @@ def _dial_text(raw):
     `01/16/06 DISABLED` -- the console's date in neither form nor place. The
     other four methods name a recurrence rather than a date and stay as they
     are; the capture has no example of one. See FIDELITY S18.
+
+    A date of zeros, which is what a cold start stores, has no month: the
+    bench TLS-350 prints `??? 16, 2006` on JAN 16 and `??? 17, 2006` on JAN
+    17 (2026-09-18 and 2026-09-19) -- the console's own day and year under
+    three question marks. `today` is the console's clock, a struct_time.
     """
     if not raw:
         return "", ""
     m, rest = raw[0], raw[1:]
     name = DIAL_METHOD.get(m, "")
     if m == "1":
+        if rest[0:6] == "000000" and today is not None:
+            zero_date = "???" + clock_date(today)[3:]
+            return name, f"{zero_date:<16s}{_clock(rest[6:]):>8s}"
         try:
             when = time.strptime(rest[0:6], "%y%m%d")
         except ValueError:
             # a date `_dial_ok` refuses now and once let through, still in
             # somebody's state file: shown as it is stored, not raised over
-            return name, f"{rest[0:6]:<16s}{_clock(rest[6:])}"
-        return name, f"{clock_date(when):<16s}{_clock(rest[6:])}"
+            return name, f"{rest[0:6]:<16s}{_clock(rest[6:]):>8s}"
+        return name, f"{clock_date(when):<16s}{_clock(rest[6:]):>8s}"
+    # The recurring methods, as the bench TLS-350 set them out on 2026-09-18
+    # (START TIME is column 40): DAILY `       5:30 PM` -- the time in eight
+    # columns, right-aligned; WEEKLY `THR     5:26 PM` -- the day in seven,
+    # then the time in eight; MONTHLY `WEEK 2   MON     9:53 PM` -- the week
+    # in nine, the day in seven, the time in eight. The day is three letters
+    # and Thursday is THR; MON and THR were seen, the other five follow them.
+    # ANNUALLY was not captured and keeps its words.
     if m == "2":
         return name, (f"MONTH {int(rest[0:2])} WEEK {rest[2]} "
                       f"{WEEKDAY.get(rest[3], '')} {_clock(rest[4:])}")
     if m == "3":
-        return name, (f"WEEK {rest[0]} {WEEKDAY.get(rest[1], '')} "
-                      f"{_clock(rest[2:])}")
+        return name, (f"{'WEEK ' + rest[0]:<9s}"
+                      f"{WEEKDAY_SHORT.get(rest[1], ''):<7s}"
+                      f"{_clock(rest[2:]):>8s}")
     if m == "4":
-        return name, f"{WEEKDAY.get(rest[0], '')} {_clock(rest[1:])}"
-    return name, _clock(rest)
+        return name, (f"{WEEKDAY_SHORT.get(rest[0], ''):<7s}"
+                      f"{_clock(rest[1:]):>8s}")
+    return name, f"{_clock(rest):>8s}"
+
+
+WEEKDAY_SHORT = {"1": "MON", "2": "TUE", "3": "WED", "4": "THR", "5": "FRI",
+                 "6": "SAT", "7": "SUN"}
 
 
 # What a LIST field shows on the PANEL. A list is a packed run whose shape
@@ -253,9 +278,10 @@ def _lockout_ok(body):
 
 def _lockout_text(raw):
     if not raw:
-        # The title and its rule, and nothing under them. `NO LOCKOUT
-        # SCHEDULE` was this project's phrase; an empty report on this
-        # console is its heading alone. See FIDELITY S18 and U5.
+        # Nothing STORED. `NO LOCKOUT SCHEDULE` was this project's phrase
+        # and came out (FIDELITY S18, U5); what a real console prints for a
+        # schedule nobody set is its default, DAILY and both times DISABLED,
+        # which the 75A report supplies -- the bench TLS-350, 2026-09-18.
         return []
     kind, rest = raw[0], raw[1:]
     if kind == "0":
@@ -583,7 +609,7 @@ def validate(code, text):
 # ---------------------------------------------------------------------------
 # the shared plumbing
 # ---------------------------------------------------------------------------
-MINE = {"52A", "52B", "52C", "612", "61D", "75A", "7B1", "7B4",
+MINE = {"52A", "52B", "52C", "5BC", "52F", "612", "61D", "75A", "7B1", "7B4",
         "52D", "8C1", "8C2", "550", "551", "54C", "520",
         # 787, 7A7 and 75B are 52C's payload and 52C's report, for a LINE
         # rather than a receiver: "Set Pressure Line Leak Disable Alarm
@@ -599,7 +625,13 @@ MINE = {"52A", "52B", "52C", "612", "61D", "75A", "7B1", "7B4",
         # kept ONE assignment for 808 -- a `digits` field of width 8, so a
         # second Set overwrote the first -- and had no field at all for
         # 8BC. See FIDELITY I1a and CLOSED U48.
-        "808", "8BC"}
+        "808", "8BC",
+        # And the three line families have their "II" codes too, one version
+        # along like 8BC: 7BC, 7BD and 7BE, "Set ... Line Disable Alarm
+        # Assignments II". The bench TLS-350 answers I7BD00 with 787's own
+        # PRESSURE LLD SETUP REPORT, three blocks, word for word
+        # (2026-09-18); 7BC and 7BE are taken to follow it.
+        "7BC", "7BD", "7BE"}
 
 # Which line family each of the three belongs to, what its report is called,
 # and the code its label lives at -- all three off the manual's own page.
@@ -607,14 +639,27 @@ LINE_DISABLE = {"787": ("plld", "PRESSURE LLD SETUP REPORT", "Q", "782"),
                 "7A7": ("wplld", "WPLLD LLD   SETUP REPORT", "W", "7A2"),
                 "75B": ("vlld", "LINE LEAK SETUP REPORT", "P", "760")}
 
+# the II codes, one version along, are the same report under their own
+# page's title: p.438 spaces 7BE's `WPLLD LLD SETUP REPORT` once where p.434
+# spaces 7A7's three times
+LINE_DISABLE.update({"7BD": ("plld", "PRESSURE LLD SETUP REPORT", "Q", "782"),
+                     "7BE": ("wplld", "WPLLD LLD SETUP REPORT", "W", "7A2"),
+                     "7BC": ("vlld", "LINE LEAK SETUP REPORT", "P", "760")})
+
 # "Computer format is not supported for this command", said of the CODE and
 # not of one direction of it. 680 is the report that says the same.
 NO_COMPUTER_FORMAT = {"7B1", "7B4"}
 
 # what card each one needs before it means anything
-NEEDS = {"52A": "modem", "52B": "modem", "52C": "modem", "52D": "modem",
-         "520": "modem", "7B1": "bir",
-         "787": "plld", "7A7": "wplld", "75B": "vlld"}
+#
+# The receiver codes needed a MODEM here, and 7B1 needed BIR. The bench
+# TLS-350 has neither, and on 2026-09-18 it answered 520, 52A, 52B, 52C and
+# 52D with all eight receivers, took S52B Sets and read them back, and
+# answered 7B1 with `TANK MAP EMPTY`. The receivers are the console's own
+# eight addresses whatever is in the comm bay. The line families still want
+# their card: 7A7 with no WPLLD card answers a bare frame on the bench.
+NEEDS = {"787": "plld", "7A7": "wplld", "75B": "vlld",
+         "7BD": "plld", "7BE": "wplld", "7BC": "vlld"}
 
 
 
@@ -630,9 +675,9 @@ def _disable_lines(console, kind, dev):
     """
     if dev.isdigit() and int(dev):
         return [int(dev)]
-    numbers = [n for kind_, n, _label in console.programmed_lines()
-               if kind_ == kind]
-    return numbers or list(range(1, max(console.capacity(kind), 0) + 1))
+    # every position, programmed or not: with Q1 switched on and labelled,
+    # the bench still answers `I78700` with Q 1, Q 2 and Q 3 (`cap_site`)
+    return list(range(1, max(console.capacity(kind), 0) + 1))
 
 
 def _relays(console, dev):
@@ -643,10 +688,14 @@ def _relays(console, dev):
     and `I80800` with a stamp and an empty body -- no report title, where
     `I78700` on the same console prints one for each of its three pressure
     lines. A console with nothing to report on this code says nothing.
+
+    And one asked by number is the same question: the bench TLS-350, no
+    relay module, answered `I8BC01` with the frame alone (2026-09-22).
     """
+    configured = list(console.outputs.configured())
     if dev.isdigit() and int(dev):
-        return [int(dev)]
-    return list(console.outputs.configured())
+        return [int(dev)] if int(dev) in configured else []
+    return configured
 
 
 def _receivers(console, dev):
@@ -675,7 +724,7 @@ def handle(handler, tok, dev, code, data):
     c = handler.c
     need = NEEDS.get(tok)
     if need and not (c.has(need) if need != "bir" else c.licensed("bir")):
-        return handler._nine(code), f"no {need} fitted"
+        return handler._absent(code), f"no {need} fitted"
     setting = code[0] in "Ss"
     body = (data or "").strip()
 
@@ -713,7 +762,7 @@ def _set(handler, tok, dev, code, body):
         computer = code[0].islower()
         width = 8 if computer else 4
         if len(body) != 12 * width:
-            return (handler._nine(code), "REJECTED: wants twelve of "
+            return (handler._refused(code, body, tok, dev), "REJECTED: wants twelve of "
                     + ("FFFFFFFF" if computer else "GG.G"))
         try:
             if computer:
@@ -723,11 +772,11 @@ def _set(handler, tok, dev, code, body):
             else:
                 values = [float(body[n * 4:n * 4 + 4]) for n in range(12)]
         except Exception:
-            return handler._nine(code), "REJECTED: not twelve numbers"
+            return handler._refused(code, body, tok, dev), "REJECTED: not twelve numbers"
         if any(not 0.0 <= v <= 15.0 for v in values):
-            return handler._nine(code), "REJECTED: 0.0 to 15.0"
+            return handler._refused(code, body, tok, dev), "REJECTED: 0.0 to 15.0"
         c.values["S54C00"] = "".join(f"{v:04.1f}" for v in values)
-        return handler._frame(code, ""), "Reid vapor pressures"
+        return handler._answered(tok, dev, code), "Reid vapor pressures"
 
     if tok == "550":
         # "C - Inventory Alarms Units Configuration". The panel and the wire
@@ -736,63 +785,78 @@ def _set(handler, tok, dev, code, body):
         word = next((w for w, digit in UNITS_CONFIG_CODE.items()
                      if digit == body[:1]), None)
         if word is None:
-            return handler._nine(code), "REJECTED: 1 to 5"
+            return handler._refused(code, body, tok, dev), "REJECTED: 1 to 5"
         # ONE store, which is the whole of FIDELITY F9: the setting is it, and
         # `values["S55000"]` was a second copy that nothing ever read back.
         # A write-only duplicate cannot be seen to be wrong, so it is the kind
         # that drifts; `water_filter` on 642 keeps no such copy and is the
         # pattern this follows.
         c.set_setting("inventory_units", word, 0)
-        return handler._frame(code, ""), "inventory alarm units"
+        return handler._answered(tok, dev, code), "inventory alarm units"
     if tok == "551":
         # "A - Alarm Type", "U - Units Type", and note 3: "Alarm Type Max
         # Product cannot be set to unit type % Max"
         if len(body) < 2 or not body[:2].isdigit():
-            return handler._nine(code), "REJECTED: wants an alarm and a unit"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants an alarm and a unit"
         alarm, unit = body[0], body[1]
         if alarm not in "12345" or unit not in "1234":
-            return handler._nine(code), "REJECTED: out of range"
+            return handler._refused(code, body, tok, dev), "REJECTED: out of range"
         if alarm == "1" and unit == "1":
-            return (handler._nine(code),
+            return (handler._refused(code, body, tok, dev),
                     "REJECTED: Max Product cannot be % Max")
         row = UNIT_ROWS[int(alarm) - 1][1]
         c.set_setting(f"custom_{row}", UNITS_WORD[unit], 0)
-        return handler._frame(code, ""), "inventory alarm custom units"
+        return handler._answered(tok, dev, code), "inventory alarm custom units"
     if tok == "52A":
         if len(body) < 2 or not body[:2].isdigit():
-            return handler._nine(code), "REJECTED: wants a count"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants a count"
         count, rest = int(body[:2]), body[2:]
         if len(rest) != count * 4:
-            return (handler._nine(code),
+            return (handler._refused(code, body, tok, dev),
                     f"REJECTED: {count} reports wants {count * 4} characters")
         picks = {}
         for i in range(count):
             rr, ss = rest[i * 4:i * 4 + 2], rest[i * 4 + 2:i * 4 + 4]
             if rr not in REPORTS or ss not in ("00", "01"):
-                return handler._nine(code), f"REJECTED: report {rr}"
+                return handler._refused(code, body, tok, dev), f"REJECTED: report {rr}"
             picks[rr] = ss
         for r in _receivers(c, dev):
             c.receiver_reports.setdefault(r, {}).update(picks)
         c.save()
-        return handler._frame(code), f"{count} report(s) set"
+        return handler._answered(tok, dev, code), f"{count} report(s) set"
 
     if tok == "52B":
-        if not _dial_ok(body):
-            return handler._nine(code), "REJECTED: method and width disagree"
+        # The method decides the width and the bench TLS-350 reads that many
+        # characters and no more: `S52B0132121530` stored MONTHLY, week 2,
+        # Monday, 21:53, and the trailing 0 went nowhere (2026-09-18).
+        if body[:1] in DIAL_WIDTH:
+            body = body[:1 + DIAL_WIDTH[body[:1]]]
+        if (body[:1] == "4" and len(body) == 1 + DIAL_WIDTH["4"]
+                and body[1].isdigit() and body[1] not in WEEKDAY
+                and _valid_clock(body[-4:])):
+            # WEEKLY on a day that is not one: the bench TLS-350 took
+            # `S52B01481700` and `S52B01401700` and stored them as ON DATE
+            # with a zero date and the time sent -- `ON DATE  ??? 16, 2006
+            # 5:00 PM` (2026-09-19, `transcripts/probes.jsonl`)
+            # -- a zero date `_dial_ok` would refuse if it were SENT, which
+            # was not tried, so it is let through only from here
+            body = "1000000" + body[-4:]
+        elif not _dial_ok(body):
+            return handler._refused(code, body, tok, dev), "REJECTED: method and width disagree"
         for r in _receivers(c, dev):
             c.receiver_dial[r] = body
         c.save()
-        return (handler._frame(code),
+        return (handler._answered(tok, dev, code),
                 f"auto dial {DIAL_METHOD[body[0]].lower()}")
 
     if tok in LINE_DISABLE:
         # The same `AANNTTSS` 52C takes, against a LINE instead of a receiver.
         kind = LINE_DISABLE[tok][0]
         if len(body) != 8 or not body.isdigit():
-            return handler._nine(code), "REJECTED: wants AANNTTSS"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
-            return handler._nine(code), "REJECTED: status is 00 or 01"
+            return handler._refused(code, body, tok, dev), "REJECTED: status is 00 or 01"
         for number in _disable_lines(c, kind, dev):
             # Through the console's own door, so the group screen chapter 25
             # asks first -- `Q1: (Name)` over `IN-TANK ALARMS: NO` -- reads
@@ -800,7 +864,7 @@ def _set(handler, tok, dev, code, body):
             c.assign_line_disable_alarm(kind, number, aa, nn, tt,
                                         ss == "01")
         c.save()
-        return (handler._frame(code),
+        return (handler._answered(tok, dev, code),
                 "line disable assigned" if ss == "01" else "cleared")
 
     if tok in ("808", "8BC"):
@@ -808,28 +872,28 @@ def _set(handler, tok, dev, code, body):
         # Set, ss putting it on the list or taking it off. 8BC is the same
         # command with a later version number -- see the note on RELAY_ALARM.
         if len(body) != 8 or not body.isdigit():
-            return handler._nine(code), "REJECTED: wants AANNTTSS"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
-            return handler._nine(code), "REJECTED: status is 00 or 01"
+            return handler._refused(code, body, tok, dev), "REJECTED: status is 00 or 01"
         numbers = _relays(c, dev)
         if not numbers:
             # "RR - Relay number (Decimal, RR>00)" on 808, and a relay the
             # console has not got is not a relay
-            return handler._nine(code), "no such relay"
+            return handler._refused(code, body, tok, dev), "no such relay"
         for r in numbers:
             c.assign_relay_alarm(r, aa, nn, tt, ss == "01")
-        return (handler._frame(code),
+        return (handler._answered(tok, dev, code),
                 "relay alarm assigned" if ss == "01" else "relay alarm cleared")
 
     if tok == "52C":
         # "AANNTTSS" -- one assignment per Set, and SS says whether it goes on
         # the list or comes off it
         if len(body) != 8 or not body.isdigit():
-            return handler._nine(code), "REJECTED: wants AANNTTSS"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants AANNTTSS"
         aa, nn, tt, ss = body[:2], body[2:4], body[4:6], body[6:]
         if ss not in ("00", "01"):
-            return handler._nine(code), "REJECTED: status is 00 or 01"
+            return handler._refused(code, body, tok, dev), "REJECTED: status is 00 or 01"
         for r in _receivers(c, dev):
             rows = c.receiver_alarms.setdefault(r, [])
             key = (aa, nn, tt)
@@ -837,20 +901,20 @@ def _set(handler, tok, dev, code, body):
             if ss == "01":
                 rows.append(key)
         c.save()
-        return (handler._frame(code),
+        return (handler._answered(tok, dev, code),
                 "alarm assigned" if ss == "01" else "alarm cleared")
 
     if tok in ("612", "61D"):
         digits = body.replace(",", "")
         if digits and (not digits.isdigit() or len(digits) % 2):
-            return handler._nine(code), "REJECTED: wants tank numbers"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants tank numbers"
         tank = int(dev) if dev.isdigit() and int(dev) else 1
         partners = []
         for i in range(0, len(digits), 2):
             n = int(digits[i:i + 2])
             if n and n != tank and n not in partners:
                 if n > c.tank_count():
-                    return handler._nine(code), f"REJECTED: no tank {n}"
+                    return handler._refused(code, body, tok, dev), f"REJECTED: no tank {n}"
                 partners.append(n)
         if tok == "612":
             # "You only need to enter this information for one of the tanks
@@ -862,15 +926,15 @@ def _set(handler, tok, dev, code, body):
             c.values[f"S{tok}{tank:02d}"] = "".join(f"{n:02d}"
                                                     for n in partners)
         c.save()
-        return (handler._frame(code),
+        return (handler._answered(tok, dev, code),
                 f"tank {tank} manifolded to {partners or 'nothing'}")
 
     if tok == "75A":
         if not _lockout_ok(body):
-            return handler._nine(code), "REJECTED: type and width disagree"
+            return handler._refused(code, body, tok, dev), "REJECTED: type and width disagree"
         c.values["S75A00"] = body
         c.save()
-        return handler._frame(code), f"lockout {LOCKOUT_TYPE[body[0]].lower()}"
+        return handler._answered(tok, dev, code), f"lockout {LOCKOUT_TYPE[body[0]].lower()}"
 
     if tok == "52D":
         # the whole command is one character, and every character except "1"
@@ -879,39 +943,39 @@ def _set(handler, tok, dev, code, body):
             for r in _receivers(c, dev):
                 c.autodial_alarm[r] = False
             c.save()
-            return handler._frame(code), "autodial alarm cleared"
-        return handler._frame(code), "ignored: only 1 clears"
+            return handler._answered(tok, dev, code), "autodial alarm cleared"
+        return handler._answered(tok, dev, code), "ignored: only 1 clears"
 
     if tok in ("8C1", "8C2"):
         if not _serial_ok(body):
-            return (handler._nine(code),
+            return (handler._refused(code, body, tok, dev),
                     f"REJECTED: wants {VMC_SERIAL} decimal digits")
         number = int(dev) if dev.isdigit() and int(dev) else 1
         if tok == "8C1":
             c.vmc_serials[number] = body
             c.values[f"S8C1{number:02d}"] = body
             c.save()
-            return handler._frame(code), f"VMC {number} serial {body}"
+            return handler._answered(tok, dev, code), f"VMC {number} serial {body}"
         # 8C2 REMOVES, and only if that is the serial actually held --
         # otherwise a typo silently unregisters a controller that was fine
         held = c.vmc_serial(number)
         if held != body:
-            return (handler._nine(code),
+            return (handler._refused(code, body, tok, dev),
                     f"REJECTED: VMC {number} holds {held}")
         c.vmc_serials.pop(number, None)
         c.values.pop(f"S8C1{number:02d}", None)
         c.save()
-        return handler._frame(code), f"VMC {number} serial removed"
+        return handler._answered(tok, dev, code), f"VMC {number} serial removed"
 
     if tok == "7B4":
         if not _offset_ok(body):
-            return handler._nine(code), "REJECTED: wants FF MM TT +o.oo"
+            return handler._refused(code, body, tok, dev), "REJECTED: wants FF MM TT +o.oo"
         fp, meter, tank = int(body[0:2]), int(body[2:4]), int(body[4:6])
         pct = float(body[7:]) * (-1.0 if body[6] == "-" else 1.0)
         # The panel's INDIVIDUAL METER OFFSET row writes the same three
         # fields and a percent. See `Console.set_meter_offset`.
         c.set_meter_offset(fp, meter, tank, pct)
-        return handler._frame(code), f"meter {meter} offset {pct:+.2f}%"
+        return handler._answered(tok, dev, code), f"meter {meter} offset {pct:+.2f}%"
 
     # 7B1
     fields = map_fields(body)
@@ -921,7 +985,7 @@ def _set(handler, tok, dev, code, body):
         # no parameter to point at. 9999 is the wire's own "I did not
         # understand that", and it is what a real console answers a
         # malformed command with.
-        return handler._nine(code), "REJECTED: wants B SS FP MM TT"
+        return handler._refused(code, body, tok, dev), "REJECTED: wants B SS FP MM TT"
     bad = map_errors(c, fields)
     if bad:
         # "All parameters are checked before the command is performed. If an
@@ -989,22 +1053,32 @@ def _inquire(handler, tok, dev, code):
                         for _label, row in UNIT_ROWS)
         return handler._frame(code, body), "inventory alarm units"
     if tok == "52A":
-        rows, body = ["RECEIVER REPORT LIST"], ""
+        # The title, a blank and the heading, and on the bench TLS-350 with
+        # no report selected for any receiver, nothing under them
+        # (2026-09-18). A receiver WITH reports keeps the lines below, which
+        # no capture has yet.
+        rows = ["RECEIVER REPORT LIST", "",
+                "RCVR   LOCATION LABEL       REPORT LIST"]
+        body = ""
         for r in _receivers(c, dev):
             picks = c.receiver_reports.get(r, {})
             on = sorted(k for k, v in picks.items() if v == "01")
+            # packed, every receiver carries all nineteen slots, each with
+            # its status -- `011901000200030004000500...190002190100...` on
+            # the bench TLS-350 with none selected (`cap_swept`, and the
+            # same in every capture since). 04 is among them: the manual's
+            # list skips it and the console's slots do not.
+            body += f"{r:02d}19" + "".join(
+                f"{k:02d}" + ("01" if picks.get(f"{k:02d}") == "01" else "00")
+                for k in range(1, 20))
+            if not on:
+                continue
             rows.append(f"RCVR {r}: {c.text('522', r)}".rstrip())
-            # A receiver with nothing selected gets no lines under it.
-            #
-            # This one is worth a second look and is flagged in U5. Its
-            # immediate sibling 52C DOES mark an empty block, and the words
-            # are in the capture verbatim -- `- NO ALARM ASSIGNMENTS -` on
-            # `I78700` and `I61500` -- so the dashed style is real for that
-            # report. What a REPORT LIST block reads when nothing is
-            # selected is on no page and in no capture, and `- NONE -` was
-            # a guess at it. See FIDELITY U5.
+            # A receiver with nothing selected is not listed at all: the
+            # bench answers the heading and nothing under it, where 52C
+            # prints `- NO ALARM ASSIGNMENTS -` for an empty block. `- NONE
+            # -` was a guess at this and came out earlier (FIDELITY U5).
             rows += [f"     {REPORTS[k]}" for k in on]
-            body += f"{r:02d}{len(on):02d}" + "".join(k + "01" for k in on)
         if display:
             return handler._frame(code, SEP.join(rows)), "report list"
         return handler._frame(code, body), "report list"
@@ -1035,10 +1109,14 @@ def _inquire(handler, tok, dev, code):
         body = ""
         for r in _receivers(c, dev):
             raw = c.receiver_dial_spec(r)
-            kind, when = _dial_text(raw)
+            kind, when = _dial_text(raw, c.now())
             rows.append((f"{r:4d}   {c.text('522', r):<21.21s}"
                          f"{kind:<12s}{when}").rstrip())
-            body += f"{r:02d}" + raw
+            # 520, the Version 20 twin, counts the spec's characters in hex
+            # before it: `010B1000000EE00` on the bench TLS-350 where 52B
+            # packs `011000000EE00` (`cap_swept`, 2026-09-18)
+            body += f"{r:02d}" + (f"{len(raw):02X}" if tok == "520"
+                                  else "") + raw
         if display:
             return handler._frame(code, SEP.join(rows)), "auto dial setup"
         return handler._frame(code, body), "auto dial setup"
@@ -1104,10 +1182,38 @@ def _inquire(handler, tok, dev, code):
             return handler._frame(code, SEP.join(rows)), "relay alarms"
         return handler._frame(code, body), "relay alarms"
 
-    if tok == "52C":
+    if tok == "52F" and display:
+        # RECEIVER ALARM STATUS, a block per receiver as the bench TLS-350
+        # draws it (2026-09-18): a blank line, `D n:` and the label twenty
+        # wide, and the four receiver alarms indented one. This console
+        # keeps no per-receiver alarm state -- the autodial failure it models
+        # is a system alarm -- so every row reads CLEAR, which is what a
+        # console nobody has dialled from reads.
+        rows = ["RECEIVER ALARM STATUS"]
+        for r in _receivers(c, dev):
+            rows += ["", f"D {r}:{c.text('522', r) or '':<20.20s}",
+                     " SERVICE REPORT WARN: CLEAR",
+                     " ALARM CLEAR WARNING: CLEAR",
+                     " DELIVERY REPORT WRN: CLEAR",
+                     " NO DIAL TONE ALARM : CLEAR"]
+        return handler._frame(code, SEP.join(rows)), "receiver alarm status"
+    if tok == "52F":
+        # and packed: the count of receiver alarms, then each receiver's
+        # number and one flag per alarm -- `i52F00` answers
+        # 04010000020000...080000 on the bench. It fell through to the meter
+        # map below, and answered with I7B1's title.
+        return (handler._frame(code, "04" + "".join(
+            f"{r:02d}0000" for r in _receivers(c, dev))), "receiver alarms")
+
+    if tok in ("52C", "5BC"):
+        # A blank line above every block, the first one included, and the
+        # label column twenty wide: `D 1:` and twenty blanks on a receiver
+        # nobody has named -- the bench TLS-350's I52C00 and I5BC00, which
+        # answer the same report (2026-09-18). 5BC is 52C's "II" code.
         rows, body = ["RECEIVER SETUP REPORT"], ""
         for r in _receivers(c, dev):
-            rows.append(f"D {r}: {c.text('522', r)}".rstrip())
+            rows.append("")
+            rows.append(f"D {r}:{c.text('522', r) or '':<20.20s}")
             mine = c.receiver_alarms.get(r, [])
             for aa, nn, tt in mine:
                 rows.append(f"     {c.alarm_name(aa, nn)}"
@@ -1175,10 +1281,19 @@ def _inquire(handler, tok, dev, code):
     if tok == "75A":
         raw = (c.values.get("S75A00") or "").strip()
         if display:
-            rows = ["LINE LEAK LOCKOUT SETUP", "------ ------"]
-            return (handler._frame(code, SEP.join(rows + _lockout_text(raw))),
+            # The rule is dashes with spaces between them, and a console that
+            # has not been given a schedule prints the DAILY one it holds,
+            # both times DISABLED -- the bench TLS-350's I75A00 out of a cold
+            # start (2026-09-18). The heading alone was this project's.
+            rows = ["LINE LEAK LOCKOUT SETUP", "- - - - - -  - - - - - -"]
+            body_rows = _lockout_text(raw) or [
+                "LOCKOUT SCHEDULE", "DAILY", "START TIME: DISABLED",
+                "STOP TIME : DISABLED"]
+            return (handler._frame(code, SEP.join(rows + body_rows)),
                     "lockout schedule")
-        return handler._frame(code, raw), "lockout schedule"
+        # and packed the same schedule: `0EE00EE00`, DAILY with both times
+        # DISABLED, in every bench capture (2026-09-18 and 19)
+        return handler._frame(code, raw or "0EE00EE00"), "lockout schedule"
 
     if tok == "52D":
         receivers = _receivers(c, dev)
@@ -1189,6 +1304,10 @@ def _inquire(handler, tok, dev, code):
                 rows.append(f"{r:2d}      "
                             + ("ALARM" if c.autodial_alarm.get(r) else "CLEAR"))
             return handler._frame(code, SEP.join(rows)), "autodial alarms"
+        # packed, every receiver whatever the device: `i52D01` and `i52D02`
+        # answered `0800000000` as `i52D00` does (2026-09-22 and 24), where
+        # the display form draws the one receiver asked for. FIDELITY S38.
+        receivers = _receivers(c, "00")
         body = f"{len(receivers):02d}" + "".join(
             "1" if c.autodial_alarm.get(r) else "0" for r in receivers)
         return handler._frame(code, body), "autodial alarms"

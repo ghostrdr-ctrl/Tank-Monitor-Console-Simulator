@@ -104,6 +104,10 @@ class TheTransducer(unittest.TestCase):
         ln.transducer = "open"
         self.assertLess(ln.reading, 0.0)
         self.assertIn("-1.000 PSI", ln.screen()[0])
+        # and a TEST is what notices it: the bench TLS-350's Q2 sat open for
+        # four minutes without the alarm (2026-09-19, `idleline.log`)
+        self.assertNotIn(aa + nn + "01", c.conditions())
+        ln.tried = True
         self.assertIn(aa + nn + "01", c.conditions())
         ln.transducer = None
         self.assertNotIn(aa + nn + "01", c.conditions())
@@ -210,6 +214,83 @@ class TheCommErrorRecord(unittest.TestCase):
         c.clear_comm_errors(port)
         report = h.handle(("{}I888{:02d}{}".format(chr(1), port, chr(13))).encode())
         self.assertNotIn(b"LOST CARRIER", report)
+
+
+class ASessionCutOffMidCommand(unittest.TestCase):
+    """What puts a record on 888. The bench TLS-350 carried two days of
+    sessions over its TCP/IP card with `CONNECTION : NONE` and no stamps
+    (`cap_unprogrammed` to `cap_site`), and after one died while the console
+    was waiting for the rest of a command it read MODEM DIAL IN, WAITING FOR
+    DATA and DATA TIMED OUT with both stamps (2026-09-19,
+    `transcripts/comm888`). FIDELITY S36."""
+
+    def report(self, c):
+        from tls350sim.wire import Handler
+        h = Handler(c, verbose=False)
+        return h.handle(("{}I88800{}".format(chr(1), chr(13))).encode())
+
+    def a_console(self):
+        c = a_pair()
+        c.modules["rs232"] = 1
+        c.tick()
+        return c
+
+    def test_traffic_alone_says_nothing(self):
+        c = self.a_console()
+        c.note_comm()
+        report = self.report(c)
+        self.assertIn(b"CONNECTION : NONE", report)
+        self.assertNotIn(b"TIME OF LAST COMM DATA", report)
+
+    def test_a_cut_session_is_the_whole_block(self):
+        c = self.a_console()
+        c.note_comm()
+        c.session_cut()
+        report = self.report(c)
+        for want in (b"CONNECTION : MODEM DIAL IN",
+                     b"FUNCTION   : WAITING FOR DATA",
+                     b"ERROR      : DATA TIMED OUT",
+                     # the port's own settings: 9600 was the bench's port 2,
+                     # its satellite, and this is a fresh RS-232 port at 1200
+                     b"BAUD RATE  : 1200",
+                     b"TIME OF LAST COMM DATA:",
+                     b"TIME OF LAST COMM ERROR:"):
+            self.assertIn(want, report, want)
+
+    def test_a_session_that_stops_mid_command_records_it(self):
+        """End to end, through `wire.serve`: a command left half sent."""
+        import socket
+        import threading
+        import time
+        from tls350sim import wire
+        c = self.a_console()
+        got = []
+        threading.Thread(target=wire.serve,
+                         args=(c, "127.0.0.1", 0, False, None),
+                         kwargs={"on_socket": got.append},
+                         daemon=True).start()
+        deadline = time.time() + 5.0
+        while not got and time.time() < deadline:
+            time.sleep(0.01)
+        self.addCleanup(got[0].close)
+        where = ("127.0.0.1", got[0].getsockname()[1])
+        conn = socket.create_connection(where, timeout=5.0)
+        conn.sendall(chr(1).encode() + b"I201")      # half a command
+        time.sleep(0.2)
+        conn.close()
+        deadline = time.time() + 5.0
+        while not c.comm_errors and time.time() < deadline:
+            time.sleep(0.02)
+        self.assertIn(b"DATA TIMED OUT", self.report(c))
+        # and a session that finishes what it started leaves nothing
+        c.comm_errors.clear()
+        c.comm_connect.clear()
+        conn = socket.create_connection(where, timeout=5.0)
+        conn.sendall(chr(1).encode() + b"I20100" + chr(13).encode())
+        time.sleep(0.3)
+        conn.close()
+        time.sleep(0.3)
+        self.assertEqual(c.comm_errors, {})
 
 
 class TheServiceVisit(unittest.TestCase):

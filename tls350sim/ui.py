@@ -37,10 +37,12 @@ from .facepanel import CURSOR, DotMatrixLCD, KeyCap, blend
 from tkinter import ttk
 
 from . import APP_NAME, DISCLAIMER, PUBLISHER, __version__
-from . import fieldio, masks
+from . import fieldio, leaktest, masks
 from . import bench, exposed, paths, update, updateui, xport
+from . import xportnet
 from .clock import clock_date
 from . import presets
+from . import sitebackup
 from . import printer
 from . import screens
 from . import traffic as _traffic
@@ -249,7 +251,8 @@ def line_pick(kind, number):
 
 
 class SimApp(tk.Tk):
-    def __init__(self, console, port=10001, policy=None, capture=None):
+    def __init__(self, console, port=10001, policy=None, capture=None,
+                 host="127.0.0.1"):
         enable_dpi_awareness()
         claim_taskbar_identity()
         super().__init__()
@@ -269,17 +272,33 @@ class SimApp(tk.Tk):
         # its constructor. See `bench.set_scale`.
         bench.set_scale(self.px)
         self.console = console
+        # 5FA, the display mirror, reads the panel's own screen off the
+        # resting display (`wire.Handler._glass_reply`)
+        console.glass_source = self._glass_for_wire
         self.port = port
         # The exposure the process was started with, and the capture it is
         # writing. Handed neither, the bench serves as it always has and the
         # Capture view is not built. See `exposed.py`.
         self.policy = policy or exposed.Policy(exposed.BENCH)
+        # Where the bare tunnel was bound, which this window cannot see any
+        # other way: `run.py` starts it round a socket it never hands over.
+        # It is what decides whether lowering the exposure is safe when
+        # there is no card to move. See `_retreat_first` and FIDELITY R26.
+        self.host = host
         self.capture = capture
-        if self.capture is not None:
-            self.capture.enable(self.policy.capturing)
+        if self.capture is not None and self.policy.capturing:
+            # Arms, and never disarms. This was `enable(self.policy
+            # .capturing)`, which switched OFF a capture the command line
+            # had asked for by name: `run.py --capture cap.jsonl` with no
+            # exposure set built an armed recorder and the window turned it
+            # straight back off. A bench policy is not a request to stop
+            # recording; the Bench menu's dropdown is, and it still is.
+            # FIDELITY R29.
+            self.capture.enable(True)
         self._cap_shown = 0          # rows of the capture already on screen
         self._cap_follow = True
         self._cap_after = None
+        self._cap_fault_said = None  # the last capture outage put in the log
         self.title(f"{APP_NAME}  --  serial on 127.0.0.1:{port}")
         self.configure(bg=PANEL_BG)
         self.reset_panel()
@@ -357,6 +376,10 @@ class SimApp(tk.Tk):
         # the parent again. One of "no", "yes", "sure_no", "sure_yes".
         self.vmc_remove = "no"
         self.isd_override = None  # the shutdown-override confirmation walk
+        # (kind, device) while START LVP TEST is on the glass. ALARM/TEST
+        # after a VLLD 3.0 gph shutdown puts it there and ENTER runs it.
+        # FIDELITY H18.
+        self.lvp_prompt = None
         self.isdflow = None       # the grade-hose mapping flows of 577013-800
         self.sumpflow = None      # SELECT MAG SENSOR, 576013-610 p.24-4
         # (the confirmation on the glass, the one STEP shows next): p.20-2
@@ -567,7 +590,15 @@ class SimApp(tk.Tk):
             loadm.add_command(label=name,
                               command=lambda n=name:
                               self._load_preset_named(n))
+        loadm.add_separator()
+        loadm.add_command(label="From a site backup (.vrset)...",
+                          command=self._site_backup_asked)
         conm.add_cascade(label="Load example site", menu=loadm)
+        conm.add_command(label="Load site backup (.vrset)...",
+                         command=self._site_backup_asked)
+        conm.add_command(label="Site reports...",
+                         command=self._show_site_reports)
+        conm.add_separator()
         conm.add_command(label="Seed programming from file...",
                          command=self._seed_asked)
         conm.add_command(label="Save programming to file...",
@@ -1467,7 +1498,23 @@ class SimApp(tk.Tk):
         # there and always empty teaches people to ignore it, and this is
         # the one view that must be noticed the moment it has something in
         # it. `_apply_exposure` shows it.
-        self._switch.set_visible("Capture", self.policy.capturing)
+        #
+        # Or the capture is armed without the exposure being raised, which
+        # `--capture` on a bench now does: the view is the only place that
+        # says whether the file is being written, so hiding it there would
+        # keep the one answer the operator came for off the screen.
+        # FIDELITY R29.
+        self._switch.set_visible(
+            "Capture",
+            self.policy.capturing
+            or (self.capture is not None and self.capture.enabled))
+        # `_build_exposure` ends by painting, and it runs inside
+        # `_build_network` above -- BEFORE `_build_capture` has made
+        # `_cap_where`, so that paint's `hasattr` guard skipped it silently
+        # and the label saying where the capture is going stayed empty for
+        # the whole session unless somebody touched the exposure dropdown.
+        # Painted again here, with every widget it names built.
+        self._paint_exposure()
         if self.capture is not None:
             self._poll_capture()
         # The site the console already knows about, there at first sight.
@@ -1612,13 +1659,43 @@ class SimApp(tk.Tk):
                 if self._cap_follow:
                     self.capbox.see("end")
             st = cap.stats()
+            text = ("%d exchanges  %d sources%s%s"
+                    % (st["total"],
+                       st["peers"],
+                       "+" if st.get("peers_untallied") else "",
+                       "  (%d dropped from view)" % st["dropped"]
+                       if st["dropped"] else ""))
+            # A count that climbs while the file stands still is the one
+            # thing this view must never show quietly: a stopped capture
+            # and a quiet night look identical until it says so. The two
+            # numbers are different failures -- `dropped` fell off this
+            # view's ring and is safe on the disk, `unwritten` never
+            # reached the disk at all. FIDELITY R34.
+            fault = st.get("fault")
+            lost = st.get("unwritten", 0)
+            if fault:
+                text += ("   NOT WRITING: %s (%d exchange(s) lost)"
+                         % (fault, lost))
+            elif lost:
+                # Writing again, and still short. The rows an outage ate do
+                # not come back, so the count stays -- but it is history
+                # now, not a fault, and saying NOT WRITING of a capture
+                # that IS writing is the same lie the other way round.
+                text += "   %d exchange(s) never reached the file" % lost
             self._cap_stats.config(
-                text="%d exchanges  %d sources%s%s"
-                     % (st["total"],
-                        st["peers"],
-                        "+" if st.get("peers_untallied") else "",
-                        "  (%d dropped from view)" % st["dropped"]
-                        if st["dropped"] else ""))
+                text=text,
+                fg=bench.BAD if fault else bench.WARN if lost
+                else bench.MUTED)
+            if fault != self._cap_fault_said:
+                self._cap_fault_said = fault
+                if fault:
+                    self.log("-- capture stopped: %s" % fault)
+                else:
+                    self.log("-- capture is writing again")
+                # The "Appending to ..." line is painted on exposure
+                # changes, which an outage is not one of; repaint it here
+                # so it is not still promising the disk minutes later.
+                self._paint_exposure()
         except tk.TclError:
             return
         self._cap_after = self.after(400, self._poll_capture)
@@ -1927,6 +2004,56 @@ class SimApp(tk.Tk):
                 return
         self._apply_exposure(level)
 
+    # Which way is down. Lowering GIVES UP protections, and that is the
+    # direction that must not happen while the listeners are still on an
+    # address the world can reach. FIDELITY R26.
+    LEVEL_RANK = {exposed.BENCH: 0, exposed.LAN: 1, exposed.EXPOSED: 2}
+
+    def _retreat_first(self, level):
+        """Take the listeners off a wide address BEFORE the guards come off.
+
+        `_apply_exposure` dropped the limits, unfroze the writes and
+        disarmed the capture without touching a socket, so a card brought
+        up on `0.0.0.0` was still on `0.0.0.0` afterwards with nothing in
+        front of it -- reproduced by selecting Bench and then changing the
+        saved configuration over the network from another machine. The note
+        this project left at that line, that the card "is still bound where
+        it started", read it as a limitation of the control rather than as
+        the hole it is. FIDELITY R26.
+
+        Returns False when the retreat cannot be made, and then the level
+        does not change at all: refusing to lower is the other half of the
+        entry's own remedy, and it is the only honest answer when this
+        window has no handle on the listener.
+        """
+        net = getattr(self, "_card_net", None)
+        if net is not None:
+            if net.bound_wide():
+                self.log("-- lowering to %s: the card is on %s, so it is "
+                         "being moved to 127.0.0.1 and its open connections "
+                         "dropped BEFORE the protections come off"
+                         % (exposed.LABELS[level], net.bound_host()))
+                net.confine("127.0.0.1")
+            return True
+        if xportnet.is_loopback(self.host):
+            return True
+        # The bare tunnel is a thread `run.py` started round a socket this
+        # window was never given, so there is nothing here that can move
+        # it. Saying so beats lowering the guard and hoping.
+        why = ("The serial tunnel is bound to %s and this window cannot "
+               "move it, so lowering the exposure to %s would leave it "
+               "open to the network with nothing in front of it.\n\n"
+               "Restart with --host 127.0.0.1, or with --xport so the "
+               "card's own listeners can be moved."
+               % (self.host, exposed.LABELS[level]))
+        self.log("-- REFUSED: " + " ".join(why.split()))
+        try:
+            from tkinter import messagebox
+            messagebox.showwarning("Exposure not lowered", why, parent=self)
+        except Exception:           # noqa: BLE001 -- headless, or no display
+            pass
+        return False
+
     def _apply_exposure(self, level):
         """Put a new exposure in force, here and in every listener.
 
@@ -1937,6 +2064,16 @@ class SimApp(tk.Tk):
         from the limits at the time, and a gate cannot widen itself.
         """
         was = self.policy.level
+        if self.LEVEL_RANK[level] < self.LEVEL_RANK[was]:
+            # Before a single limit is dropped. FIDELITY R26.
+            if not self._retreat_first(level):
+                return
+        elif self.LEVEL_RANK[level] > self.LEVEL_RANK[was]:
+            # Going back up releases the card to its own programming.
+            net = getattr(self, "_card_net", None)
+            if net is not None and net.confine(None):
+                self.log("-- the card is going back to the address it is "
+                         "programmed with")
         self.policy.level = level
         total, per_ip, rate, idle = exposed.Policy.LIMITS[level]
         self.policy.max_total = total
@@ -1944,6 +2081,12 @@ class SimApp(tk.Tk):
         self.policy.rate_per_min = rate
         self.policy.idle_timeout = idle
         self.policy._delay = exposed.Policy.DELAY[level]
+        self.policy.pace = exposed.Policy.PACE[level]
+        # The listeners read this off the policy object on every chunk, so
+        # a level changed here reaches a connection that is already open.
+        # Left out, raising the exposure from the bench capped the
+        # connections and not the bytes down them. FIDELITY R32.
+        self.policy.max_bytes_per_min = exposed.Policy.BYTES_PER_MIN[level]
         exposed.freeze_writes(self.policy.readonly)
 
         # Arm the capture the listeners are ALREADY holding. Making a new
@@ -1987,11 +2130,18 @@ class SimApp(tk.Tk):
                                        "only")
         self._exp_note.config(text=note)
         if hasattr(self, "_cap_where"):
-            self._cap_where.config(
-                text=("Appending to %s" % self.capture.path)
-                if self.capture is not None and self.capture.path
-                else "Held in this window only -- no capture file was named. "
-                     "Start with --capture FILE.jsonl to keep one.")
+            if self.capture is not None and self.capture.path:
+                where = "Appending to %s" % self.capture.path
+                # "Appending to" is a claim about the disk, so it has to
+                # stop being made when the disk stopped taking it.
+                # FIDELITY R34.
+                if self.capture.fault:
+                    where = ("NOT writing to %s -- %s"
+                             % (self.capture.path, self.capture.fault))
+            else:
+                where = ("Held in this window only -- no capture file was "
+                         "named. Start with --capture FILE.jsonl to keep one.")
+            self._cap_where.config(text=where)
 
     def _set_breaker(self):
         """The wall breaker. Off is dark everywhere at once; on is a warm
@@ -2691,6 +2841,159 @@ class SimApp(tk.Tk):
         self._bench_say("seeded %d value(s) from %s"
                         % (n, os.path.basename(path)))
 
+    def _site_backup_asked(self):
+        """Load a real site whole: the programming, the cards, the state.
+
+        Seeding takes the programming and nothing else. A site snapshot
+        from the Tank Monitor Console Multitool carries the console's own
+        reports as well, and `sitebackup.load` reads the cards out of 102,
+        the tanks out of 201, the sensors, the alarms, the deliveries and
+        the leak results out of the rest. A plain backup with no reports
+        still loads; it just brings less.
+        """
+        from tkinter import filedialog, messagebox
+        path = filedialog.askopenfilename(
+            parent=self, title="Load a site backup",
+            filetypes=self.SETUP_FILES,
+            initialdir=os.path.dirname(self.console.archive_path() or "")
+            or None)
+        if not path:
+            return
+        try:
+            with self.console.lock:
+                done = sitebackup.load(self.console, path)
+        except (OSError, UnicodeDecodeError, ValueError) as e:
+            messagebox.showerror("Could not read that file",
+                                 "%s\n\n%s" % (os.path.basename(path), e),
+                                 parent=self)
+            return
+        self._after_console_change()
+        self._sync_network()
+        name = os.path.basename(path)
+        self.log("-- site backup %s: %d value(s), %d report(s)"
+                 % (name, done["values"], done["reports"]))
+        for line in done["applied"]:
+            self.log("--   " + line)
+        for line in done["skipped"]:
+            self.log("--   not loaded: " + line)
+        self._bench_say("site loaded from %s" % name)
+        lines = ["%d programming value(s) seeded." % done["values"]]
+        if done["reports"]:
+            lines.append("%d report(s) kept; read into the simulator:"
+                         % done["reports"])
+            lines += ["  - " + a for a in done["applied"]] or ["  (nothing)"]
+        else:
+            lines.append("This backup carries no reports, so only the "
+                         "programming was loaded. Take a site snapshot "
+                         "(Back Up with reports) to bring the site's state.")
+        if done["skipped"]:
+            lines.append("")
+            lines.append("Not loaded:")
+            lines += ["  - " + s for s in done["skipped"][:12]]
+            if len(done["skipped"]) > 12:
+                lines.append("  ... and %d more (see the log)"
+                             % (len(done["skipped"]) - 12))
+        if done["reports"]:
+            lines += ["", "Open the site's reports now?"]
+            if messagebox.askyesno("Site backup loaded", "\n".join(lines),
+                                   parent=self):
+                self._show_site_reports()
+        else:
+            messagebox.showinfo("Site backup loaded", "\n".join(lines),
+                                parent=self)
+
+    def _show_site_reports(self):
+        """The site's own reports beside what this console prints now.
+
+        Left is the real console's reply as the backup kept it, untouched
+        but for the frame; right is this simulator answering the same code
+        at this moment. They start the same where the import could read the
+        report into the model, and drift as the simulation runs.
+        """
+        from tkinter import messagebox
+        blocks = sitebackup.reports(self.console)
+        if not blocks:
+            messagebox.showinfo(
+                "No site reports",
+                "No site backup with reports has been loaded.\n\n"
+                "Console > Load site backup (.vrset)... takes a Multitool "
+                "site snapshot, the backup taken with its reports.",
+                parent=self)
+            return
+        win = getattr(self, "_site_win", None)
+        if win is not None and win.winfo_exists():
+            win.destroy()
+        win = tk.Toplevel(self)
+        self._site_win = win
+        self._set_icon(win)
+        kept = self.console.site_backup
+        win.title("Site reports  --  %s" % kept.get("source", ""))
+        win.configure(bg=bench.BG)
+        win.minsize(self.S(640), self.S(360))
+        head = tk.Frame(win, bg=bench.BG)
+        head.pack(fill="x", padx=10, pady=(8, 0))
+        where = kept.get("header") or {}
+        tk.Label(head, bg=bench.BG, fg=bench.INK, font=bench.FONT_SM,
+                 anchor="w", justify="left",
+                 text="%s   taken %s from %s" % (
+                     kept.get("source", ""), where.get("time", "?")[:19],
+                     where.get("host", "?"))).pack(side="left")
+        if kept.get("posted"):
+            tk.Button(head, text="Clear alarms carried from the backup",
+                      command=self._clear_site_alarms, font=bench.FONT_SM
+                      ).pack(side="right")
+        body = tk.PanedWindow(win, orient="horizontal", bg=bench.BG,
+                              sashwidth=self.S(4))
+        body.pack(fill="both", expand=True, padx=10, pady=8)
+        picker = tk.Listbox(body, bg="#17191d", fg="#c8ccd2",
+                            font=bench.MONO_SM, borderwidth=0,
+                            exportselection=False, width=34)
+        body.add(picker)
+        panes = []
+        for title in ("The site, as backed up", "This console, now"):
+            frame = tk.Frame(body, bg=bench.BG)
+            tk.Label(frame, text=title, bg=bench.BG, fg=bench.MUTED,
+                     font=bench.FONT_SM, anchor="w").pack(fill="x")
+            text = tk.Text(frame, bg="#17191d", fg="#c8ccd2",
+                           font=bench.MONO_SM, borderwidth=0, padx=8,
+                           pady=6, wrap="none", width=60)
+            text.pack(fill="both", expand=True)
+            body.add(frame, stretch="always")
+            panes.append(text)
+        for b in blocks:
+            picker.insert("end", "%s  %-10s %s" % (b.code, b.status, b.name))
+
+        def show(_e=None):
+            pick = picker.curselection()
+            if not pick:
+                return
+            from . import wire as _wire
+            b = blocks[pick[0]]
+            # the handler takes the console's lock itself
+            h = _wire.Handler(self.console, verbose=False)
+            now = h.handle(("\x01I%s00\r" % b.code).encode())
+            now = sitebackup.report_text(
+                sitebackup.Block(b.code, b.name, b.group, "data", now, None))
+            for text, content in zip(panes, (sitebackup.report_text(b), now)):
+                text.configure(state="normal")
+                text.delete("1.0", "end")
+                text.insert("1.0", content)
+                text.configure(state="disabled")
+
+        picker.bind("<<ListboxSelect>>", show)
+        picker.selection_set(0)
+        show()
+
+    def _clear_site_alarms(self):
+        """Take down the alarms the backup posted because the model could
+        not raise them itself. They are results, like a failed test's, and
+        stand until something clears them; this is that something."""
+        with self.console.lock:
+            n = sitebackup.clear_posted(self.console)
+        self.log("-- cleared %d alarm(s) carried from the site backup" % n)
+        self._bench_say("alarms from the backup cleared")
+        self._show_site_reports()
+
     def _archive_asked(self):
         """Write this console's programming out, for seeding another one.
 
@@ -2862,6 +3165,46 @@ class SimApp(tk.Tk):
             font=("Segoe UI", 8), anchor="w",
             command=self._set_probe_gt)
         tick.pack(anchor="w", padx=22)
+        # What is wired on its four thermistor inputs, in ohms; blank is
+        # open. A resistor stands in for a thermistor the way one did on the
+        # bench TLS-350 (`groundtemp`).
+        wired = tk.Frame(box, bg=bench.BG)
+        wired.pack(anchor="w", padx=40)
+        tk.Label(wired, text="thermistor inputs, ohms (blank = open):",
+                 bg=bench.BG, fg="#8f948b",
+                 font=("Segoe UI", 8)).pack(side="left")
+        self.thermistor_vars = {}
+        for n in range(1, 5):
+            ohms = self.console.thermistors.get(n)
+            var = tk.StringVar(value="" if ohms is None else f"{ohms:g}")
+            self.thermistor_vars[n] = var
+            tk.Label(wired, text=f" {n}", bg=bench.BG, fg="#8f948b",
+                     font=("Segoe UI", 8)).pack(side="left")
+            entry = tk.Entry(wired, textvariable=var, width=8,
+                             font=("Segoe UI", 8))
+            entry.pack(side="left")
+            entry.bind("<Return>", lambda _e, n=n: self._set_thermistor(n))
+            entry.bind("<FocusOut>", lambda _e, n=n: self._set_thermistor(n))
+
+    def _set_thermistor(self, number):
+        text = self.thermistor_vars[number].get().strip().lower()
+        text = text.replace(",", "")
+        scale = {"k": 1e3, "m": 1e6}.get(text[-1:], 1.0)
+        if scale != 1.0:
+            text = text[:-1]
+        try:
+            ohms = float(text) * scale if text else None
+        except ValueError:
+            ohms = self.console.thermistors.get(number)
+        if ohms is not None and not (0.0 < ohms < 1e9):
+            ohms = self.console.thermistors.get(number)
+        self.thermistor_vars[number].set("" if ohms is None else f"{ohms:g}")
+        if ohms == self.console.thermistors.get(number):
+            return
+        self.console.wire_thermistor(number, ohms)
+        self.console.save()
+        self._bench_say(f"thermistor input {number}: "
+                        + ("open" if ohms is None else f"{ohms:g} ohms"))
 
     def _set_probe_gt(self):
         self.console.probe_gt = bool(self.probe_gt_var.get())
@@ -4876,6 +5219,8 @@ class SimApp(tk.Tk):
             return self._edit_time()
         if self._date_entry():
             return self._edit_date()
+        if self._signed_echo():
+            return self._signed_text()
         text = self.buf
         i = max(0, min(self.cur, len(text)))
         if i >= len(text):
@@ -4883,6 +5228,36 @@ class SimApp(tk.Tk):
         if self._blink:
             return text[:i] + CURSOR + text[i + 1:]
         return text
+
+    def _signed_echo(self):
+        """Is the field open a signed number, typed behind its sign?
+
+        The offset screens draw their own cells, so not those."""
+        if not self.editing or (self.cur_step() or {}).get("offset"):
+            return False
+        return bool((self.cur_field() or {}).get("bench_keypad")
+                    and self._signed_entry())
+
+    def _signed_text(self, cursor=True):
+        """A signed number as the bench keypad echoes it: the sign, then the
+        digits right-aligned in the rest of the field, then the cursor.
+
+        TEMP COMPENSATION, whose resting screen is `VALUE (DEG F ): +120.0`,
+        read `VALUE (DEG F ):+  130` with 130 typed, `+   60` with 60 and
+        `-  010` with the sign key and 010 (2026-09-19, over 5FA): the sign
+        where the space was, the number filling from the right like a
+        calculator's, and at the glass the flashing block on the cell after
+        it. Measured on that one field, so drawn on the fields marked
+        `bench_keypad` alone; whether every signed field does it is for the
+        next walk at a keypad. The width is the resting value's less its
+        sign.
+        """
+        negative = self.buf.startswith("-")
+        digits = self.buf[1:] if negative else self.buf
+        resting = screens.masked(self.cur_field(), self._stored()) or ""
+        width = max(len(resting.lstrip("+-")), len(digits), 1)
+        cell = CURSOR if cursor and self._blink else " "
+        return ("-" if negative else "+") + digits.rjust(width) + cell
 
     def _edit_date(self):
         """"DATE: --/--/----", the template a date blanks to."""
@@ -4966,6 +5341,26 @@ class SimApp(tk.Tk):
             self.buf = "-" + self.buf
             self.cur += 1
 
+    def _glass_for_wire(self):
+        """What the panel shows, for 5FA, or None at the resting display.
+
+        Drawn with the cursor's flash off, because the bench's mirror
+        carried the character under the cursor and never the block: `DATE:
+        1-/--/----` where the glass flashed a block on the second cell.
+        Called from the serial thread; `_lines` only reads."""
+        if (MODES[self.mode] == "NORMAL" and not self._entered
+                and not (self.msg or self.locked or self.maint_report)):
+            return None
+        was = self._blink
+        try:
+            self._blink = False
+            rows = list(self._lines())
+        except Exception:
+            return None
+        finally:
+            self._blink = was
+        return [str(r).replace(CURSOR, " ") for r in rows[:2]]
+
     def _lines(self):
         if self.msg:
             return self.msg.split(chr(10))[:ROWS]
@@ -4989,20 +5384,15 @@ class SimApp(tk.Tk):
                 # centred on the glass, as photographed: two cells in
                 return [clock, "ALL FUNCTIONS NORMAL".center(COLS)]
             # "If more than one condition exists, the display will alternately
-            # flash all messages": and a single unacknowledged one flashes on
-            # its own, which is what the manual's example screen is showing.
-            #
-            # A message holds for a whole flash, which is why this counts in
-            # PAIRS of polls. `_blink` and `_cycle` both advance once a poll,
-            # so stepping the message once a poll locked them together: with
-            # an even number of alarms every message landed on the same half
-            # of the flash every time, and half of them were blanked on every
-            # pass. Two alarms meant one of them was never drawn at all.
-            # See FIDELITY U2.
-            a = al[(self._cycle // 2) % len(al)]
-            key = a["aa"] + a["nn"] + a["tt"]
-            if key not in self.console.acked and self._blink:
-                return [clock, ""]
+            # flash all messages". On the bench TLS-350 (2026-09-19) that is
+            # one message per clock SECOND, in turn, stepping as the seconds
+            # on the line above step -- PLLD OPEN at :54, PRINTER ERROR at
+            # :55, PLLD OPEN at :56 -- and the text itself never blanks,
+            # acknowledged or not: read five times a second over 5FA, and by
+            # eye at the glass. The flashing is the lamps'. This blanked an
+            # unacknowledged message on every other poll and held each for
+            # two polls. See FIDELITY U2.
+            a = al[int(time.mktime(self.console.now())) % len(al)]
             return [clock, a["screen"]]
         if self.sumpflow and MODES[self.mode] == "NORMAL":
             return self._sumpflow_lines()
@@ -5177,7 +5567,8 @@ class SimApp(tk.Tk):
                         self._second(prompt, self._edit_text())[:COLS]]
             head, label = self._setup_context(e, text)
             return [head[:COLS],
-                    self._second(label, self._edit_text())[:COLS]]
+                    self._second(label, self._edit_text(),
+                                 "" if self._signed_echo() else " ")[:COLS]]
         if self._live_mode():
             if MODES[self.mode] == "RECONCILIATION":
                 return self._recon_lines(e, text)
@@ -5692,6 +6083,9 @@ class SimApp(tk.Tk):
             self.device = devices[0]
 
     def _render(self):
+        # 5FA reads this panel's screen, and the console may have been
+        # swapped since the last render (`_glass_for_wire`)
+        self.console.glass_source = self._glass_for_wire
         # the backlight is on whenever the console is, unless SW2-3 has
         # blanked the display
         self.lcd.backlight(self.console.powered
@@ -5719,6 +6113,17 @@ class SimApp(tk.Tk):
                     _rid, text=self._isdflow_lines()[_i].ljust(COLS)[:COLS])
             self.hint.config(text="grade-hose mapping: TANK/SENSOR scrolls, "
                                   "ENTER selects, STEP cancels or continues")
+            return
+        if self.lvp_prompt:
+            # 576013-610 Rev AC p.29-20. Two lines, and the device prefix is
+            # the page's own `P #:`. See `leaktest.LVP_SCREEN` for why this
+            # form and not p.29-21's. FIDELITY H18.
+            kind, device = self.lvp_prompt
+            rows = [leaktest.LVP_SCREEN % device, leaktest.LVP_PROMPT]
+            for _i, _rid in enumerate(self._text_ids):
+                self.lcd.itemconfig(_rid, text=rows[_i].ljust(COLS)[:COLS])
+            self.hint.config(text="Leak Verification Procedure: ENTER starts "
+                                  "it, any other key leaves it for later")
             return
         if self.isd_override:
             if self.isd_override == "enter":
@@ -5980,8 +6385,14 @@ class SimApp(tk.Tk):
         # 1.2 seconds lasted 0.7 at most.
         if time.time() >= self._lamp_test_until:
             self._set_led("power", True)
-            self._set_led("warn", warn and self._blink)   # it flashes
-            self._set_led("alarm", alarm)
+            # Both flash, and not together: at the bench (2026-09-19) the
+            # red and the yellow lamp flashed with a PLLD alarm and a
+            # printer error standing, out of step with each other, and the
+            # red one alone flashed with the acknowledged PLLD alarm. The
+            # red one was steady here. How far out of step is by eye, so
+            # they alternate.
+            self._set_led("warn", warn and self._blink)
+            self._set_led("alarm", alarm and not self._blink)
         # And the console makes a noise about it. 576013-610 Rev AC
         # p.29-1 gives it a heading of its own -- "AUDIBLE ALARM / Press
         # ALARM/TEST to silence the alarm" -- 576013-623 p.2-2 says the key
@@ -6249,12 +6660,16 @@ class SimApp(tk.Tk):
         says any key leaves it while MODE and FUNCTION changed the mode
         underneath and left it on the glass.
         """
-        if not (self.isd_override or self.mt_login):
+        if not (self.isd_override or self.mt_login or self.lvp_prompt):
             return False
         self.isd_override = None
         self._alarm_presses = 0
         self.mt_login = None
         self.mt_asked = None
+        # The procedure is still owed -- the line is still shut down and
+        # `leaks.lvp_due` still holds it -- so leaving the screen postpones
+        # it rather than cancelling it. ALARM/TEST brings it back.
+        self.lvp_prompt = None
         self._render()
         return True
 
@@ -6339,8 +6754,13 @@ class SimApp(tk.Tk):
         whatever screen the console was on.
 
         See FIDELITY U5.
+
+        And the entry STAYS. At the bench keypad (2026-09-19) ENTER on
+        `DATE: 13/45/2006` and on a TEMP COMPENSATION of 130 did nothing at
+        all: the field stayed open with what was typed, until STEP left it
+        unsaved or CHANGE started it again. This closed the edit and put
+        the stored value back, which looked like an acceptance.
         """
-        self.editing, self.buf = False, ""
         self.log(f"-- entry refused: {why}")
 
     def _mode_offered(self, mode):
@@ -7360,7 +7780,10 @@ class SimApp(tk.Tk):
         f = self.cur_field() if field is None else field
         if (f or {}).get("kind") not in ("int", "float"):
             return False
-        low = f.get("min")
+        # the range the keypad is held to (`fieldio._wire_range`): TEMP
+        # COMPENSATION's page says 0 to 120 and the bench keypad took -10
+        low = (f.get("wire_min", f.get("min")) if f.get("bench_keypad")
+               else f.get("min"))
         return low is None or low < 0
 
     def _numeric_entry(self, field=None):
@@ -7645,6 +8068,15 @@ class SimApp(tk.Tk):
         e_flow = self.cur_step() if MODES[self.mode] == "SETUP" else None
         if e_flow is not None and e_flow.get("isdflow"):
             self._isdflow_start(e_flow["isdflow"])
+            return
+        if self.lvp_prompt:
+            # "Press ENTER to begin the Leak Verification Procedure."
+            kind, device = self.lvp_prompt
+            self.lvp_prompt = None
+            said = self.console.leaks.lvp_start(kind, device)
+            self.log("-- Leak Verification Procedure on %s %d: %s"
+                     % (kind.upper(), device, said))
+            self._flash(said)
             return
         if self.isd_override:
             if self.isd_override == "enter":
@@ -7956,6 +8388,9 @@ class SimApp(tk.Tk):
             self._render()
             return
         typed = self.buf
+        # a signed number is acknowledged as it was typed: `+   60` over
+        # PRESS <STEP> TO CONTINUE at the bench, not the resting `+060.0`
+        echo = self._signed_text(cursor=False) if self._signed_echo() else None
         if self._time_field() and self.meridiem:
             # the keypad enters a twelve hour clock and the arrows say which
             # half of the day, so both go to the encoder
@@ -8072,6 +8507,8 @@ class SimApp(tk.Tk):
                 # colon and the digits -- was confirmed with a space in it.
                 # Found by the test for the mask, walking the same function.
                 head = self._second(label, shown, step.get("gap", " "))
+                if echo is not None:
+                    head = self._second(label, echo.rstrip(), "")
             self.confirm = [head[:COLS], CONT_STEP]
             if str((step or {}).get("sure", "\0")) == str(data):
                 # "Press STEP: DISABLED / ARE YOU SURE? : NO" -- the beeper
@@ -9062,6 +9499,19 @@ class SimApp(tk.Tk):
         self.paper_out(printer.alarms(self.console))
         shown, _still, cleared = self.console.acknowledge(
             self.console.mt_logged_in())
+        # "Press ALARM/TEST to silence the alarm. The system displays the
+        # message: P #: START LVP TEST / PRESS <ENTER>". AFTER the
+        # acknowledge, because the page's order is silence-then-prompt and
+        # because `re_enable` runs in there: on a site set to LINE RE-ENABLE
+        # METHOD: ACKNOWLEDGE ALARM the key clears the shutdown outright,
+        # and a console that then asked for a verification of a line it had
+        # just re-enabled would be contradicting itself one line later.
+        # FIDELITY H18.
+        due = self.console.leaks.lvp_pending()
+        if due is not None:
+            self.lvp_prompt = due
+            self._render()
+            return
         # The console does not report what the keypress did. Four
         # messages stood here and all four were this project's -- a count of
         # what was cleared, a count of what is still standing, the word

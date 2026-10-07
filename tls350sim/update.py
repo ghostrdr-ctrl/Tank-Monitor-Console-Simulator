@@ -33,6 +33,7 @@ not going to be the thing that introduces one.
 """
 import hashlib
 import json
+import ntpath
 import os
 import ssl
 import subprocess
@@ -239,8 +240,10 @@ def download(release, progress=None):
     # is a bigger problem than this -- but the difference between "our
     # release account was compromised" and "our release account was
     # compromised AND it could write anywhere the user can" is worth one
-    # line. The basename is all this ever wanted.
-    safe = os.path.basename(release.installer_name or "").strip() or "update"
+    # line. The basename is all this ever wanted -- and `ntpath`'s, which
+    # splits on both separators and drops a drive on any system, where
+    # `os.path.basename` on Linux left "..\\..\\evil.exe" whole.
+    safe = ntpath.basename(release.installer_name or "").strip() or "update"
     if safe in (".", ".."):
         safe = "update"
     dest = os.path.join(d, safe)

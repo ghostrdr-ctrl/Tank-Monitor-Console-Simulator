@@ -60,6 +60,7 @@ import time
 import weakref
 
 from . import exposed
+from . import listen
 from . import xport as _x
 
 # The port the arp-and-telnet procedure knocks on to hand an unaddressed
@@ -110,6 +111,15 @@ def _windows_addresses():
 
 def is_local(ip):
     return bool(ip) and ip not in ("0.0.0.0", "") and ip in local_addresses()
+
+
+def is_loopback(host):
+    """Is this an address nothing off this machine can reach?
+
+    `0.0.0.0` is emphatically not one, and it is the one that matters:
+    a card left bound there when the protections came off is FIDELITY R26.
+    """
+    return bool(host) and (str(host).startswith("127.") or host == "localhost")
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +270,16 @@ class CardNetwork:
         # not a thing to close, and should not be kept alive to be closed
         self._sessions = weakref.WeakSet()
         self._stop = False
+        # Which set of listeners is the current one. Every `_tear_down`
+        # bumps it, so a thread that belongs to a previous generation ends
+        # itself the next time it looks -- on a REBOOT as well as on a
+        # stop, and without waiting for its closed socket to be noticed.
+        # Closing the socket never woke a thread already blocked in
+        # `accept()` at all. See `listen.py` and FIDELITY R30.
+        self._gen = 0
         self._bound = None           # (host, port, web_port) now serving
+        self._bound_host = None      # the address they are actually on
+        self._confined = None        # held here by the exposure control
         self._lock = threading.Lock()
 
     # -- what address to use ---------------------------------------------
@@ -290,6 +309,40 @@ class CardNetwork:
                     "address" % host)
         return "so the card is answering on %s alone" % host
 
+    def confine(self, host):
+        """Move every listener to `host`, or release it back to the card's
+        own programming when `host` is None.
+
+        Lowering the exposure used to drop the limits, unfreeze the writes
+        and disarm the capture while leaving the sockets exactly where they
+        were, so a card brought up on `0.0.0.0` was still on `0.0.0.0`
+        afterwards with nothing in front of it. Reproduced by selecting
+        Bench and then changing the saved configuration over the network
+        from another machine. FIDELITY R26.
+
+        The tear-down here closes the listening sockets AND the sessions
+        open on them, which is the half that matters: a connection already
+        established would otherwise go on being served under the new, laxer
+        policy from the address the old one was protecting.
+        """
+        if host == self._confined:
+            return False
+        self._confined = host
+        self._tear_down()
+        # The supervisor's inner loop watches `_bound`; clearing it brings
+        # the card back up on the next turn rather than waiting for the
+        # programming to change.
+        self._bound = None
+        return True
+
+    def bound_host(self):
+        """The address the listeners are actually on."""
+        return self._bound_host or self.bind_host()[0]
+
+    def bound_wide(self):
+        """Is anything of this card reachable from off this machine?"""
+        return not is_loopback(self.bound_host())
+
     def bind_host(self):
         """The address to bind to, and why.
 
@@ -298,6 +351,12 @@ class CardNetwork:
         to whatever `--host` gave it -- and the note says WHICH, because
         only `0.0.0.0` is "every address" and it is not the default.
         """
+        if self._confined:
+            # Held here by the exposure control, over whatever the card is
+            # programmed with, until the level goes back up. FIDELITY R26.
+            return (self._confined,
+                    "held on %s while the exposure is below the level this "
+                    "card was started at" % self._confined)
         ip = self.config.ip
         if not ip or ip == "0.0.0.0":
             return (self.fallback_host,
@@ -341,6 +400,17 @@ class CardNetwork:
             time.sleep(0.4)
         self._tear_down()
 
+    def _generation(self):
+        """A predicate that is true while THIS set of listeners is current.
+
+        Handed to `listen.accept`, which asks it on a timeout rather than
+        trusting a closed descriptor to wake anybody. A listener from a
+        previous generation stops answering within one tick of the reboot
+        or the stop that replaced it. FIDELITY R30.
+        """
+        gen = self._gen
+        return lambda: not self._stop and self._gen == gen
+
     def _remember(self, sock):
         with self._lock:
             self._closers.append(sock.close)
@@ -363,6 +433,7 @@ class CardNetwork:
             self._claim_now()
 
         host, note = self.bind_host()
+        self._bound_host = host
 
         # A card with no address answers nothing that is addressed by IP,
         # because it has no IP to be addressed at. Only the two ways of
@@ -402,6 +473,10 @@ class CardNetwork:
             # different problems. See FIDELITY Z5.
             self.log("-- " + self.status())
 
+        # Captured once for this whole generation of listeners, so all of
+        # them go down together on a reboot or a stop. FIDELITY R30.
+        running = self._generation()
+
         # the serial tunnel: the port the card is programmed with
         threading.Thread(
             target=self._guard,
@@ -410,7 +485,7 @@ class CardNetwork:
                   {"on_socket": self._remember,
                    "on_conn": self._remember_session,
                    "policy": self.policy, "gate": self.gate,
-                   "capture": self.capture}),
+                   "capture": self.capture, "running": running}),
             daemon=True).start()
 
         # the setup menu on 9999
@@ -419,7 +494,8 @@ class CardNetwork:
             args=("setup menu", xportmenu.serve_setup,
                   (cfg, host, self.log, self.powered),
                   {"on_socket": self._remember, "policy": self.policy,
-                   "gate": self.gate, "capture": self.capture}),
+                   "gate": self.gate, "capture": self.capture,
+                   "running": running}),
             daemon=True).start()
 
         self._start_discovery()
@@ -494,11 +570,16 @@ class CardNetwork:
                          % e)
             return
         self._remember(srv)
+        running = self._generation()
         while True:
-            try:
-                conn, _addr = srv.accept()
-            except OSError:
+            got = listen.accept(srv, running)
+            if got is None:
+                try:
+                    srv.close()
+                except OSError:
+                    pass
                 return
+            conn, _addr = got
             try:
                 wanted = conn.getsockname()[0]
             except OSError:
@@ -539,6 +620,12 @@ class CardNetwork:
                 self.log("-- the card's %s could not start: %s" % (what, e))
 
     def _claim_now(self):
+        if self._stop:
+            # Stopped while the supervisor was partway through bringing the
+            # card up. Claiming now would put back an address `stop()` has
+            # just released, after the only thing that releases it has run
+            # for the last time. FIDELITY R27.
+            return
         ip = self.config.ip
         if not ip or ip == "0.0.0.0":
             self._release_now()
@@ -575,6 +662,10 @@ class CardNetwork:
             self.claimed = None
 
     def _tear_down(self):
+        # BEFORE the sockets go, so a listener that wakes during the
+        # teardown already knows it is not the current one and refuses
+        # what it has just accepted. FIDELITY R30.
+        self._gen += 1
         with self._lock:
             closers, self._closers = self._closers, []
             sessions, self._sessions = list(self._sessions), weakref.WeakSet()

@@ -24,6 +24,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 from tls350sim import presets, wirelists                   # noqa: E402
 from tls350sim.console import Console, FIELDS              # noqa: E402
 from tls350sim.meterid import MeterId                      # noqa: E402
@@ -55,7 +57,7 @@ def body(h, cmd):
 
 
 def refused(h, cmd):
-    return body(h, cmd).startswith("9999")
+    return is_refused(send(h, cmd))
 
 
 class ThePanelAndTheWireMeetOnDeviceZero(unittest.TestCase):

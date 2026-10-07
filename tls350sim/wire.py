@@ -33,10 +33,14 @@ import threading
 import time
 import traceback
 
-from .clock import clock_words
+from .clock import clock_hhmm, clock_words
 from .console import alarm_report_stamp, describe_alarms
 from . import exposed
 from . import fieldio
+from . import listen
+from . import units
+from . import blankrows
+from . import replytails
 from . import alarmreports
 from . import controls
 from . import delivery
@@ -148,7 +152,9 @@ def _sent_token(raw, folded):
         body = raw.lstrip(SOH).rstrip(CR).decode("ascii", "replace")
     except AttributeError:
         return folded
-    body = body.rstrip("\r\n\x00")
+    if body.endswith("\r\n"):
+        body = body[:-1]
+    body = body.rstrip("\r\x00\x03")
     if body in SHORT_COMMANDS:
         body = SHORT_COMMANDS[body]
     if len(body) > 6 and body[0].isdigit():
@@ -159,8 +165,19 @@ def _sent_token(raw, folded):
 
 def parse_command(raw):
     """(security, letter, token, device, data)."""
-    body = raw.lstrip(SOH).rstrip(CR).decode("ascii", "replace")
-    body = body.rstrip("\r\n\x00")
+    # Latin-1, so a byte past 7F reaches the field as itself rather than as
+    # U+FFFD: what a real console does with one depends on the field, and a
+    # label maps it to `A` (see `fieldio`). UNKNOWNS A76.
+    body = raw.lstrip(SOH).rstrip(CR).decode("latin-1")
+    # ETX ends a command as CR does (`TERMINATORS`), and is no more data
+    # than CR is: the bench TLS-350 answered `I61F00<ETX>` as it answers
+    # `I61F00<CR>`, where this took the ETX as a delivery type (2026-09-23).
+    # A line feed is data (`TERMINATORS`) but for the one a telnet client
+    # sends after its return, which a session drops as noise before the next
+    # SOH and a caller handing over the whole line has not yet dropped.
+    if body.endswith("\r\n"):
+        body = body[:-1]
+    body = body.rstrip("\r\x00\x03")
     if body in SHORT_COMMANDS:
         body = SHORT_COMMANDS[body]
     security = ""
@@ -202,6 +219,34 @@ REPORTS |= {"113", "114", "115", "116", "119", "11A", "11B"}
 # known; the alternative, going on refusing a code the hardware answers, fits
 # nothing. See FIDELITY S17.
 REPORTS |= {"121"}
+# 7C3 is in no revision of 576013-635 on this shelf either, and the bench
+# TLS-350 answers it: TANK MAXIMUM VOLUME LIMIT, 132 gallons on every tank
+# out of a cold start (2026-09-18). `blankrows.TABLES` draws it.
+REPORTS |= {"7C3"}
+# 7B0 and 7B3 likewise: the meter map's column header, and a reply that is
+# three question marks. `Handler.NO_BIR` draws both.
+REPORTS |= {"7B0", "7B3"}
+# ...and none of the three draws the station header on the bench, which a
+# code with no page to read it off would otherwise be given for being here
+NO_PAGE_NO_HEADER = {"7C3", "7B0", "7B3"}
+# and three more with no page, answered with what the bench holds:
+# `Handler.FIXED`
+REPORTS |= {"51F", "55D", "535"}
+NO_PAGE_NO_HEADER |= {"51F", "55D", "535"}
+# 617, CSLD's custom probability of detection, is in no revision either; the
+# bench answers its title. `Handler.NO_LIVE_TANK`.
+REPORTS |= {"617"}
+NO_PAGE_NO_HEADER |= {"617"}
+# 904, WPLLD DIAGNOSTIC DATA, answers on the bench with no WPLLD card in it
+# (`Handler._bench_state_reply`); it is in no revision of the code manual
+REPORTS |= {"904"}
+NO_PAGE_NO_HEADER |= {"904"}
+# 5FA is the display itself: `Handler._glass_reply`. The other four of its
+# family on the bench (5F0 annunciator status, 5F2 local print, 5F4, 5F8)
+# are service functions that change things, and 5F4 took the bench console
+# down; none of them is answered here.
+REPORTS |= {"5FA"}
+NO_PAGE_NO_HEADER |= {"5FA"}
 REPORTS |= {"212", "213", "214", "215", "216", "21B", "222",
             "225", "226", "227", "281", "282", "2E2"}
 REPORTS |= {"A56", "A61", "A62", "A63", "A81", "A91", "B61", "B62"}
@@ -331,7 +376,10 @@ INQUIRE_ONLY = {
 SET_ONLY = {"001", "002", "003", "010", "031", "051", "052", "053", "054",
             "081", "082", "083", "084", "087", "088", "089", "090", "091",
             "092", "093", "094", "095", "096", "097", "098", "099", "09A",
-            "09B", "7B6"}
+            "09B"}
+# 7B6 was on it, and the bench TLS-350 answers `I7B600` and `i7B600` with a
+# bare frame once a CR follows them (2026-09-22, `WAITING_INQUIRIES`): its
+# Inquire is not in the manual, and it is there.
 
 # 7.3.3's Service Notice block, less 566 -- which is the FEATURE switch, has a
 # panel step and a field, and so reads back down the generic path like any
@@ -356,9 +404,49 @@ VERIFIED = {"530": "149", "081": "149", "082": "149",
 # several of its reports put a line of their own above it.
 REPORTS |= wiresensors.CODES | set(AT_COMMANDS)
 
+# Forty-four codes in no revision of 576013-635 on this shelf that the bench
+# TLS-350 (326.01) knows: asked in both formats on 2026-09-18 (`cap_swept`),
+# every one answered a bare frame rather than 9999FF. The cage had none of
+# the cards most of them plainly belong to -- 724 to 734 sit in the smart
+# sensor band, 7D0 to 7D4 past the I/O band, V4C to VC4 among the ISD codes
+# -- so a bare frame is what an absent card gets (`Handler._absent`), and
+# what any of them says with its card in is unknown. Inquiries only: none
+# was sent a Set. FIDELITY S33. Two of the forty-four were only bare for a
+# console with no line on -- 375 and 385 are the pressure line results
+# report once one is (`cap_site`, `wirelines`) -- and are not here.
+#: The newest software known NOT to take 786's MANIFOLDED: ALTERNATE-HT:
+#: the bench TLS-350's 326.01 refused `S786015` (2026-09-18). When it
+#: arrived is on no page on the shelf. See `Handler._bench_set_gate`.
+ALTERNATE_HT_AFTER = 26
+
+#: Numbered console-wide slots -- the print header's four lines and the four
+#: shift start times -- whose report is one line about one of them. Asked for
+#: all of them at once, the bench TLS-350 answers a bare frame in both
+#: formats, whatever is programmed: `I50300` with two header lines set and
+#: `I50200` with three shift times (2026-09-19, `transcripts/header503b`,
+#: `shifts2`). A device family's codes list every position instead -- 52B
+#: prints all eight receivers -- so this is the slots' own rule.
+NUMBERED_SLOTS = {"502", "503"}
+
+UNDOCUMENTED_BARE = {
+    "209", "20E", "20F", "331", "332", "38A", "510", "539",
+    "53A", "53B", "53C", "53D", "53E", "53F", "540", "541", "542", "543",
+    "724", "725", "726", "731", "732", "733", "734", "762", "78D", "7C1",
+    "7C2", "7D0", "7D2", "7D3", "7D4", "892", "B31", "B53", "B54", "B92",
+    "V4C", "V4D", "VC3", "VC4",
+    # three more that wait for a data field (`WAITING_INQUIRIES`) and were
+    # on no capture until a CR was sent after them (2026-09-22): C24 and C30
+    # then answer bare, and E20 answers nothing even so
+    "C24", "C30", "E20",
+    # and the service family's Inquiries, which are bare too. Their SETS
+    # change things -- `S5F400` with data put the bench in a boot loop --
+    # and stay refused here.
+    "5F0", "5F2", "5F4", "5F8"}
+
 KNOWN = (SETTABLE | REPORTS | ACTIONS | ISD_SETUP | ISD_READ | ISD_TABLES
          | ISD_CONTROL | ISD_READ_ONLY | ISD_BUFFERS | set(VERIFIED)
-         | wiresensors.CODES | wirelines.CODES | wirelater.MINE)
+         | wiresensors.CODES | wirelines.CODES | wirelater.MINE
+         | UNDOCUMENTED_BARE)
 
 # The eleven Revision Y documents and Revision U does not are settable where
 # the manual gives them a Set format, which is three of them.
@@ -479,7 +567,7 @@ class Handler:
             # blank BELOW the block was already here; the one above it was
             # not. See FIDELITY S6.
             lines.insert(2, "")
-            lines += [self.c.text("503", n) or "" for n in range(1, 5)]
+            lines += [self.c.header_line(n) for n in range(1, 5)]
         if body and self._head_gap(code[1:4]):
             # ONE BLANK LINE between the header block and the body, which is
             # what 576013-635 draws and this console did not. Measured across
@@ -502,6 +590,11 @@ class Handler:
         body = wiretables.lead(code[1:4], body)
         text = SEP.join(lines) + SEP + body.replace(SEP, chr(10)).replace(
             chr(13), chr(10)).replace(chr(10), SEP)
+        # and the trailing spaces the bench keeps, which every comparison
+        # that strips a line never saw (`wiretables.pad_line`)
+        rows = text.split(SEP)
+        text = SEP.join(rows[:2] + [wiretables.pad_line(code[1:4], row)
+                                    for row in rows[2:]])
         # A display reply opens SOH CR LF and closes CR LF ETX. The manual
         # draws the text of a report and not its framing, so this was written
         # without the two line endings for a long time. Measured on a real
@@ -642,10 +735,16 @@ class Handler:
             for label, which in (("TIME OF LAST COMM DATA:", "comm_data_at"),
                                  ("TIME OF LAST COMM ERROR:", "comm_error_at")):
                 when = getattr(self.c, which).get(n)
-                if when:
+                # and only under a record: the bench's board carried two days
+                # of sessions with no stamp of either kind until one of them
+                # was cut off mid-command (`Console.session_cut`)
+                if when and self.c.comm_errors.get(n):
                     # p.474 puts both stamps at column 25, and it is
                     # `clock_words` here rather than the wide form
                     rows.append(f"{label:<25s}{clock_words(when)}")
+            # a blank line closes every port's block: the bench TLS-350's
+            # I88800, both boards, 2026-09-18
+            rows.append("")
         return rows
 
     def _shift_rows(self, tank):
@@ -703,8 +802,24 @@ class Handler:
     def _tanks(self, dev):
         """"TT - Tank Number (Decimal, 00=all)"."""
         if dev != "00":
+            if ((self._token or "")[:1] not in self.POSITION_REPORTS
+                    and int(dev) not in self.c.tank_level):
+                # one tank's measurements need its probe reporting too
+                return []
             return [int(dev)]
-        live = sorted(self.c.tank_level) or sorted(self.c.programmed_tanks())
+        live = sorted(self.c.tank_level)
+        if live:
+            return live
+        if (self._token or "")[:1] not in self.POSITION_REPORTS:
+            # A tank with no probe reporting has nothing to measure, and a
+            # report of measurements says nothing about it: the bench
+            # TLS-350, its tank 1 labelled and given a full volume but with
+            # no probe wired, answers I201, I205, I20C, I212 and every A-code
+            # in-tank diagnostic with a bare frame, in both formats
+            # (`cap_swept`, 2026-09-18). This fell back to the programmed
+            # tanks and reported tank 1 at zero. FIDELITY S33.
+            return []
+        live = sorted(self.c.programmed_tanks())
         if live:
             return live
         # Nothing programmed. A setup report still has a row per position;
@@ -792,7 +907,7 @@ class Handler:
         """The five undocumented @ diagnostics, as chapter 12 prints them."""
         c = self.c
         if not c.has("probe"):
-            return self._nine(code), "no probe module fitted"
+            return self._absent(code), "no probe module fitted"
         tanks = self._tanks(dev)
         if tok == "@B6":
             rows = c.accuchart.calibration_status_rows(tanks)
@@ -800,7 +915,7 @@ class Handler:
             rows = c.accuchart.calibration_data_rows(tanks)
         elif tok == "@A4":
             if not c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             # The daily history, which is what the title says: "I@A400
             # DAILY RECONCILIATION LIST FOR LAST 31 DAYS". This printed the
             # SHIFT report under it -- the wrong period, one row of it, in
@@ -858,7 +973,7 @@ class Handler:
         c = self.c
         if tok == "642":
             if not c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             words = {v: k for k, v in self.WATER_FILTER.items()}
             if code[0].isupper():
@@ -1916,11 +2031,818 @@ class Handler:
         See FIDELITY L5.
         """
         drawn = wiretables.station_header(tok)
+        if drawn is None and tok in NO_PAGE_NO_HEADER:
+            return False
+        if tok in ("375", "385"):
+            # no page, and the bench draws the header as it does on 373
+            # (`cap_site`, 2026-09-19)
+            return True
         return tok in REPORTS if drawn is None else drawn
 
     def _nine(self, _code=None):
         """What the console says when it has not understood."""
         return NOT_UNDERSTOOD
+
+    # Reports about DEVICES, which a console with none of that device
+    # configured answers with the frame, the code, the stamp and nothing
+    # else -- not a title, not a heading, and not a device 1 it has not got.
+    # Every one of these was read on the bench TLS-350 on 2026-09-18 straight
+    # after a cold start, with the probe and PLLD cards fitted and nothing
+    # switched on. I20100 had been known to do this since the 2006 capture;
+    # these are the rest of the family.
+    TANK_REPORTS = {"202", "207", "208", "20A", "20B", "20C", "20D", "212",
+                    "214", "215", "216", "217", "218", "219", "21B", "282",
+                    "A01", "A14", "A15", "A55", "B91", "B93", "B94",
+                    # bare at 00 and at 01 with no tank reporting (the bench
+                    # TLS-350, 2026-09-22), where tank 1 drew its block
+                    "203", "251", "683",
+                    # and, CR-terminated (`WAITING_INQUIRIES`), the CSLD
+                    # monthly report and 2E2's packed form, which drew four
+                    # tanks' rows and a tank-1 record
+                    "A56", "2E2"}
+    LINE_REPORTS = {"373", "374", "375", "381", "382", "383", "384", "385",
+                    "B7B", "B7C",
+                    "B7E", "B81", "B87", "B88", "B89", "B8A"}
+
+    def _answered(self, tok, dev, code):
+        """An accepted Set's reply: what the Inquire of that device answers.
+
+        The bench TLS-350 (2026-09-18) answers `S78901200` with the I78901
+        report under an `S78901` echo -- the code and device, never the data
+        -- and `s7890143480000` with i78901's own packed body under `s78901`.
+        Every family tried did the same: 602, 503, 560, 61E, 52B, 781, 782,
+        785, 788. A code with no report to give answers the bare echo.
+        """
+        # Asked as the Inquire it is -- the list families route an S code
+        # back to their Set path -- and then echoed as the Set it was.
+        asked = ("I" if code[:1].isupper() else "i") + code[1:]
+        try:
+            out, _note = self.inquire(tok, dev, asked)
+        except Exception:
+            out = None
+        if not out or out.startswith(NOT_UNDERSTOOD[:5]):
+            return self._frame(code)
+        out = out.replace(asked.encode("latin-1"), code.encode("latin-1"), 1)
+        if code[:1].islower() and b"&&" in out:
+            body = out[:out.rindex(b"&&") + 2]
+            out = body + checksum(body).encode("ascii") + ETX
+        return out
+
+    def _absent(self, code):
+        """A code the console knows, for a card, key or feature it has not
+        got: a bare frame, not 9999FF.
+
+        The bench TLS-350 (326.01, 2026-09-18) answers every one of them so,
+        in both formats -- `I70100` and `i70100` with no liquid sensor card,
+        `IV0000` with no ISD, `I68000`'s neighbours with no Fuel Manager --
+        and keeps 9999FF for a code it does not know at all. 485 codes
+        captured in both formats, `cap_swept`; FIDELITY S33.
+        """
+        return self._frame(code)
+
+    def _refused(self, code, data, tok=None, dev=None):
+        """A refused Set's reply, which is not 9999FF.
+
+        Display: the echo, the stamp, and one `?` for every character of
+        data that was SENT -- `S789015000` answers `????`, `S78901ABC`
+        answers `???`, a one-character flag answers `?`. Computer: the echo,
+        the stamp, one `?` for every character of the field's own width --
+        eight for a float -- then `&&` and the checksum. Read off the bench
+        TLS-350 on 2026-09-18.
+        """
+        if code[:1].islower():
+            width = self._field_width(tok, dev) or len(data or "")
+            body = (SOH + code.encode("ascii") + stamp(self.c).encode("ascii")
+                    + b"?" * width + b"&&")
+            return body + checksum(body).encode("ascii") + ETX
+        # ...no more than the field reads, where it reads a width of its own:
+        # `S50E00+999.9` answers five, `S52E01ABC` two
+        from .console import FIELDS
+        field = tok and (FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+                         or FIELDS.get(f"S{tok}00"))
+        marks = len(data or "")
+        if field and wire_cut(field):
+            marks = min(marks, wire_cut(field))
+        return (SOH + SEP.encode() + code.encode("ascii") + SEP.encode()
+                + self.c.clock_stamp().encode("ascii") + SEP.encode()
+                + b"?" * marks + SEP.encode() + ETX)
+
+    def _clock_reply(self, code, digits):
+        """501's own Set reply: the echo, the stamp, and the digits taken.
+
+        Called before the clock moves, so the stamp is the one the console
+        is answering from -- which is what the bench sent, a FEB 28 stamp
+        over the JAN 19 digits that replaced it.
+        """
+        if code[:1].islower():
+            body = (SOH + code.encode("ascii") + stamp(self.c).encode("ascii")
+                    + digits.encode("ascii") + b"&&")
+            return body + checksum(body).encode("ascii") + ETX
+        return (SOH + SEP.encode() + code.encode("ascii") + SEP.encode()
+                + self.c.clock_stamp().encode("ascii") + SEP.encode()
+                + digits.encode("ascii") + SEP.encode() + ETX)
+
+    def _field_width(self, tok, dev):
+        """The computer-format width of a code's data field, or None."""
+        from .console import FIELDS
+        if not tok:
+            return None
+        field = (FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+                 or FIELDS.get(f"S{tok}00"))
+        if not field or field.get("part"):
+            return None
+        return self.WIDTHS.get(field.get("kind"), lambda f: None)(field)
+
+    #: codes whose devices are a fixed count, not a family's positions
+    SET_DEVICES = {"503": 4}
+    #: codes whose value is a position of another family, held to its count
+    SET_MAX_FROM = {"785": "probe"}
+    #: documented codes a software version refuses outright: {code: version}
+    WITHHELD = {"78B": 26, "7AA": 26}
+    #: `_canonical`'s answer for a computer-format value short of its width
+    BARE = object()
+    #: of `wiretables.ROW_FILTER`, the codes a COMPUTER-format Set is not
+    #: gated for: `s77B0100000000` and `s77E011` were taken on a line that
+    #: is not USER DEFINED, where the display Sets are refused
+    UNGATED_PACKED = {"77B", "77E"}
+    # The Version 4 test-warning codes against their Version 15 tank and
+    # line twins, on the bench TLS-350 (2026-09-18): `S50700015` set both
+    # 547 and 557 to 1 day, `S50A00300` both 54A and 55A to 300, `S506000`
+    # disabled both 546 and 556. Reading one back is not symmetric: I507
+    # answered 547's 20 with 557 at 25, and I50A answered 55A's 300 with 54A
+    # at 350. 508 and 50B were not tried, and keep `Console.SHARED_CODES`.
+    LEGACY_TWINS = {"506": ("546", "556"), "507": ("547", "557"),
+                    "50A": ("54A", "55A")}
+    #: which twin a Version 4 code reads, where it is not the tank's
+    LEGACY_READ = {"50A": "55A"}
+
+    # What the reconciliation and meter-map codes answer on a console with no
+    # BIR key, which is every one of them answering -- not 9999 -- and most
+    # with a bare frame. The bench TLS-350 (S-Module 330160-012: no BIR),
+    # 2026-09-18, byte for byte. 795, 796 and 79F are not here because their
+    # own reports print the same thing keyed or not. None is a bare frame;
+    # a list is the lines after the stamp, blank lines and all.
+    NO_BIR = {
+        "790": None, "791": None, "792": None, "793": None, "794": None,
+        "797": None, "798": None, "799": None, "79A": None, "79B": None,
+        "79C": None, "79D": None, "7B2": None, "7B4": None, "7B5": None,
+        "7B6": None,
+        "79E": ["", "RECONCILIATION CLEAR MAP", "", ""],
+        "7B0": ["LOGICAL       REAL    |     METER",
+                "  FP     FP  BUS  SLOT| 0  1  2  3  4  5 ",
+                "----------------------+------------------", "", ""],
+        "7B1": ["FUELING POSITION - METER - TANK MAP", "",
+                " BUS  SLOT  FUEL_P  METER  TANK",
+                "-------------------------------", "TANK MAP EMPTY", "", "",
+                ""],
+        # the whole of the reply: three question marks
+        "7B3": ["", "???"],
+        # The BIR printout and ticketed-delivery switches, and the variance
+        # printouts, answer a bare frame too -- 51C says why in so many words.
+        # 513 (Tanker Load) and 515 (QPLD) have keys of their own and 54C is
+        # CSLD's evaporation chart, on a console WITH CSLD; the bench has
+        # none of BIR, Tanker Load or Fuel Manager, so all three are filed
+        # here on this console's evidence and not on a rule anybody wrote.
+        "511": None, "512": None, "513": None, "515": None, "51D": None,
+        "51E": None, "532": None, "533": None, "534": None, "54C": None,
+        "51C": ["", "", "", "MUST HAVE BIR", ""],
+    }
+
+    # Tank settings the bench TLS-350 lists for NO tank -- not a row, not a
+    # position -- even with tank 1 switched on (2026-09-18, with no probe
+    # wired to its card), where every other tank table lists all four
+    # positions whether they are on or not. What they have in common is the
+    # probe: CSLD's settings, the water limits and the settings that belong
+    # to a probe TYPE (the CAP0 boot, the Mag floats). So they are read as
+    # rows for a tank whose probe is reporting, and on a console with none
+    # this is what each answers: its title alone, a blank and its title, its
+    # title and heading, or a bare frame.
+    NO_LIVE_TANK = {
+        "613": ["CSLD PROBABLITY OF DETECTION", "", ""],
+        "614": ["CSLD CLIMATE FACTOR", "", ""],
+        "617": ["CSLD CUSTOM PROBABLITY OF DETECTION", "", ""],
+        "618": ["", "CSLD EVAPORATION COMPENSATION", "", ""],
+        "619": None,
+        "61B": ["", "IN-TANK LEAK GROSS TEST AUTO-CONFIRM", "", ""],
+        "61C": ["", "CSLD REPORT ONLY", "", ""],
+        "624": None, "627": None, "60E": None,
+        "62E": ["", "CAP0 PROBE CONDUCTIVE BOOT FLAG", "",
+                "TANK   PRODUCT LABEL          CAP0 CONDUCTIVE BOOT:", ""],
+        "62F": ["", "MAG PROBE FLOAT SIZE", "",
+                "TANK   PRODUCT LABEL                FLOAT SIZE:", ""],
+    }
+
+    # What the bench TLS-350 does with a Set it has no use for, which is
+    # decided before the value is looked at: every value tried, good or bad,
+    # got the same answer. Measured by the Set sweep of 2026-09-18 (981 Sets,
+    # `tests/test_bench_sweep.py`). A code answers one of three ways --
+    #   bare      the echo alone, nothing stored;
+    #   refused   one `?` per character sent, as for a bad value;
+    #   answered  its Inquire report, unchanged, as for a good one.
+    # Without BIR: its own table says which codes, and of those the three
+    # below are refused rather than bare, and 51C answers MUST HAVE BIR.
+    NO_BIR_SET_REFUSED = {"511", "512", "515"}
+    # Only the codes the sweep reached; the ticket codes (7B5, 7B6) have a
+    # result-code reply of their own and were not tried.
+    NO_BIR_SET = {"511", "512", "513", "515", "51C", "51D", "51E", "797",
+                  "798", "799", "79A", "7B2"}
+    # With no tank whose probe reports: the CSLD settings answer their title,
+    # 619 is bare, and the water limits, the float size and the periodic test
+    # type are refused -- 62C though its Inquire lists a row for every tank.
+    NO_LIVE_TANK_SET_REFUSED = {"624", "627", "62C", "62F"}
+    NO_LIVE_TANK_SET = {"613", "614", "618", "619", "61B", "61C"} \
+        | NO_LIVE_TANK_SET_REFUSED
+    #: of `NO_LIVE_TANK`, the ones that answer one tank with a bare frame
+    #: (62E: `I62E01` on the bench, 2026-09-22)
+    NO_LIVE_TANK_BARE_ONE = {"62F", "62E"}
+
+    def _bench_set_gate(self, tok, dev, code, data):
+        """A Set the bench answers the same whatever it carries, or None."""
+        if tok in SETTABLE and not self._module_present(tok):
+            # `S72C01-5.0` on a console with no smart sensor card is bare,
+            # and so is `S72C01ABC`: the card is asked about before the value
+            return self._frame(code), "no module fitted: acked, nothing stored"
+        if not self.c.licensed("bir") and tok in self.NO_BIR_SET:
+            if tok in self.NO_BIR_SET_REFUSED:
+                return self._refused(code, data, tok, dev), "no BIR key: refused"
+            text = self.NO_BIR[tok]
+            if text is None or code[:1].islower():
+                return self._frame(code), "no BIR key: a bare frame"
+            return self._raw_display(code, text), "no BIR key"
+        if tok in self.NO_LIVE_TANK_SET and not self.c.tank_level:
+            if tok in self.NO_LIVE_TANK_SET_REFUSED:
+                return (self._refused(code, data, tok, dev),
+                        "no tank with a probe: refused")
+            text = self.NO_LIVE_TANK[tok]
+            if text is None or code[:1].islower():
+                return self._frame(code), "no tank with a probe: bare"
+            return self._raw_display(code, text), "no tank with a probe"
+        if tok == "681" and not self.c.licensed("fuelman"):
+            return self._refused(code, data, tok, dev), "no Fuel Manager: refused"
+        if tok == "61E" and not self._mass_density_on():
+            # No density without Mass/Density: the bench TLS-350 refused
+            # `S61E030.8500` with six `?` while it was disabled, and kept
+            # the tank's thermal coefficient as it was (2026-09-19,
+            # `transcripts/sdw10`). This answered a bare frame and quietly
+            # rewrote the coefficient from the density it had refused.
+            return (self._refused(code, data, tok, dev),
+                    "mass/density disabled: refused")
+        if tok == "525" and data.strip().isdigit():
+            # "Enter the slot number in which the a modem module ... is
+            # installed", 576013-623 Rev AN p.6-8 -- so a port with no card
+            # in it, or the RS-232 port the tool itself is on, is not a
+            # port to dial from. The bench TLS-350 (RS-232 on comm 1, the
+            # serial satellite on comm 2, 3 to 6 empty) took 2 and refused
+            # 0, 1 and 3 to 7 (2026-09-18/19, `transcripts/port525.log`).
+            card = self.c.comm_positions().get(int(data.strip()))
+            if card is None or card[1] == "rs232":
+                return (self._refused(code, data, tok, dev),
+                        "no card to dial from on that port")
+        if (tok == "786" and data.strip() in ("5", "05")
+                and self.c.version <= ALTERNATE_HT_AFTER):
+            # MANIFOLDED: ALTERNATE-HT is 576013-623 Rev AN's and not
+            # 326.01's: the bench refused `S786015` (2026-09-18) and took
+            # modes 1 to 4. No page or version table dates it, so this
+            # says only what was measured -- version 26 and older refuse it
+            # -- and a later console takes it, as the manual documents.
+            return (self._refused(code, data, tok, dev),
+                    "ALTERNATE-HT: not in this software")
+        keep = wiretables.ROW_FILTER.get(tok)
+        if code[:1].islower() and tok in self.UNGATED_PACKED:
+            keep = None
+        if keep and dev.isdigit() and int(dev) and not keep(self.c, int(dev)):
+            # the user-defined pipe's settings, and the second length a
+            # fiberglass pipe has, on a line whose pipe is neither: refused.
+            # `S77701` is taken the moment S788 makes the line USER DEFINED.
+            return (self._refused(code, data, tok, dev),
+                    "not this line's pipe type: refused")
+        return None
+
+    def _glass_reply(self, code):
+        """5FA: what is on the display, as the bench TLS-350 answers it.
+
+        Undocumented, and found by the hex census on 2026-09-18: the two
+        24-column lines run together as one 48-character line, the top the
+        clock to the second and the second the standing messages in turn,
+        one a clock second (2026-09-19, two alarms standing: `:54` PLLD,
+        `:55` PRINTER ERROR, `:56` PLLD), or ALL FUNCTIONS NORMAL. Sampled five times a
+        second on the bench, the message line never blanked, acknowledged or
+        not. Computer format carries the same 48 characters.
+
+        Off the resting display it is the menu: at the bench keypad
+        (2026-09-19) i5FA00 read `SYSTEM SETUP / PRESS <STEP> TO CONTINUE`,
+        `SET MONTH DAY YEAR / DATE: 1-/--/----` mid-entry, and so on --
+        the characters under the cursor, not the flashing block. With a
+        panel attached (`Console.glass_source`, which `ui.SimApp` sets) this
+        answers what the panel shows; without one, the resting display.
+        """
+        source = getattr(self.c, "glass_source", None)
+        away = source() if source else None
+        if away:
+            glass = "".join(row[:24].ljust(24) for row in (list(away) + ["", ""])[:2])
+            if code[:1].islower():
+                return self._frame(code, glass)
+            return self._raw_display(code, [glass])
+        # centred: the numeric formats are shorter than the line (`   01-16-06
+        # 20:30:09    ` on the bench), and 01 fills it
+        top = self.c.clock_text()[:24].center(24)
+        shown = [a["screen"] for a in describe_alarms(self.c.compute_alarms())]
+        if shown:
+            beat = int(time.mktime(self.c.now()))
+            second = shown[beat % len(shown)][:24].ljust(24)
+        else:
+            second = "ALL FUNCTIONS NORMAL".center(24)
+        glass = top + second
+        if code[:1].islower():
+            return self._frame(code, glass)
+        return self._raw_display(code, [glass])
+
+    def _bench_state_reply(self, tok, dev, code):
+        """The bench TLS-350's own answer where this console had none, in the
+        state the bench was in -- a feature not keyed, a card not fitted, a
+        setting never made -- or None. Every body below is byte for byte
+        `tests/console_capture/bench-2026-09-18/cap_coldstart`, taken on
+        2026-09-18 out of a cold start; anything the state does not cover
+        goes on to the renderer that was here."""
+        c = self.c
+        if tok == "611" and c.values.get("S61100") is None:
+            # LEAK TEST METHOD, never set: TEST ON DATE for all tanks, on the
+            # day the console came up, with no start time. That day is
+            # STORED: the bench printed JAN 16, 2006 with its clock at JAN
+            # 22, off tank 1's `0201060116EE00` (`TTDDRMYYMMDDHHmm`, the
+            # method 1 and the date 060116), so a record held is read.
+            date = time.strftime("%b %d, %Y", c.now()).upper()
+            held = (c.values.get("S61101") or "").strip()
+            if len(held) == 16 and held[5] == "1" and held[6:12].isdigit():
+                try:
+                    date = time.strftime("%b %d, %Y", time.strptime(
+                        held[6:12], "%y%m%d")).upper()
+                except ValueError:
+                    pass
+            # and the early stop is TANK 1's 61A: with tank 2 alone enabled
+            # the bench printed DISABLED here, with tank 1 ENABLED
+            # (2026-09-19, `transcripts/earlystop.log`)
+            early = ("ENABLED" if (c.values.get("S61A01") or "").strip()
+                     .endswith("1") else "DISABLED")
+            return self._raw_display(code, [
+                "", "LEAK TEST METHOD", "- - - - - -  - - - - - -",
+                "TEST ON DATE : ALL TANK", date, "START TIME : DISABLED",
+                "TEST RATE  :0.20 GAL/HR", "DURATION   : 2  HOURS", "",
+                "TST EARLY STOP:" + early, ""])
+        if not c.licensed("fuelman"):
+            if tok in ("681", "682"):
+                return self._frame(code)
+            if tok == "680":
+                # the setup report answers with its defaults under the
+                # station header whether or not Fuel Manager is keyed
+                # -- and a block of zero average sales for every tank that
+                # is configured, keyed or not (`cap_tank1on`, 2026-09-19)
+                blocks = []
+                # and the one asked for, configured or not: `I68001` drew
+                # tank 1's block with every tank off (2026-09-22)
+                for t in ([int(dev)] if dev.isdigit() and int(dev)
+                          else c.configured("601", c.capacity("probe"))):
+                    # the tank's label first: `REGULAR UNLEADED     ( TANK 1 )`
+                    blocks += [f"{c.text('602', t) or '':<21.21s}( TANK {t} ) ",
+                               "   SUN   MON   TUE   WED   THR   FRI   SAT",
+                               "     0" * 7, ""]
+                return self._frame(code, SEP.join([
+                    "FUEL MANAGEMENT SETUP", "", "DELIVERY WARN DAYS:  0.0",
+                    "AUTO PRINT: DISABLED", "", "",
+                    "FUEL MANAGEMENT AVERAGE SALES (GALLONS)", ""]
+                    + blocks + [""]))
+        if tok == "5E2" and dev.isdigit() and int(dev):
+            # a record with its time disabled (`I5E201`, 2026-09-22), where
+            # this printed the stored `EE00`; and an enabled one's time in
+            # twelve hours, the hour space padded -- `RECORD 1 :  2:30 PM`,
+            # `12:05 AM` for 0005 -- in every DATE/TIME FORMAT, 24-hour ones
+            # too (2026-09-25, `bench-2026-09-25/fmt5e2.jsonl`), where this
+            # printed the stored `1430`
+            held = (c.values.get(f"S5E2{dev}") or "EE00").strip()[-4:]
+            when = "DISABLED"
+            if held.isdigit() and int(held[:2]) < 24 and int(held[2:]) < 60:
+                when = clock_hhmm(time.strptime(held, "%H%M"))
+            return self._raw_display(code, ["", f"RECORD {int(dev)} : {when}"])
+        if tok == "904" and not c.has("wplld"):
+            # the software is the COMM module's (576013-818 Rev AB ch.6: "the
+            # software version number of the WPLLD Comm Module"), and it shows
+            # with the comm module alone
+            part, made = (self.WPLLD_COMM_SOFTWARE if c.has("wplldcom")
+                          else ("", ""))
+            return self._raw_display(code, [
+                " WPLLD DIAGNOSTIC DATA  ", "- - - - - -  - - - - - -",
+                f"#: {part:<14s}" if part else "#: ", made,
+                "PC COMM ERRORS  =      0", "", "", "", ""])
+        if tok == "B21" and c.has("probe") and c.probe_gt:
+            # the G.T. board's four ground temperature inputs, each its
+            # sample counter, the two reference counts, and the resistance
+            # read -- a thousand million on an input with nothing on it
+            # (`groundtemp`). `IB2101` answered input 1 alone.
+            inputs = range(1, 5) if dev == "00" else [int(dev)]
+            rows = []
+            for n in inputs:
+                count, high, low, _last, average = c.thermistor_row(n)
+                rows.append(f"{n:6d}{count:8d}{high:9d}{low:10d}"
+                            f"{int(round(average)):13d}")
+            return self._raw_display(code, [
+                "", "GROUNDTEMP DIAGNOSTIC REPORT", "",
+                "        SAMPLE     HIGH       LOW",
+                "SENSOR COUNTER      REF       REF        VALUE"]
+                + rows + [""])
+        if tok == "BA0" and not (c.has("dim") or c.has("mdim")):
+            return self._raw_display(code,
+                                     ["MDIM TOTALIZER", "", "", "", ""])
+        if tok == "51B" and self._dst_on():
+            # both windows whatever the device: `I51B01` printed the start
+            # and the end, as `I51B00` does (2026-09-22)
+            return self._raw_display(code, self._dst_lines())
+        if tok in ("5BE", "5BF") and self._custom_alarms_on():
+            # in no revision on this shelf; with custom alarms on (5BD) the
+            # bench answers its title and nothing set (`cap_tank1on`)
+            return self._raw_display(code, ["", "CUSTOM ALARMS".ljust(24), ""])
+        if tok == "V10" and not c.licensed("isd"):
+            # the ISD software's version answers on a console with no ISD key
+            return self._raw_display(code, ["", "ISD VERSION: 01.00", ""])
+        if tok == "A91" and not self._tanks(dev):
+            # the outage report is per tank, and a console with none has
+            # nothing to report -- not even the title
+            return self._frame(code)
+        return None
+
+    def _bench_computer_reply(self, tok, dev="00"):
+        """The computer-format data the bench TLS-350 answers where this
+        console had none, or None. Read off `cap_swept` (2026-09-18), both
+        formats of every answering code in the state the Set sweep left.
+
+        The clock is 501's own value; 505 is 517's units and language with
+        the language one digit wide; the codes `FIXED` and `NO_BIR` draw on
+        the display side have packed forms of their own; 7C3's 132 gallons
+        is on every tank; the ground temperature block is `_bench_state_
+        reply`'s B21 as floats; and the ISD version answers without a key.
+        """
+        c = self.c
+        if tok == "501":
+            return stamp(c)
+        if tok == "505":
+            units_language = (c.values.get("S51700")
+                              or self._default_stored("517", "00")
+                              or self._blank_stored("517", "00") or "")
+            if len(units_language) == 3 and units_language.isdigit():
+                return units_language[0] + str(int(units_language[1:]))
+            return None
+        if tok == "51F":
+            return "0"
+        if tok == "55D":
+            return self._precision_print()
+        if tok == "51B" and self._dst_on():
+            # the start alone, as `i51B00` answered it
+            return self._dst_window()[0]
+        if tok in ("5BE", "5BF") and self._custom_alarms_on():
+            return "00"
+        if tok in ("681", "682") and not c.licensed("fuelman"):
+            return ""
+        if tok == "535":
+            # and one receiver asked for is its own record: `i53501` packs
+            # `0100` on the bench (2026-09-22), where this answered nothing
+            receivers = ([int(dev)] if dev.isdigit() and int(dev)
+                         else range(1, 9))
+            return "".join(f"{n:02d}{int(self._hangup(n)):02d}"
+                           for n in receivers)
+        if not c.licensed("bir") and tok in ("79E", "7B0"):
+            return "00"
+        if not c.licensed("bir") and tok == "7B3":
+            return "00000"
+        if tok == "7C3" and c.has("probe"):
+            return "".join(
+                f"{n:02d}" + packed.hexfloat(units.out(
+                    "volume", float(blankrows.max_volume(c, n)),
+                    units.system(c)))
+                for n in range(1, c.capacity("probe") + 1))
+        if tok == "904" and not c.has("wplld"):
+            if c.has("wplldcom"):
+                part, made = self.WPLLD_COMM_SOFTWARE
+                return f"{part:<14s}{made}00000000"
+            return "00000000"
+        if tok == "B21" and c.has("probe") and c.probe_gt:
+            # count, then the samples, the two references, the last sample
+            # and the average -- the average is the display's VALUE. One
+            # input asked for is that input's block alone: `iB2102` packed
+            # input 2 (2026-09-22), where this answered nothing at all
+            inputs = [int(dev)] if dev.isdigit() and int(dev) else range(1, 5)
+            return "".join(f"{n:02d}05" + "".join(
+                packed.hexfloat(float(v)) for v in c.thermistor_row(n))
+                for n in inputs)
+        if tok == "V10" and not c.licensed("isd"):
+            return "01.00"
+        return None
+
+    # A code in no revision of 576013-635 on this shelf, which the bench
+    # TLS-350 answers (2026-09-18) with what it holds out of a cold start.
+    # It is a setting, and no page says how to set it -- and setting the
+    # protocol's own prefix could leave a tool unable to talk to it, so it
+    # was not tried -- so this console answers what the bench did and takes
+    # no Set for it.
+    FIXED = {
+        "51F": ["", "EURO PROTOCOL PREFIX", "S", ""],
+    }
+
+    # 55D, PRINT PRECISION LINE TEST RESULTS, is in no revision either, and
+    # it takes a Set: the bench TLS-350 answered `S55D001` ENABLED and
+    # `S55D000` DISABLED, packed 1 and 0, and refused `S55D002` with a `?`
+    # (2026-09-19, `transcripts/p55d.log`). What it changes on the paper
+    # was not seen: the printer was not watched.
+    PRECISION_PRINT = {"0": "DISABLED", "1": "ENABLED"}
+
+    def _precision_print(self):
+        return (self.c.values.get("S55D00") or "0")[-1:]
+
+    def _precision_print_lines(self):
+        return ["", "PRINT PRECISION LINE TEST RESULTS: "
+                + self.PRECISION_PRINT[self._precision_print()], ""]
+
+    def _set_max_volume(self, dev, code, data):
+        """7C3, TANK MAXIMUM VOLUME LIMIT: a whole number of gallons, kept in
+        sixteen bits. The bench TLS-350 (2026-09-19, `transcripts/p7c3*`):
+        `S7C301200` took 200; `132.5` took 132; `9999999` was read as six
+        digits and held 999999 as 16959; `65535` held, `65536` held 0 and
+        `65537` 1; `0`, `-1` and `ABC` were refused. Packed, `s7C301` took
+        a float and dropped its fraction, and refused 0.0. Every value read
+        back as a float."""
+        text = (data or "").strip()
+        if code[:1].islower():
+            try:
+                value = packed.unhexfloat(text[:8])
+            except ValueError:
+                value = None
+        else:
+            whole = text[:6].split(".")[0]
+            value = float(whole) if whole.isdigit() else None
+            if value is not None:
+                value = units.into("volume", value, units.system(self.c))
+        if value is None or value != value or value < 1:
+            return self._refused(code, data, "7C3", dev), "REJECTED: not a volume"
+        held = int(value) % 65536
+        tanks = ([int(dev)] if dev.isdigit() and int(dev)
+                 else range(1, self.c.capacity("probe") + 1))
+        for n in tanks:
+            self.c.values[f"S7C3{n:02d}"] = str(held)
+        self.c.save()
+        return self._answered("7C3", dev, code), f"max volume {held}"
+
+    def _set_precision_print(self, code, data):
+        value = (data or "").strip()
+        if value not in self.PRECISION_PRINT:
+            return self._refused(code, data), "REJECTED: 0 or 1"
+        self.c.values["S55D00"] = value
+        self.c.save()
+        if code[:1].islower():
+            return self._frame(code, value), "stored"
+        return self._raw_display(code, self._precision_print_lines()), "stored"
+
+    # 535, RECEIVER AUTO COMPUTER MODE HANGUP, is in no revision either --
+    # and it does take a Set: the bench TLS-350 answered `S535011` with
+    # HANGUP and `S535010` with CHARACTER, and refused 2, 3 and 9 with a
+    # `?` (2026-09-19, `transcripts/probes.jsonl`). Held per receiver.
+    HANGUP_WORDS = {"0": "CHARACTER", "1": "HANGUP"}
+
+    def _hangup(self, receiver):
+        return (self.c.values.get(f"S535{receiver:02d}") or "0")[-1:]
+
+    def _hangup_lines(self, dev):
+        receivers = ([int(dev)] if dev.isdigit() and int(dev)
+                     else list(range(1, 9)))
+        return (["", "RECEIVER AUTO COMPUTER MODE HANGUP", "",
+                 "RCVR   LOCATION LABEL       METHOD"]
+                + [f"{r:2d}                          "
+                   f"{self.HANGUP_WORDS[self._hangup(r)]}"
+                   for r in receivers])
+
+    def _set_hangup(self, dev, code, data):
+        value = (data or "").strip()
+        if value not in self.HANGUP_WORDS:
+            return self._refused(code, data), "REJECTED: 0 or 1"
+        receivers = ([int(dev)] if dev.isdigit() and int(dev)
+                     else list(range(1, 9)))
+        for r in receivers:
+            self.c.values[f"S535{r:02d}"] = value
+        self.c.save()
+        if code[:1].islower():
+            return self._frame(code, self._bench_computer_reply("535")), "stored"
+        return self._raw_display(code, self._hangup_lines(dev)), "stored"
+
+    def _etx_table(self, tok, port, code):
+        """537's or 538's reply at one port, which a Set answers with too.
+
+        The bench TLS-350 (2026-09-25, `bench-2026-09-25/etx*.jsonl`): the
+        title, the heading, and the port's row -- its number in two, the
+        first character at 9 and the second four after it, as stored, a
+        control byte and all -- and packed, the characters alone."""
+        chars = self.c.values.get(f"S{tok}{port:02d}") or ""
+        if code[0].islower():
+            # raw, not through `printable_body`: the bench packed `\x04A`
+            # with the control byte in it. Nothing stored here can forge a
+            # frame, since SOH, CR and ETX each end a Set before its data.
+            body = (SOH + code.encode("ascii") + stamp(self.c).encode("ascii")
+                    + chars.encode("latin-1") + b"&&")
+            return body + checksum(body).encode("ascii") + ETX
+        a, b = (chars + "  ")[:1], chars[1:2]
+        row = f"{port:2d}       " + (a if chars else "") + "    " + b
+        title = ("DISPLAY" if tok == "537" else "COMPUTER") + \
+            " MODE RS-232 ETX CHARACTERS"
+        return self._raw_display(code, ["", title, "", "PORT    ETX    ETX",
+                                        "", row, ""])
+
+    def _raw_display(self, code, rows):
+        """A display reply exactly as `rows` lays it out under the stamp."""
+        return (SOH + SEP.encode() + code.encode("latin-1") + SEP.encode()
+                + self.c.clock_stamp().encode("latin-1") + SEP.encode()
+                + SEP.join(rows).encode("latin-1") + SEP.encode() + ETX)
+
+    def _set_family(self, tok):
+        """The card family whose positions a code's devices are, or None."""
+        family = wiretables.FAMILY_OF.get(wiretables.device_letter(tok))
+        return family[0] if family else None
+
+    def _computer_aggregate(self, tok):
+        """Device 00 of a per-device setting in computer format: every
+        position the cage has, programmed or not.
+
+        The bench TLS-350 (2026-09-18, `cap_swept`) answers `i60200` with
+        four tanks of twenty blanks on a console that labelled none,
+        `i60400` with tank 1's 200000 and three zeros, `i60300` with each
+        tank's own number as its product code, and `i78200` with the three
+        lines one controller carries. This answered only what was stored --
+        nothing at all on a blank console. A position nobody set carries
+        what it holds: its default, else what the display shows for it,
+        else the field's blank.
+        """
+        family = self._set_family(tok)
+        count = self.c.capacity(family) if family else 0
+        head = (wiretables.columns(tok) or [{}])[0].get("head")
+        if not family and (head == "RCVR" or (head == "DEVICE"
+                                              and tok.startswith("52"))):
+            # the receivers: `i52100` lists all eight, as I535 prints them
+            count = 8
+        elif not family and head == "TANK":
+            # a tank table whose rows carry no letter: 62B, 62D, 631, 639
+            count = self.c.capacity("probe")
+        if tok in self.SET_DEVICES:
+            # the print header answers only the lines that were set
+            count = 0
+        if tok in ("681", "682", "683") and not self.c.licensed("fuelman"):
+            return ""
+        if count <= 0:
+            return self.c.aggregate(tok)
+        keep = self._packed_filter(tok)
+        prefixed = self.c.is_prefixed(tok)
+        out = []
+        for n in range(1, count + 1):
+            if keep and not keep(self.c, n):
+                # a user-defined pipe's setting, on a line that is not one
+                continue
+            dev = f"{n:02d}"
+            # the store and the default both hold a prefixed code's value
+            # with its device in front (`_with_prefix`); a blank does not
+            val = self.c.values.get(f"S{tok}{dev}")
+            if val is None:
+                val = self._default_stored(tok, dev)
+            if tok == "77F" and not wiretables.ROW_FILTER["77F"](self.c, n):
+                # no second length on this pipe: `i77F00` packed three zeros
+                # with Q1 on type 19 and Q2 and Q3 on 03, where their
+                # default would have read 351 (`cap_swept`, 2026-09-19)
+                val = None
+                body = packed.hexfloat(0.0)
+            elif val is not None:
+                body = val[2:] if prefixed and len(val) >= 2 else val
+            else:
+                body = self._blank_stored(tok, dev)
+            if body is None:
+                continue
+            body = self._packed(tok, "00", body)
+            out.append(dev + body if prefixed else body)
+        return "".join(out)
+
+    def _packed_filter(self, tok):
+        """`wiretables.ROW_FILTER` as the computer format's device 00
+        applies it: 777 to 77A answer nothing for a line whose pipe is not
+        USER DEFINED, 77B and 77E nothing for one that is neither that nor
+        Petrotechnik -- `i77B00` packed Q1 alone with Q1 on type 19 and the
+        others on 03 (`cap_swept`, and again 2026-09-19) -- and the second
+        length 77F every line, 0 where the pipe has none (`_computer_
+        aggregate`). One line asked for by number is not filtered here."""
+        if tok == "77F":
+            return None
+        return wiretables.ROW_FILTER.get(tok)
+
+    def _blank_stored(self, tok, dev):
+        """What an unset position holds with no documented default: the
+        display's own reading of it encoded back, or the field's blank --
+        blanks for a label, zeros for a number, the first choice's zero."""
+        from .console import FIELDS
+        if tok == "603":
+            # a tank's product code starts as its own number: `i60300`
+            # answers 1, 2, 3 and 4 on a console that set none
+            return str(int(dev))
+        if tok == "62B":
+            # a last annual test never run is a date of zeros, which the
+            # display prints `???  0,    0`: `i62B00` packs `01000000` and
+            # so on for each tank (`cap_swept`, and every capture since)
+            return "000000"
+        field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+        if not field or field.get("part"):
+            # a record of parts is the parts' blanks, in the record's order:
+            # 605's four zero volumes, 631's two flags, 639's shape and factor
+            parts = wiretables.parts_of(tok, dev)
+            # a part with a documented default holds it, as the display
+            # already reads it: 881's baud is `01200` and its rings `01`,
+            # where this packed the first choice and zero -- 300 baud and no
+            # rings under a display that said 1200 (2026-09-22)
+            blanks = [str(p["default"]) if p.get("default") is not None
+                      and len(str(p["default"])) == (p.get("part")
+                                                     or [0, 0])[1]
+                      else self._kind_blank(p, (p.get("part") or [0, None])[1])
+                      for p in parts]
+            if parts and tok in ("605", "606"):
+                # a chart's first figure is the tank's full volume, the one
+                # value 604 and 60A hold: 200000 in `i60500` and `i60600`
+                # on the bench, with no chart point set
+                full = (self.c.limit("604", int(dev))
+                        or self.c.limit("60A", int(dev)) or 0.0)
+                blanks[0] = packed.hexfloat(full)
+            return None if not parts or None in blanks else "".join(blanks)
+        if not field:
+            return None
+        shown = self._display_value_us(tok, dev)
+        if shown not in (None, ""):
+            try:
+                return fieldio.encode_value(field, str(shown).strip(),
+                                            self.c.metric(), self.c,
+                                            code=f"S{tok}{dev}")
+            except (ValueError, TypeError):
+                pass
+        return self._kind_blank(field)
+
+    def _kind_blank(self, field, width=None):
+        """A field's blank by its kind, at `width` or its own."""
+        kind = field.get("kind")
+        width = width or self.WIDTHS.get(kind, lambda f: None)(field)
+        if kind == "text":
+            return " " * (width or 20)
+        if kind == "float":
+            return packed.hexfloat(0.0)
+        if kind in ("int", "digits", "flag", "slots"):
+            return "0" * (width or 1)
+        if kind == "enum" and field.get("choices"):
+            return str(field["choices"][0][0])
+        return None
+
+    def _default_stored(self, tok, dev):
+        """A field's documented default, in the form the store holds it, or
+        None where the field has none."""
+        from .console import FIELDS
+        field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+        if tok == "628" and dev.isdigit() and int(dev):
+            # a maximum volume nobody set is the tank's full volume, and
+            # follows it: tanks 2 to 4 read 12000, 8000 and 6000 on the
+            # bench as their 604s did (`cap_site`, 2026-09-19)
+            full = self.c.limit("604", int(dev)) or self.c.limit("60A", int(dev))
+            return self._with_prefix(tok, dev, packed.hexfloat(full or 0.0))
+        if field and field.get("default_litres") is not None:
+            # a default the firmware holds in litres: 634's is 3 and 635's 4,
+            # stored as 0.7926 and 1.0568 gallons -- which a U.S. display
+            # cuts to the 0 and 1 the cold start printed (`cap_metric`)
+            gallons = units.into("volume", float(field["default_litres"]),
+                                 units.METRIC)
+            return self._with_prefix(tok, dev, packed.hexfloat(gallons))
+        if not field or field.get("part") or field.get("default") is None:
+            return None
+        try:
+            value = fieldio.encode_value(field, str(field["default"]),
+                                         self.c.metric(), self.c,
+                                         code=f"S{tok}{dev}")
+        except (ValueError, TypeError):
+            return None
+        return self._with_prefix(tok, dev, value)
+
+    def _nothing_to_report(self, tok, dev="00"):
+        """Whether `tok` is a device report and there is no such device.
+
+        For one device asked by number, whether THAT one is missing: the
+        bench TLS-350, every tank and line off, answered `I20201`, `I37301`
+        and the rest with the frame alone as it did their `00`s, where this
+        drew device 1's report (2026-09-22)."""
+        one = int(dev) if dev.isdigit() and int(dev) else None
+        if tok in self.TANK_REPORTS:
+            # a probe reporting, not a tank programmed: see `_tanks`
+            return (not self.c.tank_level if one is None
+                    else one not in self.c.tank_level)
+        if tok in self.LINE_REPORTS:
+            # a line switched ON, not one merely labelled: see
+            # `Console.programmed_lines`
+            on = {n for kind, n, _label in self.c.programmed_lines()
+                  if kind == "plld"}
+            return not on if one is None else one not in on
+        return False
 
     def handle(self, raw):
         """Answer one command, and never let a defect take the session down.
@@ -1980,20 +2902,46 @@ class Handler:
             if self.log:
                 self.log(f"{raw!r}   [refused: RS-232 security]")
             return b""
-        if not letter:
-            # a command too short to be one, which a hand-typed telnet session
-            # makes plenty of. The console answers rather than sitting silent.
-            if self.verbose:
-                print(f"  {raw!r}   [not understood]")
+        if security and not self.c.rs232_enforces_security():
+            # And with security OFF a code in front is not a code at all:
+            # the bench TLS-350, security disabled on every port, answered
+            # `000000I20100` -- its own code, in front of a good command --
+            # with 9999FF (2026-09-19, `transcripts/edge2`). The six digits
+            # are read as the function code, which no console knows.
+            # (`123456I20100` and `12345I20100` answered a frame of their
+            # own, `123309`, which no page explains; not built.)
             if self.log:
-                self.log(f"{raw!r}   [not understood]")
+                self.log(f"{raw!r}   [a security code with security off]")
             return NOT_UNDERSTOOD
+        if not letter:
+            # A command too short to be one gets nothing at all. This
+            # answered 9999FF from 2026-08-19 (2ba6a71) so that somebody
+            # typing half a command at a telnet prompt got something back;
+            # the bench TLS-350 answers `I999<CR>` and a lone `<SOH><CR>`
+            # with silence (2026-09-23), and the console is what this
+            # matches. The manual's 9999FF is for "a function code that it
+            # does not recognize", which a command this short does not reach.
+            if self.verbose:
+                print(f"  {raw!r}   [too short: no reply]")
+            if self.log:
+                self.log(f"{raw!r}   [too short: no reply]")
+            return b""
         # The console echoes the function code exactly as it was sent. Only
         # the dispatch is case-folded, which is why parse_command upper-cases
         # the token. Sending i@a900 to a real TLS-350 brings back i@a900, not
         # i@A900 -- the only codes where it shows are the undocumented @
         # family, because everything else is typed in one case anyway.
         code = f"{letter}{_sent_token(raw, tok)}{dev}"
+        if (letter in ("I", "i") and len(dev) == 2 and dev[:1].isdigit()
+                and (dev[1:].isalpha() or dev[1:] < " ") and tok in KNOWN):
+            # (and a digit then a control character, on one observation:
+            # `I2019<BS>` was the bare frame too, where `I2019<DEL>` was
+            # 9999FF, 2026-09-23)
+            # A digit then a letter is a device the console reads and has not
+            # got: the bench TLS-350 answered `I2010A` with the report's bare
+            # frame, as it does a tank past the cage, and refused `I201A0`
+            # (2026-09-19, `transcripts/edge2`). Sets were not tried.
+            return self._frame(code)
         if not dev.isdigit():
             # the device is two decimal digits; anything else is not a command
             if self.log:
@@ -2028,10 +2976,15 @@ class Handler:
             # and set before it, two clients at once could swap it between
             # this line and the read.
             self._token = tok
-            # the port has carried data, which is half of what 888 reports;
-            # the other half is what it was doing while it did, and a command
-            # arriving on the serial port is 888's own `06=RS232 REQUEST`.
-            self.c.note_comm(connect=RS232_REQUEST)
+            # A command arriving on the serial port is NOT a 888 connection.
+            # This used to note one -- `06=RS232 REQUEST` and a TIME OF LAST
+            # COMM DATA -- on every command. The bench TLS-350 answers I88800
+            # with `CONNECTION : NONE` on both its boards, with no time line,
+            # in four captures taken over hours of commands arriving on one
+            # of them (2026-09-18), and p.474's own sample has the same NONE
+            # on the port being asked. What 888 records is what the console
+            # itself dialled or was dialled for: autodial and auto transmit
+            # still note theirs.
             if letter in "Ii":
                 out, note = self.inquire(tok, dev, code, data)
             elif letter in "Ss":
@@ -2046,26 +2999,306 @@ class Handler:
         return self._eom(out, letter)
 
     def _eom(self, out, letter):
-        """Append the programmed end-of-message characters to a computer
-        format reply, per 576013-635 (531/537). Display format and empty
-        replies are returned untouched.
-        """
-        if not out or not letter.islower() or not out.endswith(ETX):
+        """End a reply with the programmed end-of-message characters in
+        place of its ETX (531, 537 and 538; `Console.reply_end`). An empty
+        reply is returned untouched."""
+        if not out or not out.endswith(ETX):
             return out
-        return out + self.c.rs232_eom_chars()
+        return out[:-1] + self.c.reply_end(computer=letter.islower())
 
     # ---- read --------------------------------------------------------------
     def inquire(self, tok, dev, code, data=""):
+        """`_inquire`, in the console's system units (`units`): the tables
+        are told which system they draw in, and a display reply that names
+        a unit or a test rate has its words put into it -- GALLONS to
+        LITERS, `0.10 TEST SCHEDULE` to `0.38 TEST SCHEDULE`."""
+        system = units.system(self.c)
+        wiretables.UNITS[0] = system
+        try:
+            out, note = self._inquire(tok, dev, code, data)
+        finally:
+            wiretables.UNITS[0] = units.US
+        if (system != units.US and code[:1].isupper() and out
+                and (tok in units.QUANTITY or tok in units.RATE_TEXT)
+                and not out.startswith(NOT_UNDERSTOOD[:5])):
+            text = out.decode("latin-1")
+            text = (units.rate_words(text, system) if tok in units.RATE_TEXT
+                    else units.words(text, system))
+            out = text.encode("latin-1")
+        tail = replytails.TAIL.get(tok)
+        if (tail is not None and code[:1].isupper() and out
+                and out.endswith(ETX) and not out.startswith(NOT_UNDERSTOOD[:5])):
+            # the blank lines before ETX, which are the code's own and not
+            # the report's: FIDELITY S6, `replytails`
+            rows = out[:-1].decode("latin-1").split(SEP)
+            while rows and not rows[-1].strip():
+                rows.pop()
+            if (tok in replytails.BODY_TAIL
+                    and sum(1 for r in rows[3:] if r.strip()) > 1):
+                # past the leading blank, the echo and the stamp there is
+                # more than a title, and a body closes by its own count
+                # (`BODY_TAIL`): 780 with every line off is its title alone
+                # and closes by TAIL's
+                tail = replytails.BODY_TAIL[tok]
+            out = (SEP.join(rows + [""] * (tail + 1))).encode("latin-1") + ETX
+        return out, note
+
+    #: codes with no device of their own in the tables that still read one:
+    #: the bench TLS-350 answered these differently for 01 and 00
+    #: (2026-09-22) -- 888 per comm board, B21 per thermistor, 680
+    DEVICE_READ = {"680", "888", "B21"}
+    #: the WPLLD Comm Module's software and creation stamp, as 904 printed
+    #: them off a 330812-001 in the bench's comm 3 (2026-09-24)
+    WPLLD_COMM_SOFTWARE = ("349751-001-A", "96.02.14.11.38")
+    #: console-wide codes with no setting of their own that the bench
+    #: answered at 01 as at 00, body and all (2026-09-22)
+    DEVICE_BLIND = {"501", "505", "517", "51F", "55D", "5BE", "5BF", "79E",
+                    "7B0", "7B3", "901", "902", "904", "905", "V10"}
+    #: codes the bench answers bare at device 00 whatever is stored
+    NO_DEVICE_ZERO = {"536", "5E2", "881", "882", "889"}
+    #: the comm port settings a port answers by its board (`_port_reply`)
+    PORT_CODES = {"881", "882", "885", "886", "887", "889"}
+
+    def _port_reply(self, tok, port, code):
+        """One comm port's settings, as the bench TLS-350 answered them
+        (2026-09-22): port 1 its RS-232 board, port 2 its serial satellite.
+
+        881 and 882 print the same block, PORT SETTINGS: right under the
+        stamp, the board, its UART indented, the port's RS-232 security,
+        and the DTR state on the satellite board. This drew 881's parts as
+        `BAUD RATE: 1200` lines under no title, and 882 its packed record.
+        With no modem board 885, 886 and 887 are bare; the RS-232 board has
+        no DTR and 889 is bare for it, where the satellite answered 889 with
+        its DTR. Only those two boards have been seen, so a modem board keeps
+        the renderer that was here. None where this has nothing to say."""
+        name = self.c.comm_board_name(port)
+        rs232 = name == "RS-232"
+        if tok in ("885", "886", "887") and not self.c.has("modem"):
+            # the bench has no modem board, so whether an RS-232 port on a
+            # console that HAS one answers these is not known
+            return self._frame(code), "no modem board"
+        if tok == "889" and rs232:
+            return self._frame(code), "not a setting of an RS-232 board"
+        dtr = (self.c.values.get(f"S889{port:02d}") or "1").strip()[-1:]
+        dtr = "LOW" if dtr == "0" else "HIGH"
+        if tok == "889" and code[:1].isupper() and name == "S-SAT ":
+            return self._raw_display(code, [
+                "", f"COMM BOARD  : {port} ({name})",
+                f" DTR NORMAL STATE: {dtr}"]), "DTR"
+        if (tok in ("881", "882") and code[:1].isupper()
+                and name in ("RS-232", "S-SAT ")):
+            uart = self._uart_words(port, self._port_uart(port))
+            # 536's `S` then the code: 0 is DISABLED, which is all the
+            # bench has shown; an enabled port is read as printing its code
+            secure = (self.c.values.get(f"S536{port:02d}") or "0").strip()
+            rows = ["PORT SETTINGS:", "",
+                    f"COMM BOARD  : {port} ({name})",
+                    f" BAUD RATE  : {uart['baud']}",
+                    f" PARITY     : {uart['parity']}",
+                    f" STOP BIT   : {uart['stop']}",
+                    f" DATA LENGTH: {uart['data']}",
+                    "RS-232 SECURITY",
+                    "CODE : " + ("DISABLED" if secure[:1] != "1"
+                                 else secure[1:7])]
+            if not rs232:
+                rows.append(f" DTR NORMAL STATE: {dtr}")
+            return self._raw_display(code, rows), "port settings"
+        return None
+
+    def _past_the_end(self, tok, n):
+        """Is device `n` beyond the positions this code has?
+
+        The card families have their own check against the cage; these are
+        the numbered slots, receivers and ports, whose count is not a card's.
+        `_set_family` reads 5BC and 7BD as tank codes by their letter, and
+        they are a receiver's and a pressure line's."""
+        if tok in self.SET_DEVICES:
+            return n > self.SET_DEVICES[tok]
+        if wiretables._is_receiver(tok) or tok in ("5BC", "535"):
+            return n not in self.c.receivers()
+        if tok == "536":
+            return n > wiretables.SECURITY_PORTS
+        if tok == "7BD":
+            return n > self.c.capacity("plld")
+        if tok in self.PORT_CODES:
+            return n not in self.c.serial_positions()
+        return False
+
+    def _console_wide(self, tok):
+        """A code that has one value for the console, whatever device."""
+        from .console import FIELDS
+        if tok in self.DEVICE_BLIND:
+            return True
+        return (tok[:1] in "56789V" and tok not in self.DEVICE_READ
+                and not self.c.is_multi(tok) and not self.c.is_prefixed(tok)
+                and (f"S{tok}00" in FIELDS or f"S{tok}01" in FIELDS))
+
+    def _inquire(self, tok, dev, code, data=""):
+        if tok == "E20":
+            # one of `WAITING_INQUIRIES` that answered nothing even once a CR
+            # followed it, at 00 and at 01 (2026-09-22). What data field it
+            # waits for is on no page.
+            return b"", "E20: no answer"
+        if (dev != "00" and dev.isdigit() and not data
+                and self._console_wide(tok)):
+            # A console-wide setting ignores the device it is asked for: the
+            # bench TLS-350 answered them at 01 exactly as at 00, in both
+            # formats (2026-09-22) -- `I50601` is PERIODIC TEST WARNINGS:
+            # ENABLED, `i51F01` packs its 0. This answered the frame alone,
+            # or a raw stored value where a dump had left one. The echo
+            # keeps the device that was asked. Not the tank, line and sensor
+            # reports: the bench had every device off, so it cannot say what
+            # their numbers do, and those are read as the device's own.
+            dev = "00"
+        if dev == "00" and not data and (
+                tok in self.NO_DEVICE_ZERO
+                or (tok == "611" and code[:1].islower())):
+            # A port, a record or a receiver has no device 00: the bench
+            # TLS-350 answered these bare in every capture, and on
+            # 2026-09-22 with every port holding a value that `i53601` to
+            # `i53606` read back. This drew them all once one was set. 611's
+            # display form prints the all-tank method; its packed form is
+            # bare as well.
+            return self._frame(code), "device 00 is not one of them"
+        if dev.isdigit() and int(dev) and not data and self._past_the_end(
+                tok, int(dev)):
+            # A position the console has not got: the bench TLS-350 answered
+            # header line 5, receiver 9, port 7, comm port 3 with no board
+            # and a fourth pressure line with the frame alone, in both
+            # formats (2026-09-22), where this drew a blank row for each
+            return self._frame(code), "no such position"
+        if (tok == "77F" and code[:1].islower() and dev.isdigit()
+                and 0 < int(dev) <= self.c.capacity("plld") and not data
+                and not wiretables.ROW_FILTER["77F"](self.c, int(dev))):
+            # no second length on this pipe: `i77F01` packs 0 on the bench
+            # (2026-09-22), as `i77F00` does for every such line
+            # (`_computer_aggregate`), where this packed the 351 default
+            return (self._frame(code, dev + packed.hexfloat(0.0)),
+                    "no second length on this pipe")
+        if tok == "882" and code[:1].islower() and dev.isdigit() and int(dev):
+            # a port's 882 packs its 881 record: `i88201` and `i88101` are
+            # `01200117001` alike on the bench (2026-09-22), where this packed
+            # nothing unless a dump had left a value
+            out, note = self._inquire("881", dev, "i881" + dev, data)
+            if out and b"&&" in out and not out.startswith(NOT_UNDERSTOOD[:5]):
+                return self._frame(code, out[17:out.index(b"&&")].decode(
+                    "latin-1")), note
+        if (tok in self.PORT_CODES and dev.isdigit() and int(dev)
+                and not data and int(dev) in self.c.serial_positions()):
+            said = self._port_reply(tok, int(dev), code)
+            if said is not None:
+                return said
         if tok in SET_ONLY:
             return (self._nine(code),
                     f"{tok} is a Set with no Inquire format")
+        if tok in UNDOCUMENTED_BARE:
+            return self._frame(code), "known to 326.01, answered bare"
+        if (dev.isdigit() and int(dev) and not data
+                and tok[:1] in "234679AB" and not "500" <= tok < "520"):
+            # (the device families' own codes: a console-wide 501 answers
+            # `I50199` with its title, whatever the number)
+            family = self._set_family(tok)
+            count = self.c.capacity(family) if family else 0
+            if count > 0 and int(dev) > count:
+                # a device past the positions the cage gives its family: the
+                # bench TLS-350 answers `I20199`, `I60205` and `I78104` -- a
+                # fourth line on a three-line controller -- with a bare frame,
+                # in both formats (2026-09-19, UNKNOWNS B29)
+                return self._frame(code), "no such position"
+        if tok in self.WITHHELD and self.c.version == self.WITHHELD[tok]:
+            # The two 0.10 GPH schedule DATE codes, PLLD's 78B and WPLLD's
+            # 7AA, are refused by the bench TLS-350 (326.01) where every
+            # other code for a card it lacks answers bare. Refused on the
+            # one version seen doing it; what withholds them is not known.
+            # FIDELITY S29.
+            return self._nine(code), f"{tok} withheld by software {self.c.version}"
         if tok in SETTABLE and not self._module_present(tok):
             # Reading back a setting belonging to a card that is not in the
             # cage is the same question as writing one: the console has
-            # nothing to answer with, and a tool sweeping the ranges wants
-            # 9999 so it can skip the whole function rather than walk
-            # sixteen devices that are not there.
-            return self._nine(code), "no module fitted"
+            # nothing to answer with. That was 9999FF here, on the reading
+            # that a tool sweeping the ranges wants to skip the function;
+            # the bench TLS-350 answers a bare frame (`_absent`).
+            return self._absent(code), "no module fitted"
+        if tok in ("537", "538"):
+            # the RS-232 ETX characters per port, which this drew bare at
+            # every port (FIDELITY S38)
+            port = self.c.etx_port(dev)
+            if port is None:
+                return self._frame(code), "no such port"
+            return self._etx_table(tok, port, code), "ETX characters"
+        if not data and self._nothing_to_report(tok, dev):
+            return self._frame(code), "no device configured"
+        # any device: `I61301` answered the title as `I61300` did -- but
+        # `I62F01` was bare where `I62F00` answers its title and heading
+        if (tok in self.NO_LIVE_TANK
+                and not self.c.tank_level):
+            text = self.NO_LIVE_TANK[tok]
+            if (text is None or code[:1].islower()
+                    or (tok in self.NO_LIVE_TANK_BARE_ONE and dev != "00")):
+                return self._frame(code), "no tank with a probe: bare"
+            return self._raw_display(code, text), "no tank with a probe"
+        if code[:1].isupper():
+            said = self._bench_state_reply(tok, dev, code)
+            if said is not None:
+                return said, "the bench console's answer in this state"
+        elif dev == "00" or tok in ("B21", "535"):
+            said = self._bench_computer_reply(tok, dev)
+            if said is not None:
+                return self._frame(code, said), "the bench console's packed answer"
+        if tok in self.FIXED and code[:1].isupper():
+            return self._raw_display(code, self.FIXED[tok]), "the bench's own"
+        if tok == "535" and code[:1].isupper():
+            return self._raw_display(code, self._hangup_lines(dev)), "hangup"
+        if tok == "55D" and code[:1].isupper():
+            return (self._raw_display(code, self._precision_print_lines()),
+                    "precision print")
+        if tok == "7C3" and self.c.has("probe"):
+            # its own table and packing whatever is stored, since the
+            # stored figure is whole gallons and not the field's own form
+            tanks = ([int(dev)] if dev.isdigit() and int(dev)
+                     else list(range(1, self.c.capacity("probe") + 1)))
+            if code[:1].islower():
+                return self._frame(code, "".join(
+                    f"{n:02d}" + packed.hexfloat(units.out(
+                        "volume", float(blankrows.max_volume(self.c, n)),
+                        units.system(self.c)))
+                    for n in tanks)), "max volume"
+            return (self._frame(code, SEP.join(
+                blankrows.table(self.c, "7C3", tanks))), "max volume")
+        if not self.c.licensed("bir") and tok in self.NO_BIR:
+            text = self.NO_BIR[tok]
+            if tok == "7B1" and code[:1].islower():
+                # the meter map, packed, with no BIR key: `+99`, once a CR
+                # followed it -- it was filed as answering nothing at all,
+                # and it was waiting for one (`WAITING_INQUIRIES`,
+                # 2026-09-22; FIDELITY S36)
+                return self._frame(code, "+99"), "the meter map, packed"
+            if text is None or code[:1].islower():
+                return self._frame(code), "no BIR key: a bare frame"
+            return self._raw_display(code, text), "no BIR key"
+        if tok == "5FA":
+            return self._glass_reply(code), "the display"
+        if tok in NUMBERED_SLOTS and (dev == "00" or not dev.isdigit()):
+            # All four at once is a bare frame in BOTH formats, whatever is
+            # programmed: with ACME FUEL on line 1 and SECOND LINE on line 2
+            # the bench TLS-350 answered `I50300` and `i50300` with the echo
+            # and the stamp and nothing else, while `i50301` carried the
+            # twenty characters (2026-09-19, `transcripts/header503b`). The
+            # packed form had been sending every line's text run together,
+            # which was only ever right because the lines were blank.
+            return self._frame(code), f"{tok}: device 00 is bare"
+        if tok == "503" and code[:1].isupper():
+            # The print header lines. The bench TLS-350 (2026-09-18) answers
+            # `I50301` with the one line `# 1:HEADER ONE` and the header's
+            # width in blanks after it. p.158's sample line had been read
+            # as a title and printed over every answer.
+            n = int(dev)
+            return (self._frame(code, f"# {n}:{self.c.text('503', n):<20.20s}"),
+                    "print header line")
+        if tok == "61E" and not self._mass_density_on():
+            # The bench TLS-350 answers I61E01 with a bare frame while
+            # Mass/Density is disabled, and with the table once it is on.
+            return self._frame(code), "mass/density disabled"
         for family in EXTRA_REPORTS:
             answered = family(self, tok, dev, code, data)
             if answered is not None:
@@ -2077,9 +3310,21 @@ class Handler:
             note = (f"{len(recs)} alarm(s)" if recs
                     else "all functions normal")
             if code[0].isupper():
-                rows = ["SYSTEM STATUS REPORT"]
-                rows += ["  " + a["screen"]
-                         for a in describe_alarms(recs)] or ["  ALL FUNCTIONS NORMAL"]
+                # The bench TLS-350, 2026-09-18: a quiet console answers the
+                # blank line and `  ALL FUNCTIONS NORMAL  ` and stops; one
+                # with something standing answers the blank line, each
+                # message hard against the margin -- a device's padded to
+                # 23, `Q 1:SETUP DATA WARNING ` and `T 1:PROBE OUT          `,
+                # a system one bare, `PAPER OUT` -- and a blank line after.
+                shown = [a["screen"] for a in describe_alarms(recs)]
+                if not shown:
+                    rows = ["SYSTEM STATUS REPORT", "",
+                            "  ALL FUNCTIONS NORMAL  "]
+                else:
+                    rows = ["SYSTEM STATUS REPORT", ""]
+                    rows += [s.ljust(23) if re.match(r"^[A-Za-z] ?\d+:", s)
+                             else s for s in shown]
+                    rows.append("")
                 return self._frame(code, SEP.join(rows)), note
             return (self._frame(code, "".join(recs) if recs else "000000"),
                     note)
@@ -2087,7 +3332,7 @@ class Handler:
             # In-Tank Inventory Report, and the same report with the 90/95%
             # ullage the site programmed at S564
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 return (self._frame(code, self._inventory_text(tanks, tok)),
@@ -2097,46 +3342,98 @@ class Handler:
         if tok == "205":
             # In-Tank Status Report: the alarms standing against each tank
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
-            tanks = self._tanks(dev)
+                return self._absent(code), "no probe module fitted"
             active = {}
             for record in self.c.compute_alarms():
                 if record[:2] == "02":
                     active.setdefault(int(record[4:6]), []).append(record[2:4])
+            # the tanks with a probe reporting, and a tank switched on with
+            # no probe once it has an alarm standing: the bench TLS-350's
+            # tank 1, on with no probe, listed its SETUP DATA WARNING and
+            # PROBE OUT here (2026-09-24), and out of its cold start, with
+            # tanks on and nothing posted, listed none (`cap_tank1on`)
+            on = set(self.c.configured("601", self.c.capacity("probe")))
+            tanks = sorted(set(self._tanks("00"))
+                           | {t for t in on if active.get(t)})
+            if dev != "00":
+                tanks = [t for t in tanks if dev.isdigit() and t == int(dev)]
             if code[0].isupper():
-                rows = ["TANK   PRODUCT                 STATUS"]
+                # a blank line under the heading before the first tank, on
+                # the bench TLS-350 (2026-09-24)
+                rows = ["TANK   PRODUCT                 STATUS"] + (
+                    [""] if tanks else [])
                 for tank in tanks:
                     label = self.c.text("602", tank) or f"TANK {tank}"
                     names = [a["description"].upper()
                              for a in describe_alarms(
                         [f"02{nn}{tank:02d}" for nn in active.get(tank, [])])]
+                    # each status in its nineteen, `SETUP DATA WARNING ` and
+                    # `PROBE OUT          ` on the bench (2026-09-24)
                     rows.append(f"{tank:3d}    {label:<24s}"
-                                + (names[0] if names else "NORMAL"))
+                                + f"{names[0] if names else 'NORMAL':<19s}")
                     for extra in names[1:]:
-                        rows.append(" " * 31 + extra)
+                        rows.append(" " * 31 + f"{extra:<19s}")
                 return self._frame(code, SEP.join(rows)), "tank status"
             body = "".join(f"{t:02d}{len(active.get(t, [])):02X}"
                            + "".join(active.get(t, [])) for t in tanks)
             return self._frame(code, body), "tank status"
         if tok == "206":
-            # In-Tank Alarm History Report
+            # In-Tank Alarm History Report. The bench TLS-350 with real rows
+            # behind it (2026-09-19, `transcripts/p206b.log`, `hist206.log`):
+            #
+            #   TANK 2  PREMIUM UNLEADED
+            #        SETUP DATA WARNING       JAN 17, 2006  9:25 AM
+            #                                 JAN 17, 2006  9:24 AM
+            #                                 JAN 17, 2006  9:20 AM
+            #        PROBE OUT                JAN 17, 2006  9:25 AM
+            #
+            # grouped by alarm TYPE, the type named once, the THREE newest
+            # of each, types in their numbers' order -- and the CLEARs are
+            # not entries: a cycle whose alarm and clear fell in one minute
+            # left that minute in the list once, with an older alarm's
+            # minute still under it. A tank is listed while 601 has it
+            # switched on, probe or no probe, and not at all when it is off.
+            # This listed every record in log order, each with its own
+            # description, for the tanks with a probe reporting.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
-            tanks = self._tanks(dev)
-            log = [r for r in self.c.alarm_log if r["aa"] == "02"]
+                return self._absent(code), "no probe module fitted"
+            on = list(self.c.configured("601", self.c.capacity("probe")))
+            if dev == "00":
+                tanks = on
+            else:
+                tanks = [int(dev)] if int(dev) in on else []
+            log = [r for r in self.c.alarm_log
+                   if r["aa"] == "02" and r.get("state", "02") != "01"]
+
+            def grouped(tank):
+                """[(nn, [record, ...])] -- three newest of each type."""
+                out = {}
+                for r in log:
+                    if int(r["tt"]) != tank:
+                        continue
+                    kept = out.setdefault(r["nn"], [])
+                    if len(kept) < 3:
+                        kept.append(r)
+                return sorted(out.items())
             if code[0].isupper():
                 rows = ["TANK ALARM HISTORY"]
                 for tank in tanks:
-                    mine = [r for r in log if int(r["tt"]) == tank]
-                    if not mine:
+                    blocks = grouped(tank)
+                    if not blocks:
                         continue
                     label = self.c.text("602", tank) or ""
-                    rows.append(f"TANK {tank}  {label}".rstrip())
-                    for r in mine:
+                    # the label in its twenty, and a blank line before each
+                    # type's group: the bench TLS-350 on 2026-09-24,
+                    # `TANK 1  REGULAR UNLEADED    ` then SETUP DATA WARNING
+                    # and PROBE OUT each under a blank line
+                    rows.append(f"TANK {tank}  {label:<20.20s}")
+                    for nn, records in blocks:
+                        rows.append("")
                         desc = describe_alarms(
-                            [r["aa"] + r["nn"] + r["tt"]])[0]["description"]
-                        rows.append(f"     {desc.upper():<25s}"
-                                    + _when(r["at"]))
+                            [f"02{nn}{tank:02d}"])[0]["description"]
+                        for i, r in enumerate(records):
+                            head = f"{desc.upper():<25s}" if not i else " " * 25
+                            rows.append("     " + head + _when(r["at"]))
                 # The title and nothing under it, which is what
                 # `tests/console_capture/raw/I20600.bin` is: a real console
                 # with no tank alarms answering `I20600` with the header
@@ -2146,7 +3443,7 @@ class Handler:
                 return self._frame(code, SEP.join(rows)), "tank alarm history"
             body = ""
             for tank in tanks:
-                mine = [r for r in log if int(r["tt"]) == tank]
+                mine = [r for _nn, records in grouped(tank) for r in records]
                 body += f"{tank:02d}{len(mine):02d}"
                 body += "".join(r["at"] + alarm_history_code(r["nn"])
                                 for r in mine)
@@ -2156,7 +3453,7 @@ class Handler:
             # "Column" one, and they are two LAYOUTS and not two names for one
             # -- they answered with identical text until this was noticed.
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             tanks = sorted(self.c.tank_level)
             previous = dev[-2:] == "02"
             if tok == "C04":
@@ -2170,7 +3467,7 @@ class Handler:
             return self._frame(code, text), "shift reconciliation"
         if tok in recon.RECON:
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             spec = recon.RECON[tok]
             tanks = sorted(self.c.tank_level)
             previous = recon.previous_wanted(tok, data)
@@ -2199,7 +3496,7 @@ class Handler:
                     spec["note"])
         if tok in ("251", "A55"):
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.tank_level))
             if tok == "251":
@@ -2245,23 +3542,40 @@ class Handler:
             # of the DATA on a set, which is why this code needs its own
             # branch either way. See FIDELITY O13.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
-            which = (data or "0")[:1]
-            if which not in ("0", "1"):
-                return self._nine(code), "REJECTED: delivery type is 0 or 1"
-            word = "NEXT" if which == "0" else "LAST"
+                return self._absent(code), "no probe module fitted"
+            if not data:
+                # No delivery type, no report: the bench TLS-350 waits for
+                # one (`WAITING_INQUIRIES`) and answered a lone CR with the
+                # frame alone (2026-09-22), where `I61F010` draws the table.
+                # This read a missing type as NEXT.
+                return self._frame(code), "no delivery type given"
+            which = data[:1]
             tanks = self._tanks(dev)
+            if which not in ("0", "1"):
+                # a `?` a tank, in either format: `I61F00` and a line feed,
+                # a space, a tab, `X` or `2` all answered `????` on the
+                # bench's four tanks, and `I61F01X` / `i61F01X` one
+                # (2026-09-25, `lf.jsonl`). This answered 9999FF.
+                return (self._refused(code, "?" * len(tanks)),
+                        "REJECTED: delivery type is 0 or 1")
+            word = "NEXT" if which == "0" else "LAST"
             if code[0].isupper():
+                # The bench TLS-350 (2026-09-18) answers `I61F010` under the
+                # echo `I61F01` -- the delivery type is NOT echoed, whatever
+                # p.273's "<SOH> I61FTT0" draws -- and sets the table out as
+                # its 61E: DENSITY at 31, the tank number ending at column 1,
+                # the label at 7 and the value ending under the Y at 37.
                 rows = [f"{word} DELIVERY DENSITY", "",
-                        "TANK   PRODUCT LABEL               DENSITY"]
+                        "TANK   PRODUCT LABEL           DENSITY"]
                 for tank in tanks:
                     label = self.c.text("602", tank) or ""
                     got = self.c.delivery_density_value(tank, which)
-                    rows.append(f"{tank:3d}     {label:<26.26s}{got:7.4f}")
-                # the manual echoes the delivery type on the display form
-                # and carries it in the DATA on the computer form:
-                # "<SOH> I61FTT0" against "i61FTTYYMMDDHHmmTTtFFFFFFFF"
-                return (self._frame(code + which, SEP.join(rows)),
+                    rows.append(f"{tank:2d}     {label:<20.20s}{got:11.4f}")
+                # and one blank line to close it, as 61E's does: the table's
+                # first read with a real type, 2026-09-25 (`lf.jsonl`). It
+                # is not in `replytails`, whose count would also close the
+                # frame alone and the `?` refusal, which end otherwise.
+                return (self._frame(code, SEP.join(rows + [""])),
                         f"{word.lower()} delivery density")
             body = "".join(
                 f"{tank:02d}{which}"
@@ -2271,7 +3585,7 @@ class Handler:
         if tok in ("B91", "B93", "B94"):
             # AccuChart Diagnostics, Status and Calibration History
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             chart = self.c.accuchart
             if tok == "B91":
@@ -2286,11 +3600,18 @@ class Handler:
         if tok == "221":
             # Ticketed Delivery Report, current period or previous
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.tank_level))
             text = self.c.deliveries.ticketed_report(tanks)
             if code[0].isupper():
+                if not tanks:
+                    # No tank reporting, no report: the bench TLS-350 with
+                    # every tank switched off answered I22100 with the frame
+                    # and the stamp alone (site snapshot, 2026-09-22), the
+                    # same as I201. This printed the period and VOLUMES ARE
+                    # heading over nothing. CLOSED S37.
+                    return self._frame(code, ""), "ticketed delivery report"
                 return (self._frame(code, "\n" + text + "\n"),
                         "ticketed delivery report")
             return self._frame(code, text), "ticketed delivery report"
@@ -2308,8 +3629,12 @@ class Handler:
             # its record is twenty characters where the other two are
             # eighteen. See alarmreports.py.
             #
-            # 121 is a fourth, undocumented, and it answers as 113 does --
-            # see the note beside `REPORTS` above.
+            # 121 is a fourth, undocumented, and it prints as 113 does --
+            # see the note beside `REPORTS` above -- but packs a record of
+            # its own (`Console.alarm_121_records`, FIDELITY S38)
+            if code[0] == "i" and tok == "121":
+                return (self._frame(code, self.c.alarm_121_records()),
+                        "alarm report")
             tok = "113" if tok == "121" else tok
             state = tok in alarmreports.HAS_STATE
             records = {"113": self.c.active_alarm_records,
@@ -2320,7 +3645,7 @@ class Handler:
                      "115": "MAINTENANCE TRACKER UNACKNOWLEDGED ALARM REPORT"
                      }[tok]
             if tok == "115" and not self.c.has("mt"):
-                return self._nine(code), "no Maintenance Tracker fitted"
+                return self._absent(code), "no Maintenance Tracker fitted"
             if code[0].isupper():
                 rows = self.c.alarm_report_lines(records, title, state)
                 return self._frame(code, SEP.join(rows)), "alarm report"
@@ -2414,7 +3739,7 @@ class Handler:
         if tok in ("A51", "A52", "A53", "A54"):
             # The CSLD diagnostics tables the guide asks a tech to collect
             if not self.c.licensed("csld"):
-                return self._nine(code), "CSLD not installed"
+                return self._absent(code), "CSLD not installed"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -2426,7 +3751,7 @@ class Handler:
         if tok == "B71":
             # Pump Sensor Diagnostic
             if not self.c.has("pump"):
-                return self._nine(code), "no pump sense module fitted"
+                return self._absent(code), "no pump sense module fitted"
             devices = self._devices_of("pump", dev)
             if code[0].isupper():
                 rows = ["PUMP SENSOR DIAGNOSTIC",
@@ -2443,15 +3768,18 @@ class Handler:
             # "Computer format is not supported for this command"
             kind = "plld" if tok == "780" else "wplld"
             if not self.c.has(kind):
-                return self._nine(code), f"no {kind} module fitted"
+                return self._absent(code), f"no {kind} module fitted"
             if not code[0].isupper():
-                return self._nine(code), "display format only"
+                # "Computer format is not supported for this command", and
+                # the bench TLS-350 answers `i78000` with a bare frame, not
+                # 9999FF, in every capture (2026-09-18 and 19)
+                return self._frame(code), "display format only"
             lines = self.c.line_setup_lines(kind, self._devices_of(kind, dev))
             return self._frame(code, SEP.join(lines)), "line leak setup"
         if tok == "204":
             # In-Tank Shift Inventory Report, one block per shift held
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -2477,7 +3805,7 @@ class Handler:
         if tok == "207":
             # In-Tank Leak Test History Report
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["TANK LEAK TEST HISTORY"]
@@ -2504,7 +3832,7 @@ class Handler:
             # HRM and BIR Adjusted Delivery Reports, which are the delivery
             # the gauge saw plus whatever was dispensed during it
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["ADJUSTED DELIVERY REPORT"]
@@ -2544,7 +3872,7 @@ class Handler:
             # columns are the manual's own, and its example puts the tank and
             # its product label on the same line as the probe's five figures.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 # p.489, off the word boxes. The header names only the five
@@ -2587,7 +3915,7 @@ class Handler:
             # what is being shown, and then the numbers eight to a row. The
             # only differences are the title and where the numbers come from.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             title = {"A02": "FACTORY DRYS", "A03": "FACTORY WETS",
                      "A04": "UPDATED DRYS", "A05": "UPDATED WETS",
                      "A06": "SENSITIVITY RATIOS"}[tok]
@@ -2636,7 +3964,7 @@ class Handler:
             # sample number on A10 and A13 and the width of the average on
             # A11 and A12.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             which = {"A10": "last", "A11": "fast",
                      "A12": "standard", "A13": "long"}[tok]
             tanks = self._tanks(dev)
@@ -2670,7 +3998,7 @@ class Handler:
             display = code[0].isupper()
             if tok in ISD_BUFFERS:
                 if not self._vp_full_control():
-                    return (self._nine(code),
+                    return (self._absent(code),
                             "needs PMC and full vapor processor control")
                 if tok == "V81":
                     samples = self.c.hydrocarbon_history()
@@ -2719,7 +4047,7 @@ class Handler:
                 return self._frame(code, body), "vapor processor"
             if tok == "V83":
                 if not self.c.licensed("isd"):
-                    return self._nine(code), "needs the ISD software module"
+                    return self._absent(code), "needs the ISD software module"
                 # "IV8300CCNNIII": category, sensor number, and how many
                 # records of each, "[001-255]".
                 asked = (data or "").strip()
@@ -2763,7 +4091,7 @@ class Handler:
                 return self._frame(code, body), "calibration history"
             if tok in isd.DETAIL:
                 if not self.c.licensed("isd"):
-                    return self._nine(code), "needs the ISD software module"
+                    return self._absent(code), "needs the ISD software module"
                 asked = (data or "").strip()
                 width = self._isd_columns(tok, asked)
                 if width is None:
@@ -2821,7 +4149,7 @@ class Handler:
                 return self._frame(code, body), "isd detail"
             if tok in ("V01", "V02", "V03"):
                 if not self.c.licensed("isd"):
-                    return self._nine(code), "needs the ISD software module"
+                    return self._absent(code), "needs the ISD software module"
                 asked = (data or "").strip()
                 now = self.c.now()
                 monthly = tok == "V02"
@@ -2869,7 +4197,7 @@ class Handler:
                 return self._frame(code, body), "isd alarm status"
             if tok == "V00":
                 if not self.c.licensed("isd"):
-                    return self._nine(code), "needs the ISD software module"
+                    return self._absent(code), "needs the ISD software module"
                 assist = self._isd_evr() == "02"
                 site = "assist" if assist else "balance"
                 if display:
@@ -2889,7 +4217,7 @@ class Handler:
                 return self._frame(code, body), "carb thresholds"
             if tok in ("V0A", "V0B"):
                 if not self.c.licensed("isd"):
-                    return self._nine(code), "needs the ISD software module"
+                    return self._absent(code), "needs the ISD software module"
                 # "yyyymmdd" on the daily one, "yyyymm" on the monthly
                 asked = (data or "").strip()
                 now = self.c.now()
@@ -2924,7 +4252,7 @@ class Handler:
                 return self._frame(code, body), "isd status"
             if tok == "V51":
                 if not (self.c.licensed("isd") or self.c.licensed("pmc")):
-                    return self._nine(code), "needs ISD or PMC"
+                    return self._absent(code), "needs ISD or PMC"
                 passed = self._isd_setup_ok()
                 if display:
                     return (self._frame(code, "ISD/PMC TEST STATUS: "
@@ -2934,9 +4262,9 @@ class Handler:
                         "isd setup verification")
             if tok in ("VC0", "VC1", "VC8"):
                 if not self.c.licensed("pmc"):
-                    return self._nine(code), "needs the PMC software module"
+                    return self._absent(code), "needs the PMC software module"
             elif not self.c.licensed("isd"):
-                return self._nine(code), "needs the ISD software module"
+                return self._absent(code), "needs the ISD software module"
             if tok == "VC0":
                 held = self._vp_control()
                 if display:
@@ -2999,7 +4327,7 @@ class Handler:
             return self._frame(code, body), "isd service report"
         if tok in ("V42", "V43", "V48", "V49", "V4A", "V4B"):
             if not self.c.licensed("isd"):
-                return self._nine(code), "needs the ISD software module"
+                return self._absent(code), "needs the ISD software module"
             rows = self._isd_rows()
             display = code[0].isupper()
             if tok == "V42":
@@ -3076,7 +4404,7 @@ class Handler:
             # "ISD VERSION: 01.00", which is the ISD software's own number and
             # not the console's.
             if not self.c.licensed("isd"):
-                return self._nine(code), "no ISD software module"
+                return self._absent(code), "no ISD software module"
             if code[0].isupper():
                 return (self._frame(code, f"ISD VERSION: {isd.ISD_VERSION}"),
                         "isd version")
@@ -3085,7 +4413,7 @@ class Handler:
             if not self._isd_licensed(tok):
                 spec = isd.SETUP[tok]
                 want = " and ".join(k.upper() for k in spec["needs"])
-                return self._nine(code), f"needs the {want} software module"
+                return self._absent(code), f"needs the {want} software module"
             if code[0].isupper():
                 spec = isd.SETUP[tok]
                 rows = [r for r in (spec.get("title"), ) if r]
@@ -3101,7 +4429,7 @@ class Handler:
             # reference distances. Nothing new is modelled here; it is the
             # printout the others feed.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["IN-TANK DIAGNOSTIC", "-" * 18, "PROBE DIAGNOSTICS"]
@@ -3170,7 +4498,7 @@ class Handler:
             # "MAG PROBE OPTIONS TABLE", one flag wide: "TTNNL", where NN is
             # the number of option flags and L is the low temperature one.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 # p.504 stacks a two word heading over columns at 0 and
@@ -3190,7 +4518,7 @@ class Handler:
             # prints the headings with nothing after them, which is what a
             # probe with nothing wrong with it has to say.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             which = {"A20": "present", "A21": "stored", "A22": "gross"}[tok]
             title = {"present": "PRESENT LEAK TEST ANALYSIS REPORT",
                      "stored": "STORED LEAK TEST ANALYSIS REPORT",
@@ -3221,7 +4549,7 @@ class Handler:
             # "TANK LEAK TEST AVERAGING BUFFERS": the finished tests each rate
             # is averaging over, newest first, with the average under them.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -3267,11 +4595,11 @@ class Handler:
             # about one tank that has not got one, that is a 9999; asked
             # about all of them, it is simply not one of the rows.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = [t for t in self._tanks(dev)
                      if self.c.probe_reference_distance(t)]
             if not tanks:
-                return self._nine(code), "A07 is a Mag probe command"
+                return self._absent(code), "A07 is a Mag probe command"
             if code[0].isupper():
                 rows = []
                 for tank in tanks:
@@ -3303,7 +4631,7 @@ class Handler:
         if tok == "20D":
             # "This command will respond only if stick height is enabled"
             if not (self.c.values.get("S60B00") or "").strip().endswith("1"):
-                return self._nine(code), "stick height not enabled"
+                return self._absent(code), "stick height not enabled"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["TANK STICK HEIGHT",
@@ -3319,7 +4647,7 @@ class Handler:
         if tok == "211":
             # Tank Chart Report, at the height step the command carries
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             step = self._chart_step(data, code)
             if step is None:
@@ -3339,7 +4667,7 @@ class Handler:
             return self._frame(code, body), "tank chart"
         if tok in ("202", "20C"):
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.tank_level))
             recent = tok == "20C"
@@ -3352,7 +4680,7 @@ class Handler:
                     "delivery report")
         if tok in ("218", "219", "56A", "63B"):
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.programmed_tanks()))
             if tok == "219":
@@ -3371,6 +4699,18 @@ class Handler:
                     return self._frame(code, text), "chart code audit"
                 return self._frame(code, when), "chart code audit"
             reports = {"218": self.c.audit_report, "63B": self.c.chart_report}
+            if tok == "63B":
+                # only a tank on the fifty point profile has fifty points:
+                # the bench's tank 1, labelled, 500 inches across and 200000
+                # gallons on 1 PT, is not in I63B00 (2026-09-18, `cap_swept`)
+                # -- and asked by number, a 1 PT tank 1 is the title alone,
+                # and bare packed (`I63B01`, `i63B01`, 2026-09-22)
+                tanks = [t for t in tanks if self.c.tank_profile(t) == "04"]
+            if tok == "63B" and code[0].isupper() and not tanks:
+                # the bench TLS-350, with no tank programmed, answers the
+                # title and nothing under it (2026-09-18)
+                return (self._frame(code, "TANK 50 POINT HEIGHTS AND VOLUMES"),
+                        "tank chart, no tank")
             if code[0].isupper():
                 text = "\n" + ("\n\n".join(
                     reports[tok](t) for t in tanks)) + "\n"
@@ -3379,11 +4719,23 @@ class Handler:
             # programmed, and the chart of no tank is an empty one
             val = (self.c.values.get(f"S63B{tanks[0]:02d}")
                    if tok == "63B" and tanks else None)
+            if tok == "63B" and tanks and val is None:
+                # the bench packs a fifty point tank as its number, a `0`
+                # whose meaning no page gives, the diameter, the full volume
+                # and the count of pairs: `0104479FF5C497423F000` for 999.99
+                # inches and 999999 gallons with none (`cap_tank1on`)
+                val = "".join(
+                    f"{t:02d}0" + packed.hexfloat(self.c.limit("607", t) or 0.0)
+                    + packed.hexfloat(self.c.full_volume(t) or 0.0)
+                    + f"{len(self.c.chart_points(t)):02d}"
+                    + "".join(packed.hexfloat(h) + packed.hexfloat(v)
+                              for h, v in self.c.chart_points(t))
+                    for t in tanks)
             return self._frame(code, val or ""), "tank chart"
         if tok == "217":
             # Tank Profile: which of the five a tank is on, per I217's table
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = ([int(dev)] if dev != "00"
                      else sorted(self.c.programmed_tanks()))
             if code[0].isupper():
@@ -3415,9 +4767,14 @@ class Handler:
             # timestamp in FRONT of the tank, so its record does not even
             # start at the same offset.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             record = ((data or "").strip()[:2] or "01") if tok == "2E2" else ""
+            if code[0].isupper() and not tanks and tok == "2E2":
+                # The bench TLS-350, every tank off: I2E200 is the frame and
+                # the stamp alone (site snapshot, 2026-09-22), as I201 is.
+                # This printed the column heading over nothing. CLOSED S37.
+                return self._frame(code, ""), "inventory"
             if code[0].isupper():
                 # Both blocks' columns are 576013-635's own -- p.82 for 214
                 # and p.104 for 2E2 -- and 2E2's block was one this project
@@ -3452,7 +4809,7 @@ class Handler:
             #   21B  TT  dd ...  no product code at all, and a different and
             #        much longer float list
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             asked = (data or "").strip()
             if tok in ("213", "21B") and asked and not asked[0:2].isdigit():
                 # nn, how many deliveries, is a decimal count
@@ -3463,6 +4820,12 @@ class Handler:
             title = {"213": "DELIVERY REPORT",
                      "215": "MASS/DENSITY DELIVERY REPORT",
                      "21B": "BIR ADJUSTED DELIVERY REPORT"}[tok]
+            if code[0].isupper() and not tanks and tok == "213":
+                # I21300 on the bench TLS-350 with every tank off is the
+                # frame and the stamp alone (site snapshot, 2026-09-22), as
+                # I202 is. This printed DELIVERY REPORT over nothing.
+                # CLOSED S37.
+                return self._frame(code, ""), "delivery report"
             if code[0].isupper():
                 rows = [title]
                 for tank in tanks:
@@ -3491,7 +4854,7 @@ class Handler:
             return self._frame(code, body), "delivery report"
         if tok == "216":
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["TANK 50 POINT HEIGHTS, VOLUMES AND SLOPES"]
@@ -3531,7 +4894,7 @@ class Handler:
             # not. And the period selector is NOT the same field: 222, 225 and
             # 226 take tt (01=current, 02=previous) where 227 takes MMDD.
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             asked = (data or "").strip()
             previous = asked[:2] == "02" if tok != "227" else False
             kind = {"222": "periodic", "225": "periodic",
@@ -3605,7 +4968,7 @@ class Handler:
             return self._frame(code, body), "delivery variance"
         if tok in ("281", "282"):
             if tok == "281" and not self.c.licensed("fuelman"):
-                return self._nine(code), "Fuel Manager not installed"
+                return self._absent(code), "Fuel Manager not installed"
             tanks = self._tanks(dev)
             if tok == "282":
                 if code[0].isupper():
@@ -3657,7 +5020,7 @@ class Handler:
             # that its computer format cannot fill, which is the manual's
             # doing rather than ours.
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -3691,7 +5054,7 @@ class Handler:
             # A different record from its two neighbours: a daily aggregate
             # with a min, a max, an average and a verdict, and no status flag.
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -3722,7 +5085,7 @@ class Handler:
             return self._frame(code, body), "HRM daily history"
         if tok == "A56":
             if not self.c.licensed("csld"):
-                return self._nine(code), "CSLD not installed"
+                return self._absent(code), "CSLD not installed"
             previous = (data or "").strip().startswith("1")
             tanks = self._tanks(dev)
             if code[0].isupper():
@@ -3738,7 +5101,7 @@ class Handler:
             return self._frame(code, body), "CSLD monthly"
         if tok == "A81":
             if not self.c.licensed("fuelman"):
-                return self._nine(code), "Fuel Manager not installed"
+                return self._absent(code), "Fuel Manager not installed"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["FUEL MANAGEMENT DIAGNOSTIC REPORT"]
@@ -3771,7 +5134,7 @@ class Handler:
             return self._frame(code, body), "fuel diagnostic"
         if tok == "A91":
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["POWER OUTAGE REPORT"]
@@ -3814,7 +5177,7 @@ class Handler:
             return self._frame(code, body), "power outage"
         if tok in ("B61", "B62"):
             if not self.c.has("smart"):
-                return self._nine(code), "no smart sensor module fitted"
+                return self._absent(code), "no smart sensor module fitted"
             if tok == "B61":
                 # A VAPOR VALVE DIAGNOSTIC is a per-category report, and this
                 # walked every smart sensor on the card whatever it was --
@@ -3900,7 +5263,7 @@ class Handler:
             # these used to be one sensor's readings made up per call, the
             # same whatever had or had not been run. FIDELITY U1b.
             if not self.c.has("smart"):
-                return self._nine(code), "no smart sensor module fitted"
+                return self._absent(code), "no smart sensor module fitted"
             spec = sumpreports.SUMP_REPORTS[tok]
             sensors = self._mag_devices(dev)
             if code[0].isupper():
@@ -3913,7 +5276,7 @@ class Handler:
             return self._frame(code, body), "mag sump test"
         if tok in ("391", "392"):
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = []
@@ -3987,7 +5350,7 @@ class Handler:
             # Identical layouts, incompatible alarm tables: 0002 is "Disabled
             # VMCI Board" on 411 and "Roots meter not connected" on 412.
             if not self.c.has("vmc"):
-                return self._nine(code), "no VMC interface fitted"
+                return self._absent(code), "no VMC interface fitted"
             table = (sumpreports.VMCI_ALARMS if tok == "411"
                      else sumpreports.VMC_ALARMS)
             most = sumpreports.VMCI_MAX if tok == "411" else sumpreports.VMC_MAX
@@ -4016,7 +5379,7 @@ class Handler:
             # "Computer format is not supported for this command" -- the only
             # report in the manual that says so.
             if not self.c.licensed("fuelman"):
-                return self._nine(code), "Fuel Manager not installed"
+                return self._absent(code), "Fuel Manager not installed"
             if not code[0].isupper():
                 return self._nine(code), "display format only"
             rows = ["FUEL MANAGEMENT SETUP",
@@ -4047,7 +5410,13 @@ class Handler:
             # "PP - Communication Port Number (00=all)", and device 00
             # answered for port 1 alone on a console with six positions.
             ports = ([int(dev)] if dev != "00" and dev.isdigit() and int(dev)
-                     else sorted(self.c.comm_positions()) or [1])
+                     else self.c.serial_positions() or [1])
+            if tok == "88D" and not self.c.has("modem"):
+                # SiteLink's diagnostic, on a console with no modem board:
+                # the bench TLS-350 (RS-232 and serial satellite only)
+                # answers a bare frame, where this drew both its boards as
+                # S-LINK with a NetComm modem (2026-09-18).
+                return self._frame(code), "no modem board"
             if tok == "88D":
                 # `MM - Modem Type` and `DD - Modem Auto Detected` are two
                 # bytes, and this console has no modem to detect: what it
@@ -4081,7 +5450,14 @@ class Handler:
             if code[0].isupper():
                 return (self._frame(code, SEP.join(self._comm_status(ports))),
                         "comm status")
-            body = f"{sum(len(self.c.comm_errors.get(n) or ()) for n in ports):02d}"
+            total = sum(len(self.c.comm_errors.get(n) or ()) for n in ports)
+            body = f"{total:02d}"
+            if not total:
+                # "NN - Total Number of Error Reports To Follow", and none
+                # follow: the bench TLS-350 answers `i88800` with `00` and
+                # nothing after it, both ports connected to nothing
+                # (`cap_swept` and every capture since)
+                return self._frame(code, body), "comm status"
             for n in ports:
                 errors = self.c.comm_errors.get(n) or ()
                 body += (f"{n:02d}{len(errors):02d}"
@@ -4104,7 +5480,7 @@ class Handler:
             # opposite list, which is what makes blocking a key checkable
             # from the wire. See FIDELITY D13.
             if not self.c.has("mt"):
-                return self._nine(code), "no Maintenance Tracker fitted"
+                return self._absent(code), "no Maintenance Tracker fitted"
             keys = self.c.blocked_tracker_keys()
             if code[0].isupper():
                 rows = ["MAINTENANCE TRACKER BLOCK HARDWARE KEY",
@@ -4117,7 +5493,7 @@ class Handler:
             return self._frame(code, body), "blocked keys"
         if tok in ("8A2", "8A3"):
             if not self.c.has("mt"):
-                return self._nine(code), "no Maintenance Tracker fitted"
+                return self._absent(code), "no Maintenance Tracker fitted"
             if tok == "8A2":
                 entries = self.c.service_codes()
                 if code[0].isupper():
@@ -4163,7 +5539,6 @@ class Handler:
                          f"{'SYSTEM BOARD':<22s}PASS     PASS     PASS"])),
                         "self test")
                 return self._frame(code, "000000"), "self test"
-            info = self.c.software_info()
             if code[0].isupper():
                 # p.489: the title at 3, the sub-title at 2, the rule
                 # in two halves of six with two spaces between them, and the
@@ -4192,7 +5567,7 @@ class Handler:
                         # because "- " * 6 carries its own trailing space.
                         ("- " * 6).strip() + "  " + ("- " * 6).strip(),
                         f"PC SWARE# {self.c.PC_SOFTWARE}",
-                        f"CREATED - {info['created']}",
+                        f"CREATED - {self.c.PC_CREATED}",
                         pad("PC ROM CHECKSUM", "PASSED"),
                         "",
                         pad("PC RESET COUNTS", n["resets"]),
@@ -4201,13 +5576,21 @@ class Handler:
                         f"MC->PC COMMS ={n['to_pc']:>10d}",
                         f"MC<-PC COMMS ={n['from_pc']:>10d}"]
                 return self._frame(code, SEP.join(rows)), "PC diagnostic"
+            # the PC board's own date, then `01` -- in no note of the
+            # manual's, and on the bench before the count; read as the ROM
+            # checksum the display calls PASSED -- then the five counters in
+            # hex (`330269-002-B  94.12.16.13.2601050000000100000000...`,
+            # 2026-09-18). This sent five zeros.
+            n = self.c.pc_counters()
             body = (f"{self.c.PC_SOFTWARE:<14.14s}"
-                    f"{info['created']:<14.14s}" + "05"
-                    + "00000000" * 5)
+                    f"{self.c.PC_CREATED:<14.14s}" + "01" + "05"
+                    + "".join(f"{int(n[k]):08X}" for k in
+                              ("resets", "comm_errors", "cksum_errors",
+                               "to_pc", "from_pc")))
             return self._frame(code, body), "PC diagnostic"
         if tok in ("BA0", "BB1"):
             if not self.c.has("vmc"):
-                return self._nine(code), "no VMC interface fitted"
+                return self._absent(code), "no VMC interface fitted"
             if tok == "BA0":
                 if code[0].isupper():
                     rows = ["MDIM TOTALIZER"]
@@ -4272,7 +5655,7 @@ class Handler:
             # the method byte hardcoded to Standard even on a CSLD tank,
             # which is the one field 212 exists for. See FIDELITY H14.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             tanks = self._tanks(dev)
             if code[0].isupper():
                 rows = ["TANK LEAK TEST HISTORY"]
@@ -4332,7 +5715,10 @@ class Handler:
                 text = "\n" + "\n".join(rep) + "\n"
                 return self._frame(code, text), "revision level report"
             s = self.c.software_info()
-            body = f"SOFTWARE# {s['number']}CREATED - {s['created']}"
+            # `nnnnnn-vvv-rrr` is fourteen wide and a one-letter revision
+            # leaves two spaces: `SOFTWARE# 346326-100-B  CREATED - ...` on
+            # the bench TLS-350's i90200 and i90500 (2026-09-18)
+            body = f"SOFTWARE# {s['number']:<14s}CREATED - {s['created']}"
             if tok == "905":
                 flags = self.c.revision_flags()
                 body += f"{len(flags):02X}"
@@ -4340,7 +5726,7 @@ class Handler:
                 body += f"S-MODULE# {s['smodule']}"
             return self._frame(code, body), "revision level report"
         if not self._module_present(tok):
-            return self._nine(code), "no module fitted for this function"
+            return self._absent(code), "no module fitted for this function"
         if code[0].isupper():
             # The manual answers a Display inquire with a titled TABLE, and
             # its columns are read off the page rather than guessed. This
@@ -4358,8 +5744,34 @@ class Handler:
             if answered is not None:
                 return answered
         if dev == "00" and self.c.is_multi(tok):
-            return self._frame(code, self.c.aggregate(tok)), "device-00 aggregate"
+            return (self._frame(code, self._computer_aggregate(tok)),
+                    "device-00 aggregate")
+        keep = self._packed_filter(tok) if code[:1].islower() else None
+        if keep and dev.isdigit() and int(dev) and not keep(self.c, int(dev)):
+            return self._frame(code, ""), "not this line's pipe type"
         val = self.c.values.get(f"S{tok}{dev}")
+        if val is None and tok in self.LEGACY_TWINS:
+            # the Version 4 code reads its twin in both formats: `i50700`
+            # answers 547's 01, `i50A00` 55A's 300
+            twin = self.LEGACY_READ.get(tok, self.LEGACY_TWINS[tok][0])
+            val = self.c.values.get(f"S{twin}{dev}")
+        if val is None and tok in self.c.SHARED_STORE:
+            # one value under two names: a 60A Set lands on 604's key when
+            # 604 holds it, and `i60A01` answers it (`s60A01` in the sweep)
+            val = self.c.values.get(f"S{self.c.SHARED_STORE[tok]}{dev}")
+        if val is None and code[:1].islower():
+            # A setting nobody has changed still has a value, in computer
+            # format as on the glass: the bench TLS-350 answers `i56000` with
+            # `0` out of a cold start, where this answered nothing at all.
+            val = self._default_stored(tok, dev)
+            if val is None:
+                # and one with no documented default holds what the display
+                # reads for it: `i50600` answers 1 for a warning 546 turned
+                # on, and `i62C01` answers `010`, tank 1 STANDARD
+                blank = self._blank_stored(tok, dev)
+                if blank is not None:
+                    val = (dev + blank if self.c.is_prefixed(tok)
+                           and dev != "00" else blank)
         if val is None and not (code[0].isupper()
                                 and (self.display_value(tok, dev)
                                      or self._has_parts(tok))):
@@ -4382,6 +5794,13 @@ class Handler:
                 # the twenty-four that carries a device. See FIDELITY N6a.
                 if "%d" in line:
                     line = line.replace("%d", str(int(dev or "1") or 1))
+                if (field or {}).get("kind") == "time":
+                    # right-aligned in eight, which is what DISABLED is:
+                    # `SHIFT TIME 1 :  6:00 AM` and `SHIFT TIME 3 : 10:00 PM`
+                    # against this console's unpadded ` 6:00 AM`. The bench
+                    # TLS-350 with three shifts programmed, 2026-09-19,
+                    # `transcripts/shifts2`.
+                    shown = f"{shown:>8}"
                 head = self._comm_board_head(tok, dev)
                 body = f"{line} {shown}"
                 return self._frame(code, head + SEP + body if head
@@ -4420,7 +5839,38 @@ class Handler:
                                      for part in block)
                 body = title + gap + str(shown) if title else str(shown)
                 return self._frame(code, body), "decoded for the display"
-        return self._frame(code, val), ""
+        return self._frame(code, self._packed(tok, dev, val)), ""
+
+    def _packed(self, tok, dev, val):
+        """A stored value as computer format carries it, where the bench
+        TLS-350 packs it otherwise than the store holds it (2026-09-18,
+        `cap_swept`): `packed_width` pads a code to that width -- 525's port
+        is `02`, 78A's sensor type `03`, 851's flag `00` -- and
+        `packed_float` sends a whole number as a float, 78F's 25 PSI as
+        41C80000. A device prefix stays in front."""
+        from .console import FIELDS
+        field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01") \
+            or FIELDS.get(f"S{tok}00")
+        if not field or val is None:
+            return val
+        prefixed = self.c.is_prefixed(tok) and dev != "00" and len(val) > 2
+        pfx, body = (val[:2], val[2:]) if prefixed else ("", val)
+        if field.get("packed_float"):
+            try:
+                body = packed.hexfloat(float(body))
+            except ValueError:
+                pass
+        elif field.get("packed_width"):
+            body = body.strip().rjust(field["packed_width"], "0")
+        elif field.get("packed_digits") and body.strip().isdigit():
+            # printed to a minimum width rather than the field's: 54A's 0
+            # days packs as `00` and 365 as `365` (the computer Set sweep)
+            body = f"{int(body):0{field['packed_digits']}d}"
+        # the exact floats in the system's units: `i60401` answers 757000.0
+        # in metric for 200000 gallons (`cap_metric`)
+        body = units.packed(tok, body, units.system(self.c),
+                            packed.unhexfloat, packed.hexfloat)
+        return pfx + body
 
     # `COMM BOARD  : 3 (FXMOD)` -- the two codes whose response opens with
     # the comm position it is about rather than with a title.
@@ -4471,7 +5921,83 @@ class Handler:
                 return True
         return False
 
+    def _dst_window(self):
+        """51B's two moments as MMWDHHmm, the stored ones or the documented
+        APR WEEK 1 SUN and OCT WEEK 6 SUN at 2:00 AM."""
+        out = []
+        for n, default in ((1, "04170200"), (2, "10670200")):
+            raw = (self.c.values.get(f"S51B{n:02d}") or "").strip()
+            out.append(raw[-8:] if len(raw) >= 8 and raw[-8:].isdigit()
+                       else default)
+        return out
+
+    def _dst_lines(self):
+        """I51B00 as the bench TLS-350 draws it once 51A is on (2026-09-18):
+        `START DATE    APR   WEEK 1   SUN   2:00 AM`, and the end the same."""
+        rows = ["", "DAYLIGHT SAVING TIME"]
+        for head, raw in zip(("START DATE", "END DATE"), self._dst_window()):
+            month = fieldio.MONTHS[int(raw[:2]) - 1]
+            day = fieldio.DAYS[int(raw[3]) - 1]
+            hour, minute = int(raw[4:6]), raw[6:8]
+            clock = f"{hour % 12 or 12}:{minute} {'PM' if hour >= 12 else 'AM'}"
+            rows += ["", f"{head:<14s}{month}   WEEK {raw[2]}   {day}   {clock}"]
+        return rows + [""]
+
+    def _mass_density_on(self):
+        """560, Mass/Density, switched on."""
+        return (self.c.values.get("S56000") or "0").strip()[-1:] == "1"
+
+    def _custom_alarms_on(self):
+        """5BD, custom alarms, switched on."""
+        return (self.c.values.get("S5BD00") or "").strip().endswith("1")
+
+    def _dst_on(self):
+        """51A, automatic daylight saving, switched on."""
+        return (self.c.values.get("S51A00") or "").strip().endswith("1")
+
+    def _dst_in_force(self):
+        """Is the console's clock inside the daylight saving window?
+
+        The window is 51B's documented one, APR WEEK 1 SUN to OCT WEEK 6 SUN
+        at 2:00 AM, week 6 being the month's last; a window programmed
+        through 51B is not modelled, and neither is the hour the clock
+        moves.
+        """
+        import calendar
+        from .console import FIELDS
+        now = self.c.now()
+
+        def moment(key):
+            month, _week, week, _day = FIELDS[key + ".date"]["default"].split()
+            m = fieldio.MONTHS.index(month) + 1
+            sundays = [d for d in range(1, calendar.monthrange(now.tm_year, m)[1] + 1)
+                       if calendar.weekday(now.tm_year, m, d) == 6]
+            day = sundays[-1] if int(week) > len(sundays) else sundays[int(week) - 1]
+            return (m, day, 2)
+        here = (now.tm_mon, now.tm_mday, now.tm_hour)
+        return moment("S51B01") <= here < moment("S51B02")
+
     def display_value(self, tok, dev):
+        """`_display_value_us`, in the console's system units: the console
+        stores U.S. units and converts on the way out (`units`)."""
+        shown = self._display_value_us(tok, dev)
+        quantity = units.QUANTITY.get(tok)
+        if quantity:
+            system = units.system(self.c)
+            exact = None
+            if system != units.US and dev.isdigit():
+                # the stored float, where there is one, not its digits
+                exact = self.c.limit(tok, int(dev))
+                if exact is None:
+                    held = self._default_stored(tok, dev) or ""
+                    try:
+                        exact = packed.unhexfloat(held[-8:])
+                    except (ValueError, TypeError):
+                        exact = None
+            shown = units.shown(quantity, shown, system, exact)
+        return shown
+
+    def _display_value_us(self, tok, dev):
         """One device's setting, as the DISPLAY side writes it.
 
         The two sides of the wire disagree about what a setting is and the
@@ -4483,6 +6009,8 @@ class Handler:
         from .console import FIELDS
         from .screens import shown as panel_shows
         key = f"S{tok}{dev}"
+        if tok in self.LEGACY_READ:
+            key = f"S{self.LEGACY_READ[tok]}{dev}"
         val = self.c.values.get(key)
         if val is None and tok in self.c.SHARED_STORE:
             # Two names for one value: 604 and 60A for a full volume, and the
@@ -4496,6 +6024,10 @@ class Handler:
         field = FIELDS.get(key) or FIELDS.get(f"S{tok}01")
         if field is None:
             return None
+        if val is None and (field.get("default_litres") is not None
+                            or tok == "628"):
+            # held in litres (see `_default_stored`), read in gallons
+            val = self._default_stored(tok, dev)
         if val is None:
             # Nothing is stored for a setting nobody has changed, and the
             # console is not blank there: the panel reads ENGLISH, U.S.,
@@ -4517,6 +6049,22 @@ class Handler:
             shown = self._unmasked_number(field, shown)
         else:
             shown = fieldio.decode(field, key, val, self.c)
+        if tok == "51A" and str(shown).strip() == "ENABLED":
+            # whether the shift is in force now: the bench TLS-350 answers
+            # `ENABLED OFF` on a January clock (2026-09-18)
+            return "ENABLED " + ("ON" if self._dst_in_force() else "OFF")
+        # A number some consoles print as a word. The bench TLS-350 answers
+        # I78500 with `NONE` for a line that has no tank, where this printed
+        # `0` -- `screen_words` had the panel's NONE and nothing gave the
+        # wire its own. Keyed by the number, so `00` and `0` are one value.
+        words = field.get("wire_words")
+        if words:
+            try:
+                word = words.get(str(int(float(str(shown).strip()))))
+            except (TypeError, ValueError):
+                word = None
+            if word is not None:
+                return word
         # A float decodes with "%g" so that one rule serves a thermal
         # coefficient and a full volume alike. Where the manual PRINTS the
         # display line it also prints the precision and the unit --
@@ -4652,6 +6200,15 @@ class Handler:
         console, same state, two surfaces. See FIDELITY S14.
         """
         from .screens import shown as panel_shows
+        if val is None and key[1:4] in ("605", "606") \
+                and (part.get("part") or [None])[0] == 0 and key[4:6].isdigit():
+            # a chart's first figure is the tank's full volume (see
+            # `_blank_stored`): the bench's I60500 prints 200000 there
+            full = (self.c.limit("604", int(key[4:6]))
+                    or self.c.limit("60A", int(key[4:6])))
+            if full:
+                return units.shown("volume", f"{full:.0f}",
+                                   units.system(self.c))
         if val is None:
             if part.get("wire_default") is not None:
                 return part["wire_default"]
@@ -4806,7 +6363,7 @@ class Handler:
     def _set_ticket(self, tok, dev, data, code):
         """7B5 and 7B6: edit or insert a ticket against a gauged delivery."""
         if not self.c.has("probe"):
-            return self._nine(code), "no probe module fitted"
+            return self._absent(code), "no probe module fitted"
         computer = code[0].islower()
         edit, stamp, rest = data[:2], data[2:12], data[12:]
         fault = self._ticket_fault(tok, dev, edit, stamp, rest, computer)
@@ -4969,9 +6526,33 @@ class Handler:
 
     # ---- write -------------------------------------------------------------
     def set_(self, tok, dev, data, code):
-        if tok in INQUIRE_ONLY:
+        if tok == "535":
+            return self._set_hangup(dev, code, data)
+        if tok in ("537", "538"):
+            # two raw characters, stored as `Console.etx_chars` keeps them,
+            # and answered with the port's table (2026-09-25). A port that
+            # is not one is unmeasured for a Set; it answers as its inquiry.
+            port = self.c.etx_port(dev)
+            if port is None:
+                return self._frame(code), "no such port"
+            self.c.values[f"S{tok}{port:02d}"] = self.c.etx_chars(data)
+            self.c.save()
+            return (self._etx_table(tok, port, code),
+                    "ETX characters " + ("cleared" if not self.c.values[
+                        f"S{tok}{port:02d}"] else "set"))
+        if tok == "55D":
+            return self._set_precision_print(code, data)
+        if tok == "7C3" and self.c.has("probe"):
+            return self._set_max_volume(dev, code, data)
+        if tok in INQUIRE_ONLY or tok in UNDOCUMENTED_BARE:
+            # an undocumented code was only ever asked, never set
             return (self._nine(code),
                     f"{tok} is an Inquire with no Set format")
+        if tok in SETTABLE and self._short_packed(tok, dev, data, code):
+            return self._frame(code), "short of its width: acked, nothing stored"
+        gated = self._bench_set_gate(tok, dev, code, data)
+        if gated is not None:
+            return gated
         # The list-shaped setup codes parse their own data, because its width
         # is decided by the data itself rather than by the field definition.
         # They are asked before the generic path, which would otherwise store
@@ -4993,11 +6574,16 @@ class Handler:
             # time/date, 04 not numeric, 09 invalid volume -- so the generic
             # shape check must not get there first. See FIDELITY S2.
             return self._set_ticket(tok, dev, data, code)
-        if tok in SETTABLE and not formats.valid(
-                tok, data,
+        shaped = self._as_read(tok, dev, data, code)
+        if (tok in SETTABLE and data and shaped is not None
+                and not self._label_code(tok) and not formats.valid(
+                tok, shaped,
                 aggregate=(dev == "00" and self.c.is_multi(tok)),
-                computer=code[0].islower()):
-            return (self._nine(code),
+                computer=code[0].islower())):
+            # Refused the way the bench refuses a value it cannot take --
+            # `S78901ABC` answers `???` -- not with 9999FF, which the manual
+            # keeps for a function code the console does not know.
+            return (self._refused(code, data, tok, dev),
                     f"REJECTED: does not fit {tok}'s data format")
         if tok in SERVICE_NOTICE or tok == "566":
             return self._service_notice_set(tok, code, data)
@@ -5010,7 +6596,7 @@ class Handler:
         if tok in ISD_BUFFERS:
             # "Set command clears buffer", and it confirms at the front too
             if not self._vp_full_control():
-                return (self._nine(code),
+                return (self._absent(code),
                         "needs PMC and full vapor processor control")
             if not data.startswith("149"):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
@@ -5022,12 +6608,12 @@ class Handler:
         if tok in ISD_CONTROL:
             if tok in ("VC0", "VC1", "VC8"):
                 if not self.c.licensed("pmc"):
-                    return self._nine(code), "needs the PMC software module"
+                    return self._absent(code), "needs the PMC software module"
                 if not (self.c.has("relay") or self.c.has("io")):
                     # "PMC Feature and Vapor Processor relay required"
                     return self._nine(code), "no vapor processor relay"
             elif not self.c.licensed("isd"):
-                return self._nine(code), "needs the ISD software module"
+                return self._absent(code), "needs the ISD software module"
             if not data.startswith("149"):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
             body = data[3:]
@@ -5148,7 +6734,7 @@ class Handler:
             if body.strip()[:2] != "01":
                 return self._nine(code), "REJECTED: wants 01"
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             rows = self.c.bir.close("shift")
             if code[0].isupper():
                 return (self._frame(code, SEP.join(
@@ -5161,7 +6747,7 @@ class Handler:
             return self._nine(code), "REJECTED: inquire only"
         if tok in ("V42", "V43", "V49"):
             if not self.c.licensed("isd"):
-                return self._nine(code), "needs the ISD software module"
+                return self._absent(code), "needs the ISD software module"
             if tok in ("V42", "V43") and not data.startswith("149"):
                 # both confirm at the FRONT, the way V44 does
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
@@ -5201,7 +6787,7 @@ class Handler:
             if not self._isd_licensed(tok):
                 spec = isd.SETUP[tok]
                 want = " and ".join(k.upper() for k in spec["needs"])
-                return self._nine(code), f"needs the {want} software module"
+                return self._absent(code), f"needs the {want} software module"
             stored = self._isd_store(tok, data)
             if stored is None:
                 return self._nine(code), "REJECTED: value out of range"
@@ -5245,7 +6831,7 @@ class Handler:
         if tok == "891":
             # Set AccuChart Calibration Restart, one tank only
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             if dev == "00":
                 return (self._nine(code),
                         "REJECTED: command valid for single tank only")
@@ -5266,7 +6852,7 @@ class Handler:
         if tok in ("089", "090"):
             kind = "plld" if tok == "089" else "wplld"
             if not self.c.has(kind):
-                return self._nine(code), f"no {kind} module fitted"
+                return self._absent(code), f"no {kind} module fitted"
             if "149" not in (data or ""):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
             for number in self._devices_of(kind, dev):
@@ -5283,7 +6869,7 @@ class Handler:
         if tok in ("087", "088"):
             kind = "plld" if tok == "087" else "wplld"
             if not self.c.has(kind):
-                return self._nine(code), f"no {kind} module fitted"
+                return self._absent(code), f"no {kind} module fitted"
             body = (data or "")
             if not body.startswith("149"):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
@@ -5313,7 +6899,7 @@ class Handler:
             what, table, banner = controls.DEVICE_ACTIONS[tok]
             module = "plld" if what.startswith("profile") else "smart"
             if not self.c.has(module):
-                return self._nine(code), f"no {module} module fitted"
+                return self._absent(code), f"no {module} module fitted"
             if "149" not in (data or ""):
                 return self._nine(code), "REJECTED: wants the 149 confirmation"
             # a sump test runs on the Mag sensors, not on every position
@@ -5340,7 +6926,7 @@ class Handler:
         if tok == "091":
             # Close Current Shift
             if not self.c.licensed("bir"):
-                return self._nine(code), "BIR not installed"
+                return self._absent(code), "BIR not installed"
             rows = self.c.bir.close("shift")
             return self._frame(code), f"{len(rows)} tank(s) closed"
         if tok == "054":
@@ -5352,13 +6938,13 @@ class Handler:
         if tok == "051":
             # Clear In-Tank Delivery Reports
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             n = self.c.deliveries.clear(None if dev == "00" else int(dev))
             return self._frame(code), f"{n} delivery report(s) erased"
         if tok in ("052", "053"):
             # Start / Stop In-Tank Leak Detect Test, which a tool can do too
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             devices = ([int(dev)] if dev != "00"
                        else sorted(self.c.tank_level))
             for tank in devices:
@@ -5377,7 +6963,7 @@ class Handler:
             # the response is that line's test status either way.
             kind = "plld" if tok in ("081", "082") else "wplld"
             if not self.c.has(kind):
-                return self._nine(code), f"no {kind} module fitted"
+                return self._absent(code), f"no {kind} module fitted"
             lines = self._devices_of(kind, dev)
             for number in lines:
                 if tok in ("081", "083"):
@@ -5405,7 +6991,7 @@ class Handler:
             # is kept the way it arrived, which is what the console reports
             # back on an inquiry. See FIDELITY O13.
             if not self.c.has("probe"):
-                return self._nine(code), "no probe module fitted"
+                return self._absent(code), "no probe module fitted"
             which, rest = (data or "")[:1], (data or "")[1:]
             if which not in ("0", "1"):
                 return self._nine(code), "REJECTED: delivery type is 0 or 1"
@@ -5422,10 +7008,44 @@ class Handler:
             # just acks with the date/time and leaves the value alone.
             return self._frame(code), "empty data: acked, nothing stored"
         if not self._module_present(tok):
-            return self._nine(code), "REJECTED: no module fitted"
+            # The bench TLS-350 answers `S7A1011` -- a WPLLD line switched on
+            # in a console with no WPLLD card -- with the bare echo, and
+            # stores nothing.
+            return self._frame(code), "no module fitted: acked, nothing stored"
+        fixed = self.SET_DEVICES.get(tok)
+        if fixed and dev.isdigit() and int(dev) > fixed:
+            # A device the code has no such number for: the bench refuses
+            # `S50399X` -- header line 99 of four -- with one `?`.
+            return (self._refused(code, data, tok, dev),
+                    f"REJECTED: {tok} has devices 1 to {fixed}")
+        family = self._set_family(tok)
+        if family and dev.isdigit() and int(dev) > self.c.capacity(family):
+            # A device past the positions the cage gives the family: the
+            # bench answers `S60217X` -- tank 17 on a four-probe card -- with
+            # the bare echo, and stores nothing.
+            return self._frame(code), "no such position: acked, nothing stored"
+        if (family and dev == "00" and code[:1].isupper()
+                and self.c.is_prefixed(tok)):
+            # Device 00 on a one-value-per-device Set is EVERY position: the
+            # bench answers `S60200ALL` by labelling all four tanks ALL and
+            # listing the four of them.
+            stored = 0
+            for n in range(1, self.c.capacity(family) + 1):
+                one = self._canonical(tok, f"{n:02d}", data, code)
+                if one is None:
+                    return (self._refused(code, data, tok, dev),
+                            "REJECTED: value out of range")
+                self.c.values[f"S{tok}{n:02d}"] = self._with_prefix(
+                    tok, f"{n:02d}", one)
+                stored += 1
+            self.c.save()
+            return self._answered(tok, dev, code), f"stored on {stored}"
         value = self._canonical(tok, dev, data, code)
+        if value is self.BARE:
+            return self._frame(code), "short of its width: acked, nothing stored"
         if value is None:
-            return self._nine(code), "REJECTED: value out of range"
+            return (self._refused(code, data, tok, dev),
+                    "REJECTED: value out of range")
         # An older name writes the store its newer one owns, or the console
         # answers the report it has just been programmed through with the
         # value it had before. 505's language is one digit and 517's is two
@@ -5434,16 +7054,124 @@ class Handler:
         if tok in self.GROUP_ALIAS:
             tok = self.GROUP_ALIAS[tok]
             value = value[:1] + value[1:].rjust(2, "0")
-        self.c.values[f"S{tok}{dev}"] = self._with_prefix(tok, dev, value)
+        if tok in self.LEGACY_TWINS:
+            for twin in self.LEGACY_TWINS[tok]:
+                self.c.values[f"S{twin}{dev}"] = value
+            self.c.values.pop(f"S{tok}{dev}", None)
+            self.c.save()
+            return self._answered(tok, dev, code), "stored on its twins"
+        # One value under two names, written through either: on the bench
+        # TLS-350 `S60A01123456` made I604 answer 123456 where 604 had been
+        # set to 999999 (2026-09-18). So a Set lands where the value already
+        # is -- the twin's key, if only it is held -- or the twin set earlier
+        # would go on shadowing it; and a dump restored through both names
+        # comes back to the one key it started as.
+        stamp_before = self.c.clock_stamp() if tok == "50F" else None
+        keys = [f"S{tok}{dev}"]
+        twin = self.c.SHARED_STORE.get(tok)
+        if twin and f"S{twin}{dev}" in self.c.values:
+            keys = ([f"S{twin}{dev}"] if keys[0] not in self.c.values
+                    else keys + [f"S{twin}{dev}"])
+        for key in keys:
+            self.c.values[key] = self._with_prefix(tok, dev, value)
+        if tok == "609" and dev.isdigit() and int(dev):
+            # A coefficient set by hand is no longer the density's: on the
+            # bench TLS-350 `S609010.00090` turned tank 1's entered density
+            # from 99.9999 to 0.0000 (2026-09-18). A tank with none held
+            # already reads 0.0000, so nothing is written for it. And only
+            # while Mass/Density is on: with it off, `S609030.00000` left
+            # tank 3's 0.8500 where it was, and with it on `S609030.00046`
+            # zeroed it (2026-09-19, `transcripts/sdw9`).
+            if (self.c.values.get(f"S61E{dev}") is not None
+                    and self._mass_density_on()):
+                self.c.values[f"S61E{dev}"] = dev + packed.hexfloat(0.0)
+        if tok == "788" and dev.isdigit() and int(dev):
+            # A pipe type clears the settings it has no use for: after Q1
+            # went from USER DEFINED to fiberglass and on to Petrotechnik,
+            # i777 to i77A answered nothing for it and its second length
+            # 0 (the computer Set sweep, 2026-09-18). 77B and 77E kept theirs.
+            n = int(dev)
+            for other, keep in wiretables.ROW_FILTER.items():
+                if other in self.UNGATED_PACKED or keep(self.c, n):
+                    continue
+                if other == "77F":
+                    if self.c.values.get(f"S77F{dev}") is not None:
+                        self.c.values[f"S77F{dev}"] = self._with_prefix(
+                            "77F", dev, packed.hexfloat(0.0))
+                else:
+                    self.c.values.pop(f"S{other}{dev}", None)
+        if tok in ("604", "60A", "63C") and dev.isdigit() and int(dev):
+            # Setting a full volume sets the profile it belongs to. On the
+            # bench TLS-350 `S60A010` turned tank 1's I60A row from 1 PT to
+            # LINEAR, and `S60401200000` turned it back (2026-09-18); after
+            # `s63C01` tank 1 read 50 PTS (2026-09-19, `cap_tank1on`).
+            self.c.tank_profiles[int(dev)] = {"60A": "03", "604": "00",
+                                              "63C": "04"}[tok]
+            # And the three are ONE full volume. On the bench TLS-350
+            # (2026-09-19, `transcripts/reset63c.log`) `S63C015000` made
+            # I604 and I60A read 5000; `S60A01047000` made I604 read 47000
+            # and I63C read 0; `S6040110000` made I63C read 0 again. So
+            # 604 and 60A always read it, and 63C only while the tank is
+            # on the fifty point profile -- which is why the Set sweep
+            # found 63C at 0 after its last `S63C01999999`: a later
+            # `S60401999999` had moved the tank off it.
+            #
+            # 604 and 60A are already one store (`SHARED_STORE`), so a 63C
+            # Set writes that store as well -- 604's key, or 60A's where
+            # only it is held -- and a 604 or 60A Set zeroes a 63C that is
+            # held. Keys that are not held are not made: a dump restored
+            # through all three names comes back to the keys it started as.
+            if tok == "63C":
+                shared = (f"S60A{dev}" if f"S60A{dev}" in self.c.values
+                          and f"S604{dev}" not in self.c.values
+                          else f"S604{dev}")
+                self.c.values[shared] = self._with_prefix(
+                    shared[1:4], dev, value)
+            elif f"S63C{dev}" in self.c.values:
+                self.c.values[f"S63C{dev}"] = self._with_prefix(
+                    "63C", dev, packed.hexfloat(0.0))
+        if tok == "61E":
+            # the tank's thermal coefficient follows its entered density
+            for tank in ([int(dev)] if dev != "00"
+                         else range(1, self.c.capacity("probe") + 1)):
+                if dev == "00":
+                    self.c.values[f"S61E{tank:02d}"] = self._with_prefix(
+                        tok, f"{tank:02d}", value)
+                self.c.density_entered(tank)
         if tok == "501":
             # Set Time of Day sets the CLOCK, not just the stored string.
             # The panel path already did (ui calls set_clock after ENTER);
             # this path stored the digits and left the clock alone, so a
             # tool that set the time was answered politely and ignored.
+            #
+            # The reply is the bench TLS-350's (2026-09-19, `transcripts/
+            # clockset` to `clockset4`): the echo, the clock as it WAS, and
+            # the ten digits the console took, `S50100 / FEB 28, 2006  1:01
+            # AM / 0601192359`. Packed, the same three in one frame. It had
+            # been a bare echo stamped with the new time. A value that is
+            # not a date and time is a `?` per character, where this sent
+            # 9999FF, and leaves the stored digits alone.
+            # and the device number is ignored: the bench took
+            # `S501010601190035` and set the clock from it, answering with
+            # its own `S50101` echo. The value belongs under the console's
+            # one key, or the clock would be read from a position nothing
+            # else looks at.
+            if dev != "00":
+                moved = self.c.values.pop(f"S501{dev}", None)
+                if moved is not None:
+                    self.c.values["S50100"] = moved
+            digits = (self.c.values.get("S50100") or "")[:10]
+            reply = self._clock_reply(code, digits)
             if not self.c.set_clock():
-                return self._nine(code), "REJECTED: not a date and time"
+                # the refused digits are already in the store, and the clock
+                # they would be read from on the next cold boot is the one
+                # still running: put that back
+                self.c.values["S50100"] = time.strftime("%y%m%d%H%M",
+                                                        self.c.now())
+                return (self._refused(code, data, tok, dev),
+                        "REJECTED: not a date and time")
             self.c.save()
-            return self._frame(code), "clock set"
+            return reply, "clock set"
         if tok == "683":
             # 683 is `D` then the volume, and D picks one day of the week:
             # 0 all days, 1 Sunday .. 7 Saturday (576013-635 Rev AA p.330).
@@ -5459,7 +7187,73 @@ class Handler:
                     self.c.set_setting(f"avg_sales_{one}", rest,
                                        int(dev) if dev != "00" else 1)
         self.c.save()
-        return self._frame(code), "stored"
+        out = self._answered(tok, dev, code)
+        if tok == "50F" and stamp_before and code[:1].isupper():
+            # a new DATE/TIME FORMAT is answered under the stamp of the old:
+            # `S50F0002` came back `JAN 16, 2006  8:29 PM` over the 02 it
+            # had just set, and the next reply `JAN 16, 2006 20:29`
+            out = out.replace(self.c.clock_stamp().encode("latin-1"),
+                              stamp_before.encode("latin-1"), 1)
+        return out, "stored"
+
+    def _as_read(self, tok, dev, data, code):
+        """A display Set's data as far as the console reads it, for the
+        shape check: cut to a `wire_cut`, or None -- no check at all -- for
+        a word on a field that `ignores_text`, which `_canonical` answers
+        with the value it had rather than refusing."""
+        from .console import FIELDS
+        field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+        if not code[:1].isupper():
+            # a word on a packed whole number that keeps its value -- 785's
+            # `s78501ABC` was taken -- is not shape-checked either
+            if (field and field.get("ignores_text")
+                    and field.get("kind") == "int"
+                    and not data.lstrip("-").isdigit()):
+                return None
+            return data
+        if not field or field.get("part"):
+            return data
+        if field.get("ignores_text"):
+            try:
+                float(data.strip())
+            except ValueError:
+                return None
+        if wire_cut(field):
+            return data[:wire_cut(field)]
+        return data
+
+    def _packed_input_width(self, field):
+        """How much data a computer-format Set of this field carries: the
+        store's width, or a float's eight -- 78F's whole psi arrives packed.
+        Not `packed_width`, which is the REPLY's: 78A takes `s78A011` and
+        answers `0103`."""
+        if field.get("packed_float"):
+            return 8
+        return self.WIDTHS.get(field.get("kind"), lambda f: None)(field)
+
+    def _short_packed(self, tok, dev, data, code):
+        """A computer-format Set whose data is short of its field's width,
+        which the bench TLS-350 answers with the bare echo rather than a
+        refusal: `s60401ABC`, `s54A00-1` and `s525011` alike (the computer
+        Set sweep, 2026-09-18). Asked before the shape check, which would
+        refuse them."""
+        from .console import FIELDS
+        if not code[:1].islower() or not data:
+            return False
+        field = FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01") \
+            or FIELDS.get(f"S{tok}00")
+        if not field or field.get("part"):
+            return False
+        width = self._packed_input_width(field)
+        return bool(width) and len(self._without_prefix(tok, dev, data)) < width
+
+    def _label_code(self, tok):
+        """A code whose data is a free label, which `_canonical` cuts to width
+        rather than the shape check refusing a long one."""
+        from .console import FIELDS
+        field = FIELDS.get(f"S{tok}01") or FIELDS.get(f"S{tok}00")
+        return bool(field and not field.get("part")
+                    and field.get("kind") == "text")
 
     def _with_prefix(self, tok, dev, data):
         """Store a per-device value the way the console reads one back.
@@ -5495,7 +7289,9 @@ class Handler:
     # value. None means "cannot tell", and then nothing is stripped.
     WIDTHS = {"float": lambda f: 8, "text": lambda f: f.get("maxlen"),
               "int": lambda f: f.get("width"), "digits": lambda f: f.get("width"),
-              "flag": lambda f: 1}
+              "flag": lambda f: 1,
+              "enum": lambda f: (len(f["choices"][0][0])
+                                 if f.get("choices") else None)}
 
     def _without_prefix(self, tok, dev, data):
         """`data` with a device prefix taken off it, if it has one.
@@ -5540,6 +7336,30 @@ class Handler:
         field = FIELDS.get(f"S{tok}" + (dev if dev != "00" else "00"))
         if field is None and dev != "01":
             field = FIELDS.get(f"S{tok}01")
+        if (field and field.get("kind") == "slots" and dev != "00"
+                and data.strip() not in ("0", "1")):
+            # One device's configuration flag is `f`, 1=On 0=Off, and the
+            # bench TLS-350 refuses `S781012` and `S781019` with a `?`.
+            return None
+        if field and not field.get("part") and field.get("kind") == "text":
+            # A label, in either format: cut to its width, 80 to FF stored
+            # as `A`, 7F refused -- the bench TLS-350's rule, `fieldio`'s
+            # text branch. The device prefix a dump-and-restore carries comes
+            # off first and goes back on after, the way `_with_prefix` would.
+            pfx = ""
+            if (dev != "00" and self.c.is_prefixed(tok)
+                    and self._without_prefix(tok, dev, data) != data):
+                pfx, data = data[:2], data[2:]
+            try:
+                cut = fieldio.encode_value(field, data, self.c.metric(),
+                                           self.c, code=f"S{tok}{dev}")
+            except ValueError:
+                return None
+            # Padded to the field's width, which is how the console holds it:
+            # `i78201` on the bench answers `01RUAL` and sixteen blanks. A
+            # label never set is still no value at all, so a header set to
+            # twenty blanks and one never set stay two different things.
+            return pfx + cut
         if not code[:1].isupper():
             # Computer format is already packed -- but a date is six digits
             # in both forms, and this returned before looking: `s75C01AB0101`
@@ -5561,8 +7381,100 @@ class Handler:
             # to disk and outlived the restart.
             if (field and not field.get("part")
                     and field.get("kind") in ("float", "int")
+                    and not (field.get("kind") == "int"
+                             and field.get("ignores_text"))
                     and text and not _finite_packed(text)):
                 return None
+            if field and not field.get("part"):
+                # The bench TLS-350 reads a computer-format field to its own
+                # width and no further -- `s7890143480000FF` stored 200 feet
+                # and answered `0143480000` -- and holds it to the same
+                # range as the display form: `s7890100000000` (0 feet) and
+                # `s7890144160000` (600) were refused with eight `?`, and
+                # `s78801ZZ` with two. 2026-09-18.
+                width = self._packed_input_width(field)
+                # a dump-and-restore carries the device prefix the inquiry
+                # gave it; that comes off before the field is cut to width
+                data = self._without_prefix(tok, dev, data)
+                if width and len(data) > width:
+                    data = data[:width]
+                if width and len(data) < width:
+                    return self.BARE
+                kind = field.get("kind")
+                if field.get("packed_float"):
+                    kind = "float"
+                try:
+                    if kind == "int":
+                        # held to its range, which the display form is too:
+                        # `s5070031` and `s51900745` refused
+                        if field.get("ignores_text") and not data.lstrip(
+                                "-").isdigit():
+                            held = self.c.values.get(f"S{tok}{dev}") \
+                                or self._default_stored(tok, dev)
+                            if held is None:
+                                # nothing set: it keeps what it reads, NONE
+                                return self._blank_stored(tok, dev)
+                            return self._without_prefix(tok, dev, held)
+                        fieldio.encode_value(field, str(int(data)),
+                                             self.c.metric(), self.c,
+                                             code=f"S{tok}{dev}")
+                        top = self.SET_MAX_FROM.get(tok)
+                        if top and int(data) > self.c.capacity(top):
+                            return None
+                    elif kind == "float":
+                        value = packed.unhexfloat(data[:8])
+                        quantity = units.QUANTITY.get(tok)
+                        system = units.system(self.c)
+                        if quantity and system != units.US:
+                            # a packed value in the system's units is stored
+                            # in U.S.: `s62101` 4000.0 in metric read 1057
+                            # gallons back in U.S. (`units`)
+                            value = units.into(quantity, value, system)
+                            data = packed.hexfloat(value) + data[8:]
+                        if tok == "628" and value <= 0 and dev.isdigit() \
+                                and int(dev):
+                            # 0 or less is the full volume as it stands, as
+                            # the display Set's is: `s62801BF800000`
+                            value = (self.c.limit("604", int(dev))
+                                     or self.c.limit("60A", int(dev)) or 0.0)
+                            data = packed.hexfloat(value)
+                        clamp = field.get("packed_clamp")
+                        if clamp is not None and value > clamp:
+                            # a packed volume past six digits is taken and
+                            # held at 999999 -- `s6040149742400` read back
+                            # 497423F0 -- where the display's six digits
+                            # cannot carry it
+                            value = float(clamp)
+                            data = packed.hexfloat(value)
+                        # a packed floor below the display's: `s60401BF800000`
+                        # (-1.0) was taken where `S60401-1` is refused
+                        floor = field.get("packed_floor")
+                        check = value
+                        if floor is not None and floor <= value < 0:
+                            check = 0.0
+                        fieldio.encode_value(field, str(int(check))
+                                             if field.get("kind") == "int"
+                                             else repr(check),
+                                             self.c.metric(), self.c,
+                                             code=f"S{tok}{dev}")
+                    elif kind == "enum":
+                        # a choice may carry a third element, a variant it
+                        # belongs to -- 62F's 4.0 IN. PS is `ethanol`
+                        codes = [ch[0] for ch in field.get("choices", [])]
+                        if codes and data not in codes:
+                            return None
+                    elif kind == "flag" and data not in ("0", "1"):
+                        if field.get("any_digit") and data.isdigit():
+                            return "0" if data == "0" else "1"
+                        return None
+                except ValueError:
+                    return None
+                if field.get("packed_float"):
+                    # the store keeps 78F's whole psi; the wire packs it
+                    try:
+                        return str(int(packed.unhexfloat(data)))
+                    except (ValueError, TypeError):
+                        return None
             return data
         if not field or field.get("part") or field.get("kind") not in (
                 "float", "int", "flag", "time", "date", "digits", "enum"):
@@ -5592,10 +7504,60 @@ class Handler:
         if prefixed and dev != "00" and text.startswith(dev) and len(text) > 2:
             if width is None or len(text) == width + 2:
                 pfx, text = text[:2], text[2:]
+        cut = wire_cut(field)
+        if cut:
+            # The bench TLS-350 reads a display-format value to a width of
+            # its own and drops the rest: `S60801+099.99` stored 99.90,
+            # `S50E00+120.1` 120.0 and `S52E01100` 10. 2026-09-18.
+            text = text[:cut]
         try:
-            return pfx + fieldio.encode_value(field, text,
-                                              self.c.metric(), self.c,
-                                              code=f"S{tok}{dev}")
+            number = float(text)
+        except ValueError:
+            number = None
+        if (tok == "628" and number is not None and number <= 0
+                and dev.isdigit() and int(dev)):
+            # A maximum volume of 0 or less is the tank's full volume as it
+            # stands: on the bench TLS-350 `S628010` stored 123456 with the
+            # full volume at 123456, and kept it when 604 then moved to
+            # 200000 (2026-09-18).
+            full = (self.c.limit("604", int(dev))
+                    or self.c.limit("60A", int(dev)) or 0)
+            text = str(int(full))
+        if number is None and field.get("ignores_text"):
+            # Answered with the report and the value as it was, not refused:
+            # `S77501ABC`, where `S77D01ABC` is. The bench TLS-350, 2026-09-18.
+            held = self.c.values.get(f"S{tok}{dev}")
+            if held is None:
+                held = self._default_stored(tok, dev)
+            return (None if held is None
+                    else self._without_prefix(tok, dev, held))
+        if number is not None and field.get("whole"):
+            # `S6260149.5` stored 49: the whole part, not the nearest
+            text = str(int(number))
+        quantity = units.QUANTITY.get(tok)
+        system = units.system(self.c)
+        converted = False
+        if (quantity and system != units.US and number is not None
+                and not (tok == "628" and number <= 0)):
+            # entered in the system's units, stored and ranged in U.S.:
+            # `S621013785` in metric stored 1000 gallons, and 336 m was
+            # refused for a line whose longest is 1101 feet (`units`)
+            us = units.into(quantity, number, system)
+            text = (str(int(us)) if field.get("kind") == "int"
+                    else repr(us))
+            converted = True
+        top = self.SET_MAX_FROM.get(tok)
+        if top and text.lstrip("-").isdigit() and int(text) > self.c.capacity(top):
+            # a line's tank past the tanks the probe card can have: the
+            # bench refuses `S7850108` on a four-probe card with `??`
+            return None
+        try:
+            # a value converted to U.S. above is ranged in U.S. -- not by the
+            # field's metric limits a second time: `S50E00+048.8` in metric
+            # is 118.4 F, taken, not 48 against a metric ceiling of 49
+            return pfx + fieldio.encode_value(
+                field, text, self.c.metric() and not converted, self.c,
+                code=f"S{tok}{dev}")
         except ValueError:
             return None
 
@@ -5639,8 +7601,21 @@ class Handler:
             return c.has("pump")
         if 0x774 <= fn <= 0x78F:
             return c.has("plld")
-        if 0x790 <= fn <= 0x79F or 0x7B1 <= fn <= 0x7B6:
-            return c.licensed("bir")
+        if 0x790 <= fn <= 0x79F or 0x7B0 <= fn <= 0x7B6:
+            # Reconciliation setup and the meter map answer with no BIR key:
+            # the bench TLS-350 (2026-09-18, S-Module 330160-012, no BIR)
+            # answers 795, 796, 79E, 79F, 7B0, 7B1 and 7B3 with their
+            # reports. This gated them on the key and answered 9999.
+            return True
+        if fn in (0x7BC, 0x7BD, 0x7BE):
+            # the line families' "Disable Alarm Assignments II", each its own
+            # family's card although the band calls it I/O setup
+            return c.has({0x7BC: "vlld", 0x7BD: "plld", 0x7BE: "wplld"}[fn])
+        if fn == 0x7C3:
+            # TANK MAXIMUM VOLUME LIMIT, undocumented and a tank setting
+            # though it sits in the I/O band; the bench answers it with a
+            # row per tank position. `blankrows.TABLES`.
+            return c.has("probe")
         if 0x7A0 <= fn <= 0x7AF:
             return c.has("wplld")
         if 0x7C4 <= fn <= 0x7C9:
@@ -5761,6 +7736,21 @@ def printable_body(text):
     return text.translate(_UNPRINTABLE)
 
 
+def wire_cut(field):
+    """How many characters of a display-format value the console reads, or
+    None for all of them.
+
+    The bench TLS-350 (2026-09-18) reads a whole number to its width and
+    drops the rest -- `S52E01100` stored 10 and `S50700015` 1 -- and a few
+    signed decimals to a width of their own, `wire_cut`: `S60801+099.99`
+    stored 99.90, and `S50E00+120.1` 120.0.
+    """
+    if field.get("wire_cut"):
+        return field["wire_cut"]
+    if field.get("kind") == "int" and field.get("width"):
+        return field["width"]
+    return None
+
 
 def _finite_packed(text):
     """Is this a number the console could actually hold?
@@ -5781,7 +7771,7 @@ def _finite_packed(text):
 
 
 def serve(console, host, port, verbose=True, log=None, on_socket=None,
-          on_conn=None, policy=None, gate=None, capture=None):
+          on_conn=None, policy=None, gate=None, capture=None, running=None):
     """Answer the console's serial protocol on a TCP port.
 
     `on_socket` is handed the listening socket once it is up. The card's
@@ -5813,10 +7803,19 @@ def serve(console, host, port, verbose=True, log=None, on_socket=None,
         print(f"[sim] TLS-350 listening on {host}:{port}")
     handler = Handler(console, verbose, log)
     while True:
-        try:
-            conn, addr = srv.accept()
-        except OSError:
+        # Not `srv.accept()` directly: a thread already blocked in one is
+        # not woken by another thread closing the socket, so a stopped
+        # tunnel went on answering the next caller. `listen.accept` waits
+        # with a timeout, re-asks `running` each time round, and refuses a
+        # connection that arrived in the gap. FIDELITY R30.
+        got = listen.accept(srv, running)
+        if got is None:
+            try:
+                srv.close()
+            except OSError:
+                pass
             return
+        conn, addr = got
         if log:
             log(f"-- connection from {addr[0]}")
         if on_conn:
@@ -5828,7 +7827,41 @@ def serve(console, host, port, verbose=True, log=None, on_socket=None,
                          daemon=True).start()
 
 
-TERMINATORS = (13, 10, 3)      # carriage return, line feed, ETX
+# carriage return and ETX. A line feed is a character like any other: the
+# bench TLS-350 took `I61F00<LF>` as a delivery type and refused it,
+# `I61F<LF>00` as an unknown code, and `S60204SUPER<LF>` waited for its CR
+# and refused six
+# characters (2026-09-25, `bench-2026-09-25/lf.jsonl`, `lfset.jsonl`). This
+# ended a command at a line feed. FIDELITY S38.
+TERMINATORS = (13, 3)
+
+# Inquiries the console does not answer at their sixth character: it waits
+# for a data field and its terminator, and a lone CR gets the answer. The
+# bench TLS-350 (2026-09-22, `bench-2026-09-22/waitcr*.jsonl`) was silent for
+# every one of these sent bare, at device 00 and 01 alike, and answered when
+# a CR followed -- with the frame alone, but for the two named in
+# `Handler.WAITED_REPLY`. The census never sent a CR, so none of them was on
+# any capture, and `i7B100` was filed as the one code that answers nothing
+# (FIDELITY S36): it was waiting. 7B1's display form and C09's packed one
+# answer at once.
+WAITING_INQUIRIES = frozenset({
+    "2E2", "61F", "79B", "79C", "7B5", "7B6", "A56", "C01", "C02", "C03",
+    "C04", "C07", "C08", "C09", "C10", "C11", "C12", "C20", "C21", "C22",
+    "C24", "C25", "C30", "E20", "V02", "V03", "V04", "V05", "V06", "V07",
+    "V08", "V09", "V0A", "V0B", "V43", "V83"})
+WAITING_DISPLAY = WAITING_INQUIRIES
+WAITING_PACKED = (WAITING_INQUIRIES - {"C09"}) | {"7B1"}
+
+
+def _waits(body):
+    """Does this inquiry wait for a terminator before it is answered?
+
+    Not with a control byte in its code: `I61F<LF>00` was answered 9999FF at
+    its sixth character, an unknown code (2026-09-25, `lf.jsonl`)."""
+    if not body[1:6].isalnum():
+        return False
+    tok = body[1:4].upper().decode("latin-1")
+    return tok in (WAITING_DISPLAY if body[:1] == b"I" else WAITING_PACKED)
 
 # The most a session holds of a command it has not finished. The longest a
 # tool sends is a fourteen-pair tank chart -- SOH, the six-digit security
@@ -5844,6 +7877,126 @@ LONGEST_COMMAND = 1024
 LONGEST_SUBNEGOTIATION = 256
 
 
+#: a data field whose width the console knows before it reads it. `enum`,
+#: `int` and `digits` carry their own; these are the rest.
+FIXED_KINDS = {"flag": 1, "date": 6, "time": 4, "slots": 1}
+#: and the kinds a field made of PARTS can be made of, where the whole is as
+#: wide as its last part ends: 501's date and time, 517's units and language
+PARTED_KINDS = ("date", "time", "enum", "int", "digits", "flag")
+#: Codes with no `FIELDS` row of their own, as (display, packed) characters.
+#: All of them were answered bare by the bench TLS-350, so all of them have a
+#: width: `S08701 14901` (the 149 confirmation and a test type), `S55D001`,
+#: `S7C301200` and `s7C30143040000` (2026-09-18/19).
+EXTRA_SET_WIDTHS = {"087": (5, 5), "088": (5, 5), "55D": (1, 1),
+                    "7C3": (6, 8),
+                    # two raw characters, answered at the second in either
+                    # format (2026-09-25, `bench-2026-09-25/etxset.jsonl`)
+                    "537": (2, 2), "538": (2, 2)}
+#: and the auto dial payloads, whose first digit says how long the rest is
+DIAL_SIZED = {"52B": ("wirelists", "DIAL_WIDTH"),
+              "75A": ("wirelists", "DIAL_WIDTH"),
+              # 52B's successor, whose sixth method carries one character
+              # where 52B has none: the manual's own widths, not measured --
+              # the bench answered `S52B01` bare and 520 was never sent one
+              "520": ("formats", "DIAL2_WIDTH")}
+_SET_WIDTHS = {}
+
+
+def _dial_width(tok, data):
+    """`S52B01 1000000EE00`: a method digit and a field it sizes."""
+    from importlib import import_module
+    where, name = DIAL_SIZED[tok]
+    table = getattr(import_module("." + where, __package__), name, {})
+    size = table.get((data or "")[:1])
+    return 1 + size if size else 0
+
+
+def _set_width(tok, dev, packed=False):
+    """How many characters of a Set's data field the console reads before it
+    acts, or 0 when it waits for a terminator.
+
+    The bench TLS-350 answers a Set the moment its field is full and sends
+    nothing at all while it is short: `S50100060119005`, nine of the clock's
+    ten digits, sat unanswered until a CR arrived, and then was refused
+    (2026-09-19, `transcripts/framewidth.log`). Every whole-field Set in
+    every experiment was answered with no terminator at all -- `S781021`,
+    `S601021`, `S783012`, `S55D001`, `S50100` with its ten. A field whose
+    width is not fixed waits instead: the station header took `1234` and a
+    CR, and stored it.
+
+    Only the kinds whose width is known are early: a label, a decimal and a
+    list wait, which is what the header showed and what keeps a value the
+    console would have read whole from being cut in half here.
+
+    The computer format reads ITS own widths, which are not the display's:
+    `s6070142C00000` -- a tank diameter as eight hex digits -- was answered
+    bare where seven got nothing, and `s50301` took twenty characters of
+    label the same way (2026-09-19, `transcripts/packedwidth`,
+    `packedtext`). Display 607 reads six characters, so one table for both
+    would have cut a packed float in half and refused it.
+    """
+    key = (tok, dev, packed)
+    if key in _SET_WIDTHS:
+        return _SET_WIDTHS[key]
+    from .console import FIELDS
+    width = 0
+    if tok in EXTRA_SET_WIDTHS:
+        width = EXTRA_SET_WIDTHS[tok][1 if packed else 0]
+        _SET_WIDTHS[key] = width
+        return width
+    parts = []
+    for where in (dev, "01", "00"):
+        parts = [f for f in FIELDS.values()
+                 if f.get("code") == f"S{tok}{where}" and f.get("part")]
+        if parts:
+            break
+    if parts and all(p.get("kind") in PARTED_KINDS for p in parts):
+        # both formats send 501's ten digits and 517's three
+        width = max(p["part"][0] + p["part"][1] for p in parts)
+    else:
+        field = (FIELDS.get(f"S{tok}{dev}") or FIELDS.get(f"S{tok}01")
+                 or FIELDS.get(f"S{tok}00"))
+        kind = (field or {}).get("kind")
+        if field and not field.get("part") and packed and field.get(
+                "packed_float"):
+            # a whole number held but packed as a float: `s78F0125`, the
+            # display's two digits, sat unanswered on the bench where
+            # `i78F01` packs `41C80000` (the computer Set sweep, 2026-09-18)
+            width = 8
+        elif field and not field.get("part") and packed:
+            # the packed widths are the ones `_field_width` answers a refusal
+            # with, and a label's is its length
+            reads = Handler.WIDTHS.get(kind)
+            width = (reads(field) if reads else None) or FIXED_KINDS.get(kind, 0)
+        elif field and not field.get("part"):
+            if kind in FIXED_KINDS:
+                width = FIXED_KINDS[kind]
+            elif kind == "enum" and field.get("choices"):
+                lengths = set(len(str(c[0])) for c in field["choices"])
+                width = lengths.pop() if len(lengths) == 1 else 0
+            elif kind in ("int", "digits"):
+                width = field.get("width") or field.get("wire_cut") or 0
+            elif kind == "float" and field.get("wire_cut"):
+                # a decimal the console reads to a width of its own:
+                # `S62101000000` was answered bare, and `S60801+099.99`
+                # stored 99.90 -- six characters read either way
+                width = field["wire_cut"]
+    _SET_WIDTHS[key] = width
+    return width
+
+
+def _set_end(body):
+    """Where a Set's data field ends inside `body`, or 0 while it is short."""
+    tok, dev = (body[1:4].upper().decode("latin-1"),
+                body[4:6].decode("latin-1"))
+    data = body[6:].decode("latin-1")
+    if tok in DIAL_SIZED:
+        width = _dial_width(tok, data)
+    else:
+        width = _set_width(tok, dev, packed=body[:1] == b"s")
+    return 6 + width if width and len(data) >= width else 0
+
+
 def _complete(buf):
     """How many bytes of `buf` are one command, or 0 if it is not one yet.
 
@@ -5851,8 +8004,9 @@ def _complete(buf):
     Function Code, Data Field", and the function code "is a six character
     command code". So an inquiry IS complete at six characters, which is why
     a console answers a hand-typed session the moment you finish typing
-    I20100, no Return needed. A Set carries a data field of its own length,
-    so that one runs to a carriage return, line feed or ETX.
+    I20100, no Return needed. A Set of a field whose width the console knows
+    is finished at the last character of it (`_set_width`); one of a label or
+    a decimal runs to a carriage return, line feed or ETX.
     """
     if not buf.startswith(SOH):
         return 0
@@ -5864,7 +8018,18 @@ def _complete(buf):
     if len(body) > 6 and body[:1].isdigit():
         body = body[6:]              # the optional six-digit security code
     if len(body) >= 6 and body[:1] in (b"I", b"i"):
+        if body[1:4].upper() == b"61F" and len(body) >= 7 and _waits(body):
+            # its one-character delivery type is its whole data field, and
+            # the bench answered at it with no terminator: `I61F000` drew
+            # the table and `I61F002` a `?` a tank (2026-09-25, `lf.jsonl`)
+            return len(buf) - len(body) + 7
+        if _waits(body):
+            return 0
         return len(buf) - len(body) + 6
+    if len(body) > 6 and body[:1] in (b"S", b"s"):
+        end = _set_end(body)
+        if end:
+            return len(buf) - len(body) + end
     return 0
 
 
@@ -5911,7 +8076,14 @@ class Framer:
                 # still do is abandon a command that is only part typed,
                 # which is the same intent: nothing part-formed survives.
                 buf.clear()
-            elif byte in (0x08, 0x7F):
+            elif byte in (0x08, 0x7F) and self.telnet:
+                # DEL rubs out only for somebody at a terminal. On a raw
+                # tunnel it is a data byte: the bench TLS-350 refused
+                # `S78201Q<DEL>Q` as three characters of label -- `???` --
+                # where a rub-out would have left an acceptable `Q`. And so
+                # is BACKSPACE, which rubbed out everywhere here: the bench
+                # answered `I2019<BS>00` under the echo `I2019<BS>`, the BS
+                # the device's second character (2026-09-23).
                 del buf[-1:]
             else:
                 buf.append(byte)
@@ -5922,6 +8094,16 @@ class Framer:
                 break
             del buf[:start]
             n = _complete(bytes(buf))
+            after = buf.find(SOH, 1)
+            if after != -1 and (not n or after < n):
+                # A new SOH before this command was whole: the bench TLS-350
+                # threw the fragment away and answered only what followed.
+                # `I201`, `I2010`, `I101`, `I999`, a lone `I` -- each sent
+                # and then followed by the next command -- got no reply of
+                # their own (2026-09-19, `transcripts/edge1`). This ran the
+                # fragment and the next SOH together into one command.
+                del buf[:after]
+                continue
             if n > LONGEST_COMMAND or (not n and len(buf) > LONGEST_COMMAND):
                 # Longer than any command there is, so not one: dropped, and
                 # taken up again at the next SOH, the way noise is.
@@ -5956,11 +8138,16 @@ def _session(conn, handler, peer=None, policy=None, gate=None, capture=None):
     """
     ip = peer[0] if peer else None
     port = peer[1] if peer and len(peer) > 1 else None
+    # One recorder for this connection, carrying its own share of the
+    # capture: past its budget the rows keep their time, source, direction
+    # and LENGTH and drop the hex, so one flooder cannot push every other
+    # source's evidence out of the file. FIDELITY R32.
+    rec = capture.session(peer=ip, port=port, proto="tunnel") \
+        if capture is not None else None
 
     def seen(direction, data, **kw):
-        if capture is not None:
-            capture.record(direction, data, peer=ip, port=port,
-                           proto="tunnel", **kw)
+        if rec is not None:
+            rec.record(direction, data, **kw)
 
     with exposed.session(gate, ip) as admitted:
         if not admitted:
@@ -5981,17 +8168,37 @@ def _session(conn, handler, peer=None, policy=None, gate=None, capture=None):
             conn.sendall(PROBE)
         except OSError:
             return
+        budget = getattr(policy, "max_bytes_per_min", None)
+        taken = 0
+        since = time.monotonic()
         try:
             while True:
                 chunk = conn.recv(4096)
                 if not chunk:
                     break
+                if budget:
+                    # A rate on the BYTES, not only on the connections. A
+                    # flood arriving down one accepted connection was
+                    # limited by nothing at all, and the capture wrote 2.12
+                    # bytes to disk for each one of them. FIDELITY R32.
+                    now = time.monotonic()
+                    if now - since >= 60.0:
+                        since, taken = now, 0
+                    taken += len(chunk)
+                    if taken > budget:
+                        seen("refused", b"",
+                             note="byte rate limit (%d/min); connection "
+                                  "closed after %d bytes" % (budget, taken))
+                        break
                 seen("in", chunk)
                 sends, commands = framer.feed(chunk)
                 for data in sends:
                     conn.sendall(data)
                     seen("out", data)
                 for raw in commands:
+                    # the port has carried data, whatever 888 decides to
+                    # print about it
+                    handler.c.note_comm()
                     out = handler.handle(raw)
                     # BEFORE the `if`, deliberately. The delay used to sit
                     # on the answering path only, and a command refused for
@@ -6015,12 +8222,27 @@ def _session(conn, handler, peer=None, policy=None, gate=None, capture=None):
                             lead = (b"" if raw[-1:] in (b"\r", b"\n")
                                     else b"\r\n")
                             out = lead + out + b"\r\n"
-                        conn.sendall(out)
+                        # captured before it goes: a paced reply takes
+                        # seconds, and a caller that hangs up part way
+                        # would otherwise leave no record it was answered
                         seen("out", out, cmd=exposed.command_of(raw))
+                        pace = getattr(policy, "pace", None)
+                        if pace:
+                            # at the line's own pace, the way the bench's
+                            # bridge hands a reply on (`Policy.PACE`)
+                            for i in range(0, len(out), 16):
+                                conn.sendall(out[i:i + 16])
+                                time.sleep(pace * len(out[i:i + 16]))
+                        else:
+                            conn.sendall(out)
         except OSError:
             pass
         finally:
             seen("close", b"")
+            if framer.buf:
+                # gone in the middle of a command, which is what the bench
+                # console recorded as WAITING FOR DATA / DATA TIMED OUT
+                handler.c.session_cut()
             try:
                 conn.close()
             except OSError:

@@ -305,7 +305,7 @@ def handle(handler, tok, dev, code, data):
                 + " software module")
     card = NEEDS_MODULE.get(tok)
     if card and not c.has(card):
-        return handler._nine(code), f"no {card} module fitted"
+        return handler._absent(code), f"no {card} module fitted"
     setting = code[0] in "Ss"
     if setting and tok in INQUIRE_ONLY:
         return handler._nine(code), f"{tok} is a report, not a setting"
@@ -449,13 +449,10 @@ def _generator_report(handler, dev, code, display):
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
              else sorted(c.programmed_tanks()))
     if display:
-        rows = ["INPUT GENERATOR REPORT",
-                "     START               END          DURATION  CONSUMPTION"]
+        rows = ["INPUT GENERATOR REPORT"] + _generator_head(c)
         for tank in tanks:
             for run in c.generator_runs(tank):
-                rows.append(
-                    f"{_when(run['start'])}  {_when(run['end'])}  "
-                    f"{run['hours']:7.2f}  {run['used']:9.1f}")
+                rows.append(_generator_row(run))
         # An empty report is its heading and nothing under it, and
         # `NO GENERATOR RECORDS` was this project's phrase. See FIDELITY U5.
         return handler._frame(code, SEP.join(rows)), "generator report"
@@ -468,6 +465,114 @@ def _generator_report(handler, dev, code, display):
             out += f"{len(GENERATOR_FIELDS):02X}"
             out += "".join(_hexfloat(v) for v in run["figures"])
     return handler._frame(code, out), "generator report"
+
+
+
+# ---------------------------------------------------------------------------
+# 404's table, measured off the page
+#
+# 576013-635 Rev Y p.8713 and Rev AA draw the same sample, and it is the only
+# drawing of this report there is:
+#
+#       START             END         START     END    DURATION       CONSUMPTION
+#     DATE / TIME     DATE / TIME     LITERS  LITERS    HHHH:MM     LITERS     L/HR
+#    12-20-10 12:59  12-20-10 19:06   350000  349745    0006:06        200    33.33
+#
+# Two header lines, seven columns, and every value right-aligned to the END
+# of its own header -- measured, not eyeballed. What this console drew was one
+# invented header line and four columns: the two VOLUME columns were missing
+# although the data for them was already in the record, the rate column was
+# missing entirely, and the duration was decimal hours where the page draws
+# `HHHH:MM`. `0006:06` against `   6.10` is the unambiguous half of that.
+#
+# Column ends, from the sample: the two stamps at 14 and 30, start and end
+# volume at 39 and 47, duration at 58, consumption at 69, rate at 78.
+#
+# Those are measured against the block's own left edge, which is where
+# `STATION HEADER 1....` starts -- `tools/pagelines.py 576013-635_RevAA_
+# SerialInterfaceManual 152 --columns` puts the headers and the rows both
+# at column 0. They were three columns further right, read off the text
+# extraction, which indents the rows by three and the header lines not at
+# all, so every column of the table sat three to the right of the page and
+# `test_wirecolumns` caught line one. Line two and the rows were out by the
+# same three and no test measured them.
+GEN_ENDS = (14, 30, 39, 47, 58, 69, 78)
+
+# Header line one sits by its own starts; it labels pairs of columns rather
+# than lining up with them.
+GEN_HEAD1 = ((3, "START"), (21, "END"), (33, "START"), (43, "END"),
+             (50, "DURATION"), (65, "CONSUMPTION"))
+
+
+def _generator_units(console):
+    """The volume and rate words for this console's unit system.
+
+    `LITERS` and `L/HR` are the page's own: both revisions draw this report
+    from a METRIC console, which is the only sample of it that exists. The
+    US and imperial words are NOT drawn anywhere for this report -- 576013-623
+    Rev AN p.5-2 defines the systems as "gallons, gal/hour", "litres,
+    litres/hour" and "imperial gallons, imp. gal/hour", and `GALS` is what
+    this console prints for a volume everywhere else, so those two lines are
+    this project's and are marked as such in FIDELITY R25.
+    """
+    units = (console.values.get("S51700") or " ")[:1]
+    if units == "2":
+        return "LITERS", "L/HR"          # 576013-635's own sample
+    if units == "3":
+        return "IMPGAL", "IGAL/HR"       # inferred; see FIDELITY R25
+    return "GALS", "GAL/HR"              # inferred; see FIDELITY R25
+
+
+def _ends(*pairs):
+    """Place each (end column, text) so the text FINISHES at that column."""
+    line = ""
+    for end, text in pairs:
+        text = str(text)
+        start = end - len(text)
+        if start < len(line):
+            line += " " + text           # never cut a neighbour off
+        else:
+            line += " " * (start - len(line)) + text
+    return line
+
+
+def _generator_head(console):
+    volume, rate = _generator_units(console)
+    head1 = ""
+    for col, text in GEN_HEAD1:
+        head1 += " " * max(0, col - len(head1)) + text
+    head2 = _ends((12, "DATE / TIME"), (28, "DATE / TIME"),
+                  (39, volume), (47, volume), (58, "HHHH:MM"),
+                  (69, volume), (78, rate))
+    return [head1, head2]
+
+
+def _generator_row(run):
+    """One run, right-aligned under the headers.
+
+    The duration is `HHHH:MM` -- four hour digits and two minute digits --
+    which is what the page draws and what a generator run wants: a run over
+    a hundred hours is ordinary for a standby set on test.
+    """
+    figures = run.get("figures") or []
+    start_vol = figures[1] if len(figures) > 1 else 0.0
+    end_vol = figures[6] if len(figures) > 6 else 0.0
+    hours = run.get("hours") or 0.0
+    used = run.get("used") or 0.0
+    rate = (used / hours) if hours else 0.0
+    cells = (_when(run["start"]), _when(run["end"]),
+             "%d" % round(start_vol), "%d" % round(end_vol),
+             _duration(hours), "%d" % round(used), "%.2f" % rate)
+    return _ends(*zip(GEN_ENDS, cells))
+
+
+def _duration(hours):
+    """`0006:06` from 6.1 hours. Four digits of hours, two of minutes."""
+    whole = int(hours)
+    minutes = int(round((hours - whole) * 60))
+    if minutes == 60:                    # 5.999 h is six hours, not 5:60
+        whole, minutes = whole + 1, 0
+    return "%04d:%02d" % (whole, minutes)
 
 
 def _when(seconds):
@@ -868,7 +973,7 @@ def _grouped_inventory(handler, tok, dev, code, display):
     """237 and 238: volume and TC volume, subtotalled per group."""
     c = handler.c
     if not c.has("probe"):
-        return handler._nine(code), "no probe module fitted"
+        return handler._absent(code), "no probe module fitted"
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
              else sorted(c.programmed_tanks()))
     groups = _groups(c, tok, tanks)
@@ -922,7 +1027,7 @@ def _manifold_delivery(handler, tok, dev, code, display):
     """239 and 23A: one name, and only one of them carries an end time."""
     c = handler.c
     if not c.has("probe"):
-        return handler._nine(code), "no probe module fitted"
+        return handler._absent(code), "no probe module fitted"
     tanks = ([int(dev)] if dev.isdigit() and int(dev)
              else sorted(c.programmed_tanks()))
     stamps = MANIFOLD_DELIVERY[tok]

@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tls350sim import accuchart, printer                    # noqa: E402
 from tls350sim.console import Console, describe_alarms      # noqa: E402
 from tls350sim.wire import Handler                          # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_site(scheduling="1", meter_data=True, mag=True, linear=False):
@@ -291,10 +292,10 @@ class TheReports(unittest.TestCase):
         c = a_site()
         self.assertIn("9999", self.send(c, "S89101"))
 
-    def test_a_console_with_no_probe_says_9999(self):
+    def test_a_console_with_no_probe_answers_a_bare_frame(self):
         c = a_site()
         c.modules.pop("probe")
-        self.assertIn("9999", self.send(c, "IB9100"))
+        self.assertTrue(is_bare(self.send(c, "IB9100")))
 
     def test_the_printer_prints_the_same_thing(self):
         c = a_site()

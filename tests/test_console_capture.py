@@ -37,6 +37,7 @@ site's setup.
 import glob
 import os
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -362,18 +363,31 @@ class TheWholeBodyAndNotJustTheTitle(unittest.TestCase):
         # limit of 0 are values their own pages will not take -- 1 to 60
         # minutes, 1 to 99 gallons. See FIDELITY S18.
         #
-        # its autodial receivers' port, 2 on all eight. It is not a factory
-        # number: 576013-623 Rev AN p.6-8 makes it the comm-bay slot the
-        # modem is in and draws `SELECT MODEM: 3`, and the site tape's one
-        # receiver reads `PORT  NO: 1`.
-        "I52500",
-        # reconciliation limits of 0 and 1, where 576013-623 Rev AN states
-        # "the default warning limit of 3" and "the default alarm limit of
-        # 4", each with a minimum of 1
-        "I63400", "I63500",
+        # **And three more on 2026-09-18, the ones this list was surest of.**
+        # `I52500`'s port 2 on all eight receivers was here as "not a factory
+        # number", and `I63400` and `I63500`'s reconciliation limits of 0 and
+        # 1 against 576013-623 Rev AN's "default warning limit of 3" and
+        # "default alarm limit of 4". The same console was cold started on
+        # 2026-09-18 and read port 2, 0 and 1 again straight out of it, with
+        # its clock back at the firmware's own date. That is what software
+        # 326.01 comes up with, so the fields default to it now and all three
+        # match. The page's 3 and 4, and the site tape's `PORT  NO: 1`, are
+        # other software or another site's setup. See FIDELITY S18.
         # software 326.01 built in 2006, against this console's 333.02; and
         # 903's five counters, which count that console's own uptime
         "I90200", "I90300", "I90500",
+        # the autodial ON DATE, which a console out of the box reads off
+        # its own clock -- JAN 16, 2006 on that console, today on this one.
+        # It is compared date-blind in
+        # `test_the_autodial_report_reads_as_the_console_reads_it`. It is
+        # listed here because it is compared at all: the receiver codes
+        # used to want a modem, and the bench TLS-350 answers them without
+        # one (2026-09-18).
+        "I52000",
+        # the leak test method's TEST ON DATE, which is the day the console
+        # came up -- JAN 16, 2006 there, today here; the rest of the block is
+        # the bench console's own, line for line (CLOSED S31)
+        "I61100",
         # two BATTERY IS OFF records in its alarm history. The ROW is
         # compared -- `Console.alarm_row` draws it character for character
         # now -- but the records themselves are that console's.
@@ -386,7 +400,9 @@ class TheWholeBodyAndNotJustTheTitle(unittest.TestCase):
     FIXTURE = {
         "I10200",                    # a 4 PROBE / G.T. and a PLLD pair
         "I88800",                    # an RS-232 board and an S-SAT board
-        "I61300", "I61400", "I61800",  # CSLD, which its S-Module did not
+        # I61300, I61400 and I61800 came off on 2026-09-18: with no tank
+        # whose probe is reporting they answer their titles alone, which is
+        # what both captures of this console print (CLOSED S31).
     }
 
     @classmethod
@@ -471,6 +487,13 @@ class TheWholeBodyAndNotJustTheTitle(unittest.TestCase):
         from tls350sim.wire import Handler
         console = Console(None)
         console.modules["modem"] = True
+        # This console had its ON DATE STORED: the same unit, found in 2026
+        # with its clock at 1995, still printed JAN 16, 2006, where a cold
+        # start stores zeros and prints `??? 16, 2006` (`cap_coldstart`).
+        # So the capture is a receiver set to that day, and is built so.
+        for r in range(1, 9):
+            console.receiver_dial[r] = ("1" + time.strftime(
+                "%y%m%d", console.now()) + "EE00")
         console.tick()
         mine = self.lines(Handler(console, verbose=False).handle(
             SOH + b"I52000"))

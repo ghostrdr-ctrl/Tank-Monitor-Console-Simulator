@@ -177,6 +177,78 @@ class AByteItCannotSendIsNotAFunctionCodeItDoesNotKnow(unittest.TestCase):
             self.assertNotIn(b"9999FF", out, tok)
 
 
+class ASetEndsWhenItsFieldIsFull(unittest.TestCase):
+    """The bench TLS-350 answers a Set with no terminator the moment its
+    field is full, and sends nothing at all while it is short (2026-09-19,
+    `transcripts/framewidth.log`). FIDELITY S36."""
+
+    def one(self, *chunks):
+        """What a session makes of these chunks: the commands it completed."""
+        framer, out = wire.Framer(), []
+        for chunk in chunks:
+            out += framer.feed(chunk)[1]
+        return out, bytes(framer.buf)
+
+    def test_a_full_field_needs_no_terminator(self):
+        for raw in (b"\x01S783012", b"\x01S781021", b"\x01S601021",
+                    b"\x01S501000601190030", b"\x01S62101000000",
+                    b"\x01S51700101"):
+            done, left = self.one(raw)
+            self.assertEqual(done, [raw], raw)
+            self.assertEqual(left, b"", raw)
+
+    def test_a_short_field_waits_for_the_terminator(self):
+        """Nine of the clock's ten digits sat unanswered until a CR came."""
+        done, left = self.one(b"\x01S50100060119005")
+        self.assertEqual(done, [])
+        self.assertEqual(left, b"\x01S50100060119005")
+        done, _left = self.one(b"\x01S50100060119005", b"\r")
+        self.assertEqual(done, [b"\x01S50100060119005\r"])
+
+    def test_a_field_of_no_fixed_width_waits(self):
+        """The station header took `1234` and a CR and stored it."""
+        self.assertEqual(self.one(b"\x01S503011234")[0], [])
+        self.assertEqual(self.one(b"\x01S503011234", b"\r")[0],
+                         [b"\x01S503011234\r"])
+
+    def test_the_extra_character_is_not_a_command_of_its_own(self):
+        """The eleventh digit was answered at the tenth on the bench and the
+        `5` never came back. Whether it waits in the buffer or goes with the
+        rest of the line cannot be told apart from outside -- what matters is
+        that it is not read as a command, and that the next one is."""
+        done, _left = self.one(b"\x01S5010006011900305")
+        self.assertEqual(done, [b"\x01S501000601190030"])
+        self.assertEqual(self.one(b"\x01S5010006011900305",
+                                  b"\x01I20100")[0][-1], b"\x01I20100")
+
+    def test_a_security_code_does_not_shift_the_width(self):
+        raw = b"\x01123456S501000601190030"
+        self.assertEqual(self.one(raw)[0], [raw])
+
+    def test_the_computer_format_reads_its_own_widths(self):
+        """`s6070142C00000` -- a diameter as eight hex digits -- was answered
+        bare where seven got nothing, and a packed label at twenty
+        (`transcripts/packedwidth`, `packedtext`). Display 607 reads six, so
+        one table for both formats would cut a packed float in half."""
+        self.assertEqual(self.one(b"\x01s6070142C00000")[0],
+                         [b"\x01s6070142C00000"])
+        self.assertEqual(self.one(b"\x01s6070142C0000")[0], [])
+        self.assertEqual(self.one(b"\x01s50301PACKED TWENTY CHARS ")[0],
+                         [b"\x01s50301PACKED TWENTY CHARS "])
+        self.assertEqual(self.one(b"\x01s50301SHORT")[0], [])
+
+    def test_the_widths_fields_does_not_carry(self):
+        """An action's confirmation, the undocumented settings, and the auto
+        dial payload the method digit sizes -- all answered bare."""
+        for raw in (b"\x01S08701" + b"14901", b"\x01S55D001",
+                    b"\x01S7C301132000", b"\x01s7C30143040000",
+                    b"\x01S52B011000000EE00", b"\x01S52B0157031"):
+            self.assertEqual(self.one(raw)[0], [raw], raw)
+        # and 7C3's six digits are six: `S7C301200` was sent with a return
+        for raw in (b"\x01S0870114", b"\x01S52B0110000", b"\x01S7C301200"):
+            self.assertEqual(self.one(raw)[0], [], raw)
+
+
 class TheSerialSessionHoldsACommandNotAStream(unittest.TestCase):
     """`wire.Framer`, the part of a session that is not the socket."""
 
@@ -228,6 +300,18 @@ class TheSerialSessionHoldsACommandNotAStream(unittest.TestCase):
         self.assertLessEqual(len(framer.buf), wire.LONGEST_COMMAND)
         _sends, got = framer.feed(SOH + b"I20100")
         self.assertEqual(got, [SOH + b"I20100"])
+
+    def test_a_new_soh_throws_away_a_command_that_was_not_whole(self):
+        """The bench TLS-350 (2026-09-19): `I201`, `I2010`, `I101`, a lone
+        `I`, each followed by the next command, got no reply of their own,
+        and the next command was answered as itself. This glued the
+        fragment onto the next SOH and answered the pair 9999FF."""
+        for fragment in (b"I201", b"I2010", b"I", b"S60201ABC"):
+            framer = wire.Framer()
+            _sends, got = framer.feed(SOH + fragment)
+            self.assertEqual(got, [])
+            _sends, got = framer.feed(SOH + b"I20100")
+            self.assertEqual(got, [SOH + b"I20100"], fragment)
 
     def test_a_subnegotiation_that_never_ends_is_dropped_at_the_limit(self):
         framer = wire.Framer()

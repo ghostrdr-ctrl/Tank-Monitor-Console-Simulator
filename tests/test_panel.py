@@ -936,7 +936,10 @@ class Panel(unittest.TestCase):
         self.assertEqual(self.app._lines()[1], "DATE: 01/02/26--")
         self.app.k_enter()
         self.assertEqual(self.c.values["S50100"], "0301291105")
-        self.assertFalse(self.app.editing)
+        # and the entry stays open with what was typed: ENTER on
+        # `DATE: 13/45/2006` at the bench keypad did nothing (2026-09-19)
+        self.assertTrue(self.app.editing)
+        self.assertEqual(self.app._lines()[1], "DATE: 01/02/26--")
 
     def test_the_cursor_cannot_walk_off_the_end_of_the_template(self):
         """A ninth digit on an eight-cell date is not a digit. It used to
@@ -1226,6 +1229,36 @@ class Panel(unittest.TestCase):
         import re
         found = re.search(r"([0-9]+\.[0-9]+)", self.drawn()[0])
         return float(found.group(1)) if found else None
+
+    def plld_dispensing_screen(self):
+        """Stand on the FIRST PRESSURE LINE LEAK DIAG screen, line 1."""
+        app = self.plld_pressure_screen()
+        for i, screen in enumerate(app.steps()):
+            if screen.get("live") == "line_dispensing":
+                app.step = i
+                return app
+        self.fail("the PLLD diagnostic has no dispensing screen")
+
+    def test_the_dispensing_screen_reads_the_line_it_is_showing(self):
+        """577013-344 Rev H Figure 19 draws `Q 1: (PRODUCT LABEL)` over
+        `DISPENSING DISABLED` and annotates that second line "Dispensing is
+        ENABLED or DISABLED".
+
+        The line was the figure's, drawn verbatim. So the screen a
+        technician opens to find out whether a line is dispensing read
+        DISABLED on every line of every site in every state -- with the 3.0
+        passed, the shutdown cleared and fuel going out of the nozzle --
+        and the pressure screen one STEP behind it read PUMP ON. Reported
+        from the bench. FIDELITY U51.
+        """
+        app = self.plld_dispensing_screen()
+        app._render()
+        self.assertEqual(self.drawn()[:2],
+                         ["Q 1: LINE 1", "DISPENSING ENABLED"])
+        self.c.leaks.disabled.add(("plld", 1))
+        app._render()
+        self.assertEqual(self.drawn()[:2],
+                         ["Q 1: LINE 1", "DISPENSING DISABLED"])
 
     def test_a_live_screen_is_one_the_poll_redraws(self):
         """The poll redrew the display in Operating Mode alone, so a screen
@@ -2977,14 +3010,47 @@ class Panel(unittest.TestCase):
             self.assertIn(wanted, chr(10).join(lines), name)
 
     def alarms_shown_over(self, polls):
-        """Every distinct message the status line draws over `polls` polls."""
+        """Every distinct message the status line draws over `polls` polls.
+
+        A poll is 700 ms and the message steps with the console's clock
+        second, so the clock moves a second a poll here."""
         seen = set()
         for i in range(polls):
             self.app._cycle, self.app._blink = i, bool(i % 2 == 0)
+            self.app.console.clock_offset += 1.0
             line = str(self.app._lines()[1])
             if line:
                 seen.add(line)
         return seen
+
+    def test_the_status_line_steps_with_the_clock_and_never_blanks(self):
+        """The bench TLS-350, 2026-09-19, a PLLD alarm and a printer error
+        standing: one message a clock second in turn (`:54` PLLD, `:55`
+        PRINTER ERROR, `:56` PLLD), and the text never blank, acknowledged
+        or not -- read over 5FA five times a second and by eye at the
+        glass. The flashing is the lamps'."""
+        import struct
+        from tls350sim.ui import MODES
+
+        def f(v):
+            return struct.pack(">f", v).hex().upper()
+        self.app.mode = MODES.index("NORMAL")
+        self.app._entered = False
+        c = self.app.console
+        c.values["S62101"] = "01" + f(3000.0)
+        c.values["S62401"] = "01" + f(1.0)
+        c.tank_level[1] = {"volume": 500.0, "water": 3.0}
+        self.app._alarms()
+        c.clock_offset += 181.0
+        c.acked.clear()
+        shown = []
+        for blink in (False, True, False, True):
+            self.app._blink = blink
+            shown.append(self.app._lines()[1])
+            c.clock_offset += 1.0
+        self.assertNotIn("", shown)
+        self.assertNotEqual(shown[0], shown[1])
+        self.assertEqual(shown[0], shown[2])
 
     def test_the_status_line_flashes_every_alarm_not_just_one(self):
         """"If more than one condition exists, the display will alternately
@@ -4007,23 +4073,98 @@ class Panel(unittest.TestCase):
         app = self._setup_step("SYSTEM SETUP", "Temp Compensation")
 
         def typed(text):
+            """(the resting line after, whether ENTER took it). A refused
+            entry stays open at the bench keypad; STEP would leave it
+            unsaved, so it is closed here the same way."""
             app.k_change()
             for ch in text:
                 app.k_alnum(ch)
             app.k_enter()
+            took = not app.editing
+            app.editing, app.buf = False, ""
             app.confirm = None
             app._blink = False
             app._render()
-            return app._lines()[1]
+            return app._lines()[1], took
 
-        self.assertEqual(typed("120"), "VALUE (DEG F): +120.0")
-        self.assertEqual(typed("121"), "VALUE (DEG F): +120.0", "refused")
-        self.assertEqual(typed("0"), "VALUE (DEG F): +000.0")
+        self.assertEqual(typed("120"), ("VALUE (DEG F ): +120.0", True))
+        self.assertEqual(typed("121"), ("VALUE (DEG F ): +120.0", False))
+        self.assertEqual(typed("0"), ("VALUE (DEG F ): +000.0", True))
+        # below the page's floor, at the bench keypad (2026-09-19): the
+        # +/- key and 10 took -10, and -50 was refused -- the port's -49
+        self.assertEqual(typed("+10"), ("VALUE (DEG F ): -010.0", True))
+        self.assertEqual(typed("+50"), ("VALUE (DEG F ): -010.0", False))
         # the metric half of the same sentence, which has a NEGATIVE floor
         self.c.values["S51700"] = "2"
-        self.assertEqual(typed("-17"), "VALUE (DEG F): -017.0")
-        self.assertEqual(typed("50"), "VALUE (DEG F): -017.0", "refused")
-        self.assertEqual(typed("49"), "VALUE (DEG F): +049.0")
+        self.assertEqual(typed("-17"), ("VALUE (DEG F ): -017.0", True))
+        self.assertEqual(typed("50"), ("VALUE (DEG F ): -017.0", False))
+        self.assertEqual(typed("49"), ("VALUE (DEG F ): +049.0", True))
+
+    def test_temp_compensation_is_typed_as_the_bench_keypad_types_it(self):
+        """The bench TLS-350, 2026-09-19, read over 5FA: `130` typed read
+        `VALUE (DEG F ):+  130` and ENTER left it there, refused; `60`
+        was acknowledged `VALUE (DEG F ):+   60` over PRESS <STEP> TO
+        CONTINUE; the +/- key and `010` read `-  010`."""
+        app = self._setup_step("SYSTEM SETUP", "Temp Compensation")
+        app._blink = False
+        app.k_change()
+        for ch in "130":
+            app.k_alnum(ch)
+        self.assertEqual(app._lines()[1], "VALUE (DEG F ):+  130")
+        app.k_enter()
+        self.assertEqual(app._lines()[1], "VALUE (DEG F ):+  130")
+        app.k_change()
+        for ch in "60":
+            app.k_alnum(ch)
+        app.k_enter()
+        self.assertEqual(app._lines(), ["VALUE (DEG F ):+   60",
+                                        "PRESS <STEP> TO CONTINUE"])
+        app.confirm = None
+        app.k_change()
+        app.k_alnum("+")
+        for ch in "010":
+            app.k_alnum(ch)
+        self.assertEqual(app._lines()[1], "VALUE (DEG F ):-  010")
+        app.editing, app.buf = False, ""
+
+    def test_the_display_mirror_follows_the_panel(self):
+        """5FA at the bench keypad (2026-09-19): `SYSTEM SETUP` over `PRESS
+        <STEP> TO CONTINUE`, then `SET MONTH DAY YEAR` over `DATE:
+        1-/--/----` mid-entry -- the character under the cursor, never the
+        flashing block -- and the resting clock and status away from it."""
+        from tls350sim.wire import Handler
+        h = Handler(self.c, verbose=False)
+
+        def glass():
+            reply = h.handle(chr(1).encode() + b"i5FA00").decode("latin-1")
+            return reply.split("&&")[0][17:]
+        app = self._setup_step("SYSTEM SETUP", "Set Month Day Year")
+        app.step = -1                     # the function header, `ui.HEADER`
+        self.assertEqual(glass(), "SYSTEM SETUP".ljust(24)
+                         + "PRESS <STEP> TO CONTINUE")
+        app = self._setup_step("SYSTEM SETUP", "Set Month Day Year")
+        app.k_change()
+        app.k_alnum("1")
+        app._blink = True                 # the block is on the glass now
+        self.assertEqual(glass(), "SET MONTH DAY YEAR".ljust(24)
+                         + "DATE: 1-/--/----".ljust(24))
+        app.editing, app.buf = False, ""
+
+    def test_set_time_pads_its_hour(self):
+        """`TIME: 02:12 AM` on the bench TLS-350's SET TIME, 2026-09-19."""
+        import time as _time
+        app = self._setup_step("SYSTEM SETUP", "Set Time")
+        now = _time.localtime(_time.time() + self.c.clock_offset)
+        at = _time.mktime((now.tm_year, now.tm_mon, now.tm_mday, 2, 12, 0,
+                           0, 0, -1))
+        was = self.c.clock_offset
+        try:
+            self.c.clock_offset = at - _time.time()
+            app._blink = False
+            app._render()
+            self.assertEqual(app._lines()[1], "TIME: 02:12 AM")
+        finally:
+            self.c.clock_offset = was
 
     def test_the_eight_test_needed_day_fields_are_masked(self):
         """576013-623 Rev AN p.5-8 to p.5-12 draw all eight, two X's for
@@ -4101,6 +4242,10 @@ class Panel(unittest.TestCase):
         for ch in "999999999":
             app.k_alnum(ch)
         app.k_enter()
+        # refused, and the entry stays open as the bench keypad's did
+        # (2026-09-19); STEP would leave it unsaved
+        self.assertTrue(app.editing)
+        app.editing, app.buf = False, ""
         app.confirm = None
         app._render()
         self.assertEqual(app._lines()[1], "ALARM OFFSET: 000130",
@@ -5633,6 +5778,7 @@ class Panel(unittest.TestCase):
         `Q #: PLLD NUMBER #`. The walk drew `PLLD #` three times and then the
         line's label, so one line had three names. The operating-mode
         audit's OP4; FIDELITY O23."""
+        self.c.values["S78101"] = "011"
         self.c.values["S78201"] = "01" + "LANE 1".ljust(20)
         app = self._operating("PRESSURE LINE RESULTS")
         heads = []
@@ -6191,6 +6337,26 @@ class Panel(unittest.TestCase):
             del app
         finally:
             self.c.probe_gt = False
+
+    def test_a_resistor_goes_on_a_thermistor_input_from_the_bench(self):
+        """`groundtemp`: the card's four inputs take a resistance from the
+        bench, as the bench TLS-350's did; blank is open, and a value that
+        is not one keeps what was there."""
+        var = self.app.thermistor_vars[2]
+        try:
+            var.set("4.67k")
+            self.app._set_thermistor(2)
+            self.assertEqual(self.c.thermistors.get(2), 4670.0)
+            var.set("nan")
+            self.app._set_thermistor(2)
+            self.assertEqual(self.c.thermistors.get(2), 4670.0)
+            self.assertEqual(var.get(), "4670")
+            var.set("")
+            self.app._set_thermistor(2)
+            self.assertNotIn(2, self.c.thermistors)
+        finally:
+            self.c.wire_thermistor(2, None)
+            var.set("")
 
     def test_print_beside_a_vac_sensor_s_walk_is_the_figure_s_paper(self):
         """576013-818 Rev AB Figure 6-29 hangs its P off the sensor's own

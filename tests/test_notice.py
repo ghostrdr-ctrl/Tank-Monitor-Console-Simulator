@@ -30,6 +30,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 from tls350sim.console import Console
 from tls350sim.wire import Handler, SOH
 
@@ -179,7 +181,7 @@ class OverTheWire(unittest.TestCase):
     def test_the_feature_switch_takes_its_leading_149(self):
         self.assertNotIn("9999", self.ask(b"S566001491"))
         self.assertIn("SERVICE NOTICE: ENABLED", self.ask(b"I56600"))
-        self.assertIn("9999", self.ask(b"S5660001"))     # no verification
+        self.assertTrue(is_refused(self.ask(b"S5660001")))  # no verification
 
     def test_the_delivery_override_reads_and_writes(self):
         self.ask(b"S566001491")
@@ -213,7 +215,7 @@ class OverTheWire(unittest.TestCase):
                       self.ask(b"I56900"))
         self.assertTrue(self.ask(b"i56900").split("&&")[0].endswith("05"))
         for bad in (b"S5690000", b"S5690009", b"S56900XX"):
-            self.assertIn("9999", self.ask(bad), bad)
+            self.assertTrue(is_refused(self.ask(bad)), bad)
 
     def test_the_session_report_finally_has_something_to_report(self):
         """11B has been reading `service_sessions` since it was written, and

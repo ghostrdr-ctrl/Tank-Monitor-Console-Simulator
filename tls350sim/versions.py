@@ -264,7 +264,10 @@ REVISION_FLAGS = [
     ("PRECISION PLLD ON DEMAND",    15),
     ("SPECIAL 3-TANK/LINE CONSOLE", 15),
     ("ISD",                         15),
-    ("UNUSED WAS PMC",              29),
+    # "(Version 29)" on the page, and the bench TLS-350's 326.01 sends
+    # all twelve (`0C`, 2026-09-18): so no later than 26. When it arrived
+    # before that is not known; 26 is the bound
+    ("UNUSED WAS PMC",              26),
 ]
 
 # The fifty point chart is not in the manual's table, so it is not gated.
@@ -354,15 +357,29 @@ def info(version, board):
     entry = BOARD.get(board) or BOARD[LATEST_BOARD]
     a = FAMILY_PLATFORM.get(entry["family"], "1")
     bb = f"{int(version):02d}"
-    number = f"346{a}{bb}-102-B"
+    seen = SEEN_BUILD.get(int(version))
+    if seen:
+        minor, tail, created = seen
+    else:
+        minor, tail, created = "02", "102-B", _created(version)
     return {
-        "version": f"{a}{bb}.02",
-        "number": number,
-        "created": _created(version),
-        "smodule": "330160-115-A",
+        "version": f"{a}{bb}.{minor}",
+        "number": f"346{a}{bb}-{tail}",
+        "created": created,
+        # composed from the keys by `Console.s_module_number`; this is
+        # what a console with none of them reports
+        "smodule": "330160-000-A",
         "board": entry,
         "released": RELEASED.get(version, ""),
     }
+
+
+# The builds read off a real chip, where one has been: (minor, part tail,
+# CREATED). Version 26 is the bench TLS-350's, `VERSION 326.01`,
+# `SOFTWARE# 346326-100-B`, `CREATED - 06.01.16.17.13` on I90200 and I90500
+# (2026-09-18). Every other version keeps the photographed console's `.02`
+# and `-102-B` and a date made from the release month, which is a stand-in.
+SEEN_BUILD = {26: ("01", "100-B", "06.01.16.17.13")}
 
 
 def _created(version):

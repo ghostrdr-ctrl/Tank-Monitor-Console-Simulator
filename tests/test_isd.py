@@ -23,6 +23,7 @@ from tls350sim import isd, packed                        # noqa: E402
 from tls350sim.clock import clock_words                  # noqa: E402
 from tls350sim.console import Console                    # noqa: E402
 from tls350sim.wire import Handler                       # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_console(isd_key=True, pmc_key=True, board="E6"):
@@ -52,12 +53,12 @@ class TheKeysAreTwoKeys(unittest.TestCase):
     def test_pmc_alone_refuses_the_isd_ones(self):
         _c, h = a_console(isd_key=False)
         for code in ("V4E", "V4F"):
-            self.assertIn("9999", self.ask(h, code), code)
+            self.assertTrue(is_bare(self.ask(h, code)), code)
 
     def test_isd_alone_refuses_the_pmc_ones(self):
         _c, h = a_console(pmc_key=False)
         for code in ("V40", "V41", "V44", "V45", "V46"):
-            self.assertIn("9999", self.ask(h, code), code)
+            self.assertTrue(is_bare(self.ask(h, code)), code)
 
     def test_either_key_answers_the_either_functions(self):
         """V47 and V52 say "ISD or PMC" and "ISD and/or PMC"."""
@@ -70,7 +71,7 @@ class TheKeysAreTwoKeys(unittest.TestCase):
         """V50 says "ISD and PMC features required"."""
         for one, other in ((True, False), (False, True)):
             _c, h = a_console(isd_key=one, pmc_key=other)
-            self.assertIn("9999", self.ask(h, "V50"))
+            self.assertTrue(is_bare(self.ask(h, "V50")))
         _c, h = a_console()
         self.assertNotIn("9999", self.ask(h, "V50"))
 
@@ -79,7 +80,7 @@ class TheKeysAreTwoKeys(unittest.TestCase):
         NVMEM201, so its ISD key was never cut whatever the software says."""
         c, h = a_console(board="E7")
         self.assertFalse(c.licensed("isd"))
-        self.assertIn("9999", self.ask(h, "V4E"))
+        self.assertTrue(is_bare(self.ask(h, "V4E")))
 
 
 class TheSetupValues(unittest.TestCase):
@@ -741,7 +742,7 @@ class TheStatusReports(unittest.TestCase):
         c, h = self.a_site()
         c.software.pop("isd")
         for code in ("V00", "V0A", "V0B"):
-            self.assertIn("9999", self.send(h, f"I{code}00"), code)
+            self.assertTrue(is_bare(self.send(h, f"I{code}00")), code)
 
     def test_all_three_are_inquire_only(self):
         _c, h = self.a_site()
@@ -783,7 +784,7 @@ class TheProcessorAndSensorReports(unittest.TestCase):
         "00=Full Control" is the only level that is."""
         _c, h = self.a_site(full=False)
         for code in ("V80", "V81"):
-            self.assertIn("9999", self.send(h, f"I{code}00"), code)
+            self.assertTrue(is_bare(self.send(h, f"I{code}00")), code)
         _c, h = self.a_site(full=True)
         for code in ("V80", "V81"):
             self.assertNotIn("9999", self.send(h, f"I{code}00"), code)
@@ -1018,7 +1019,7 @@ class TheAlarmAndStatusReports(unittest.TestCase):
             self.assertIn("9999", self.send(h, f"s{code}0001"), code)
         c.software.pop("isd")
         for code in ("V01", "V02", "V03"):
-            self.assertIn("9999", self.send(h, f"I{code}00"), code)
+            self.assertTrue(is_bare(self.send(h, f"I{code}00")), code)
 
 
 class TheDailyDetailReports(unittest.TestCase):
@@ -1138,7 +1139,7 @@ class TheDailyDetailReports(unittest.TestCase):
             self.assertIn("9999", self.send(h, f"s{code}0001"), code)
         c.software.pop("isd")
         for code in isd.DETAIL:
-            self.assertIn("9999", self.send(h, f"I{code}00202608"), code)
+            self.assertTrue(is_bare(self.send(h, f"I{code}00202608")), code)
 
 
 class PanelReports(unittest.TestCase):

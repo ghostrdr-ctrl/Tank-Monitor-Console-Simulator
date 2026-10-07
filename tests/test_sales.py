@@ -127,5 +127,108 @@ class TheTransactionAlarm(unittest.TestCase):
         self.assertNotIn("190401", c.conditions())
 
 
+class ASaleOnlyProgressesOnFuelThatMoved(unittest.TestCase):
+    """FIDELITY R31.
+
+    `tick` advanced `sale.sold` before anything had asked whether the fuel
+    was there, and `draw` -- which is what actually takes it out of the
+    tank, capped at what the tank holds and skipped altogether under a
+    shutdown -- ran afterwards. So a twenty gallon sale completed against a
+    tank holding one, and a sale during a shutdown completed having moved
+    nothing. This is a disagreement with the physics the rest of the model
+    keeps, which is why it is the odd entry in its section.
+    """
+
+    def test_a_dry_tank_sells_what_it_has_and_no_more(self):
+        c = a_site()
+        c.tank_level[1]["volume"] = 1.0
+        sale = c.sales.start(1, 20.0, rate=600.0)
+        for _ in range(6):
+            seconds(c, 30)
+        self.assertLessEqual(sale.sold, 1.0 + 1e-6,
+                             "a 20 gallon sale completed against 1 gallon")
+        self.assertAlmostEqual(c.tank_level[1]["volume"], 0.0, delta=1e-6)
+
+    def test_the_nozzle_goes_up_rather_than_hanging_on_a_dry_tank(self):
+        """A pump that will not pump is a customer who hangs up. Without
+        this the sale never reaches `done` and holds its nozzle for ever."""
+        c = a_site()
+        c.tank_level[1]["volume"] = 1.0
+        c.sales.start(1, 20.0, rate=600.0)
+        for _ in range(8):
+            seconds(c, 30)
+        self.assertNotIn(1, c.sales.running,
+                         "the nozzle was left up on an empty tank")
+
+    def test_a_shutdown_moves_nothing_and_completes_nothing(self):
+        c = a_site()
+        before = c.tank_level[1]["volume"]
+        sale = c.sales.start(1, 10.0, rate=600.0)
+        with _blocked(c):
+            for _ in range(3):
+                seconds(c, 30)
+            self.assertEqual(sale.sold, 0.0,
+                             "a sale progressed while the pump was dead")
+        self.assertAlmostEqual(c.tank_level[1]["volume"], before, delta=1e-6)
+
+    def test_the_meter_does_not_turn_when_no_fuel_passed(self):
+        """`meter_flow` is what BIR and AccuChart book from. Booking a
+        transaction for fuel that never left is the same defect one step
+        downstream."""
+        c = a_site()
+        c.sales.start(1, 10.0, rate=600.0)
+        with _blocked(c):
+            seconds(c, 30)
+            self.assertEqual(c.meter_flow.get(1, 0.0), 0.0)
+
+    def test_an_ordinary_sale_is_untouched(self):
+        c = a_site()
+        before = c.tank_level[1]["volume"]
+        sale = c.sales.start(1, 10.0, rate=600.0)
+        seconds(c, 30)
+        self.assertAlmostEqual(sale.sold, 5.0, delta=0.2)
+        self.assertAlmostEqual(c.tank_level[1]["volume"], before - sale.sold,
+                               delta=0.2)
+        seconds(c, 40)
+        self.assertNotIn(1, c.sales.running)
+
+    def test_a_partly_served_sale_keeps_the_part_it_got(self):
+        """Not all or nothing: the tank had some, and that much was sold."""
+        c = a_site()
+        c.tank_level[1]["volume"] = 3.0
+        sale = c.sales.start(1, 20.0, rate=600.0)
+        seconds(c, 30)
+        self.assertGreater(sale.sold, 0.0)
+        self.assertLessEqual(sale.sold, 3.0 + 1e-6)
+
+    def test_a_shutdown_that_lifts_lets_the_sale_go_on(self):
+        """The starve counter takes two intervals, so a shutdown that
+        clears inside one tick does not hang up a sale about to be served."""
+        c = a_site()
+        sale = c.sales.start(1, 10.0, rate=600.0)
+        with _blocked(c):
+            seconds(c, 10)
+        seconds(c, 30)
+        self.assertIn(1, c.sales.running)
+        self.assertGreater(sale.sold, 0.0)
+
+
+class _blocked:
+    """Hold every nozzle on this console down, the way an ISD shutdown
+    does, for the life of a `with`."""
+
+    def __init__(self, console):
+        self.c = console
+
+    def __enter__(self):
+        self._was = self.c.isd_shutdown_active
+        self.c.isd_shutdown_active = lambda: True
+        return self
+
+    def __exit__(self, *exc):
+        self.c.isd_shutdown_active = self._was
+        return False
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 import struct                                              # noqa: E402
 
 from tls350sim import bir, presets, printer, recon         # noqa: E402
@@ -26,6 +28,7 @@ from tls350sim.console import Console                      # noqa: E402
 from tls350sim.meterid import meter_key                    # noqa: E402
 from tls350sim.wire import Handler                         # noqa: E402
 from tests.test_console import start_at                    # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_site(hours=15, at=10):
@@ -167,7 +170,7 @@ class TheFourFamilies(unittest.TestCase):
         c, h = a_site()
         c.software.pop("bir", None)
         for tok in recon.RECON:
-            self.assertIn("9999", send(h, "I" + tok + "00"), tok)
+            self.assertTrue(is_bare(send(h, "I" + tok + "00")), tok)
 
     def test_the_book_family_reports_the_book_inventory(self):
         """Not the gauged deliveries -- so a ticket that never arrived shows
@@ -1725,7 +1728,7 @@ class TheAlarmThresholdKeepsItsDocumentedRange(unittest.TestCase):
         c, h = self.a_console()
         self.set_threshold(h, "01.00")
         for text in ("05.01", "07.00", "99.99"):
-            self.assertIn("9999", self.set_threshold(h, text), text)
+            self.assertTrue(is_refused(self.set_threshold(h, text)), text)
             self.assertAlmostEqual(c.limit("798", 0), 1.0, places=4,
                                    msg="a refused Set must not store")
 

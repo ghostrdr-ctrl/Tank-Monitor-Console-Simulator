@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tls350sim import leaktest, pressure, printer                # noqa: E402
 from tls350sim.console import Console                            # noqa: E402
 from tls350sim.wire import Handler                               # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 SOH = b"\x01"
 
@@ -225,7 +226,10 @@ class ALineOfTwoDiameters(unittest.TestCase):
         3 inch. Both were entered; only one is non-zero."""
         c = a_line(pipe="01")
         c.values["S78501"] = "01" + "01"
-        del c.values["S78901"]
+        # 0 feet of 2 inch ENTERED, as the docstring says. This used to
+        # delete the value instead, and an unentered length is the 501 the
+        # bench TLS-350 holds out of a cold start and warns about.
+        c.values["S78901"] = "01" + struct.pack(">f", 0.0).hex().upper()
         c.values["S77F01"] = "01" + struct.pack(">f", 200.0).hex().upper()
         self.assertNotIn("210101", c.setup_warnings())
 
@@ -377,9 +381,17 @@ class TheFourFaultsTheQuickHelpStates(unittest.TestCase):
 
     def test_a_negative_reading_is_an_open_transducer(self):
         """p.11: "when the pressure transducer is not connected to the PLLD
-        Interface Module the pressure reading is negative"."""
+        Interface Module the pressure reading is negative".
+
+        And a TEST is what notices: the bench TLS-350's Q2 sat switched on
+        for four minutes with nothing on its input and posted only its
+        SETUP DATA WARNING, where Q1's came fifteen seconds into a test
+        (2026-09-19, `transcripts/idleline.log`)."""
         c = a_line()
-        c.lines.line("plld", 1).pressure = -3.0
+        ln = c.lines.line("plld", 1)
+        ln.pressure = -3.0
+        self.assertNotIn("210601", self.live(c))
+        ln.tried = True
         self.assertIn("210601", self.live(c))
 
     def test_a_healthy_line_is_not_open(self):
@@ -663,6 +675,10 @@ class TheLineEquipmentFaultAlarm(unittest.TestCase):
         ln.pd_ref = ref
         ln.handle = True
         ln.handle_since = time.mktime(c.now())
+        # a line that is dispensing has its pump running, which is what
+        # makes the handle coming down a DISPENSE with a pressure to read
+        # off it rather than a handle lifted against a shut-down pump
+        ln.pump, ln.isolated = True, False
         ln.pressure = pd
         c.lines.handle("plld", 1, False)         # the handle goes down
         return c, ln
@@ -977,6 +993,53 @@ class Dispensing(unittest.TestCase):
         run(c)
         self.assertIsNotNone(c.leaks.result("plld", 1, "gross"))
 
+    def test_a_handle_on_a_shut_down_line_leaves_nothing_to_measure(self):
+        """No pump ran, so no fuel moved and there is no dispense to follow.
+
+        Pd is "the dispense pressure", read while the line was flowing, and
+        this took it off a line standing at its rest pressure -- which is
+        under the 5 psi that makes the console adopt a reading as Pd_ref,
+        so one lift of a handle on a dead line moved the reference the
+        Dispensing Pressure Monitor judges a MONTH of real dispenses
+        against. The gross test went with it: "a gross test always follows
+        the completion of a dispense", and this one never started.
+        FIDELITY U51.
+        """
+        c = a_line(leak=0.02)
+        c.leaks.disabled.add(("plld", 1))
+        ln = c.lines.line("plld", 1)
+        c.lines.handle("plld", 1, True)
+        self.assertFalse(ln.pump)
+        self.assertEqual(ln.state, "DISPENSING DISABLED")
+        c.lines.handle("plld", 1, False)
+        self.assertIsNone(ln.pd)
+        self.assertIsNone(ln.pd_ref)
+        self.assertFalse(ln.running())
+        self.assertEqual(ln.state, "TEST COMPLETE")
+
+    def test_the_pump_answers_a_handle_that_outlasted_the_shutdown(self):
+        """A handle is a standing REQUEST to the pump.
+
+        The other half of U4's sentence: the console drops the STP at the
+        verdict, and it picks it up again when the line comes back under a
+        handle that is still up -- a passed test, or an acknowledgement on a
+        site whose LINE RE-ENABLE METHOD is ACKNOWLEDGE ALARM. The line
+        re-pressurised with its PUMP bit still OFF and its state word still
+        DISPENSING DISABLED, so 381 read ENABLED / PUMP OFF / HANDLE ON and
+        the diagnostic read thirty psi over PUMP OFF, on a nozzle that was
+        pouring. FIDELITY U51.
+        """
+        c = a_line(leak=0.02)
+        c.leaks.disabled.add(("plld", 1))
+        ln = c.lines.line("plld", 1)
+        c.lines.handle("plld", 1, True)
+        self.assertFalse(ln.pump)
+        c.leaks.disabled.discard(("plld", 1))
+        c.clock_offset += 30.0
+        c.lines.tick()
+        self.assertTrue(ln.pump)
+        self.assertEqual(ln.state, "DISPENSING")
+
     def test_lifting_the_handle_aborts_a_running_test(self):
         """"If a dispense request occurs during any test, the test is aborted"."""
         c = a_line(leak=0.02)
@@ -1049,6 +1112,51 @@ class WhatTheScreensSay(unittest.TestCase):
         head, tail = c.diag_value("line_pressure", 1, "plld").split(chr(10))
         self.assertRegex(head, r"^Q 1: +\d+\.\d\d\d PSI PUMP OFF$")
         self.assertEqual(tail, "TEST COMPLETE HANDLE OFF")
+
+    def test_the_screen_before_it_is_the_dispensing_flag(self):
+        """"Q 1: (PRODUCT LABEL)" over "DISPENSING DISABLED", annotated
+        "Dispensing is ENABLED or DISABLED" -- 577013-344 Rev H Figure 19,
+        and 576013-902 Rev AA and 576013-923 Rev V draw the same screen for
+        each family.
+
+        It was the figure's own second line, drawn verbatim for every line
+        of every site in every state: the screen a technician goes to in
+        order to find out whether a line is dispensing said DISABLED with
+        the 3.0 passed, the shutdown cleared and fuel leaving the nozzle.
+        Reported from the bench. FIDELITY U51.
+        """
+        from tls350sim import wirelines
+        c = a_line(leak=0.02)
+        self.assertEqual(c.diag_value("line_dispensing", 1, "plld"),
+                         "DISPENSING ENABLED")
+        c.leaks.disabled.add(("plld", 1))
+        self.assertEqual(c.diag_value("line_dispensing", 1, "plld"),
+                         "DISPENSING DISABLED")
+        # and it is the SAME flag 381's DISPENSING column prints, not a
+        # second list of reasons kept beside it
+        self.assertEqual(wirelines._dispensing(c, "plld", 1), "DISABLED")
+        c.leaks.disabled.discard(("plld", 1))
+        self.assertEqual(wirelines._dispensing(c, "plld", 1), "ENABLED")
+
+    def test_the_dispensing_flag_answers_for_the_line_it_is_showing(self):
+        """Every line on the walk, not line 1 with the others' word."""
+        c = a_line(leak=0.02)
+        c.values["S78102"] = "021"
+        c.values["S78202"] = "02" + "PLLD LINE 2".ljust(20)
+        c.leaks.disabled.add(("plld", 2))
+        self.assertEqual(c.diag_value("line_dispensing", 1, "plld"),
+                         "DISPENSING ENABLED")
+        self.assertEqual(c.diag_value("line_dispensing", 2, "plld"),
+                         "DISPENSING DISABLED")
+
+    def test_a_wplld_line_has_the_same_screen(self):
+        """576013-923 Rev V p.38: `W X: Product Label` over the flag."""
+        c = a_line(kind="wplld")
+        self.assertEqual(c.diag_value("line_dispensing", 1, "wplld"),
+                         "DISPENSING ENABLED")
+        c.leaks.disabled.add(("wplld", 1))
+        self.assertEqual(c.diag_value("line_dispensing", 1, "wplld"),
+                         "DISPENSING DISABLED")
 
     def test_the_pressure_moves_while_the_test_runs(self):
         """A second at a time, because the whole test is thirty of them now."""
@@ -1177,10 +1285,10 @@ class OverTheWire(unittest.TestCase):
         self.ask(c, b"S08101149")
         self.assertIn("STATUS: TEST ABORTED", self.ask(c, b"S08201149"))
 
-    def test_a_console_with_no_line_leak_card_says_9999(self):
+    def test_a_console_with_no_line_leak_card_answers_a_bare_frame(self):
         c = a_line(leak=0.02)
         c.modules["plld"] = False
-        self.assertIn("9999", self.ask(c, b"S08101149"))
+        self.assertTrue(is_bare(self.ask(c, b"S08101149")))
 
 
 class TheWirelessOnesAreTheSameTest(unittest.TestCase):

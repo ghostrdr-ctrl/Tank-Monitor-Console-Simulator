@@ -29,6 +29,7 @@ process-wide latch and not a parameter.
 Nothing here binds to anything but loopback.
 """
 import json
+import ntpath
 import os
 import re
 import socket
@@ -41,6 +42,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from tls350sim import exposed, presets, wire, xport, xportweb   # noqa: E402
+from tls350sim import listen                                   # noqa: E402
 from tls350sim import xportrec as R                             # noqa: E402
 from tls350sim import xportmenu                                 # noqa: E402
 from tls350sim import ifsf                                      # noqa: E402
@@ -176,6 +178,14 @@ class NoWriteSurvivesTheFreeze(unittest.TestCase):
             "the capture file itself -- the honeypot's whole product, "
             "append-only, to a path the operator named and the network "
             "cannot steer",
+        ("exposed.py", "_rotate"):
+            "the capture file's own rotation, and the only thing that "
+            "holds its quota -- freezing it would leave an EXPOSED "
+            "console, the one that most needs the bound, unable to keep "
+            "it. The paths are the operator's own with an integer suffix, "
+            "so the network cannot steer them, and the only file it "
+            "removes is the oldest capture this program wrote. "
+            "FIDELITY R32",
         ("paths.py", "user_data_dir"):
             "creates the data directory; makes no file and writes no "
             "content, and the path has no network input",
@@ -449,9 +459,14 @@ class TheResponseDelayIsNotAFingerprint(unittest.TestCase):
         seen = {round(hot.delay(), 6) for _ in range(200)}
         self.assertGreater(len(seen), 100,
                            "a delay that repeats is itself a fingerprint")
+        # the bench TLS-350's first byte, timed from its own subnet
+        # (2026-09-19): 35 to 120 ms
         for d in seen:
-            self.assertGreaterEqual(d, 0.15)
-            self.assertLessEqual(d, 0.75)
+            self.assertGreaterEqual(d, 0.035)
+            self.assertLessEqual(d, 0.12)
+        # and the rest at its line's pace, not in one burst
+        self.assertAlmostEqual(hot.pace, 0.00125)
+        self.assertIsNone(bench.pace)
 
     def test_the_delay_does_not_disturb_the_console_random_stream(self):
         """`traffic.py` is documented as the only module drawing from the
@@ -572,6 +587,195 @@ class TheCaptureFile(unittest.TestCase):
     def test_printable_shows_the_control_bytes_by_name(self):
         self.assertEqual(exposed.printable(b"\x01AB\x03".hex()),
                          "<SOH>AB<ETX>")
+
+
+class _Brick:
+    """A file handle that takes the first N writes and then cannot.
+
+    A full disk, in other words, or a volume pulled out from under the
+    process: the handle is still open and every write from here on raises.
+    """
+
+    def __init__(self, ok=0, exc=None):
+        self.left = ok
+        self.exc = exc or OSError(28, "No space left on device")
+        self.written = []
+        self.closed = False
+
+    def write(self, text):
+        if self.left <= 0:
+            raise self.exc
+        self.left -= 1
+        self.written.append(text)
+
+    def flush(self):
+        pass
+
+    def close(self):
+        self.closed = True
+
+
+class TheCaptureSaysWhenItStopsWriting(unittest.TestCase):
+    """FIDELITY R34. `_put` counted the row, wrote it, and swallowed the
+    `OSError`.
+
+    So a full disk, a revoked permission or a removed volume stopped the
+    recording while the counter climbed and the view went on scrolling --
+    and a honeypot whose whole product is the capture then looks exactly
+    the same as one having a quiet night. The state below is what tells
+    the two apart.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "cap.jsonl")
+        self.said = []
+
+    def a_capture(self, ok=0):
+        cap = exposed.Capture(self.path, on_fault=self.said.append)
+        # The real handle is closed directly rather than through `close()`,
+        # which would latch `_closed` and make every fault below a
+        # deliberate shutdown.
+        cap._fh.close()
+        cap._fh = _Brick(ok=ok)
+        return cap
+
+    def test_a_healthy_capture_says_nothing_and_reports_nothing(self):
+        cap = self.a_capture(ok=10)
+        cap.record("in", b"\x01I20100", peer="198.51.100.1")
+        self.assertTrue(cap.healthy())
+        self.assertIsNone(cap.stats()["fault"])
+        self.assertEqual(cap.stats()["unwritten"], 0)
+        self.assertEqual(self.said, [])
+
+    def test_a_write_that_fails_is_counted_as_lost_not_as_recorded(self):
+        cap = self.a_capture()
+        cap.record("in", b"\x01I20100", peer="198.51.100.1")
+        st = cap.stats()
+        self.assertEqual(st["total"], 1, "the exchange still happened")
+        self.assertEqual(st["unwritten"], 1, "and it is not on the disk")
+        self.assertIn("No space left", st["fault"])
+        self.assertFalse(cap.healthy())
+
+    def test_dropped_and_unwritten_are_not_the_same_number(self):
+        """`dropped` fell off the view's ring and is safe on the disk.
+        `unwritten` never reached the disk at all. Showing one as the other
+        is how a silent outage stays silent."""
+        cap = exposed.Capture(ring=2, on_fault=self.said.append)
+        for i in range(6):
+            cap.record("in", bytes([i]), peer="1.1.1.1")
+        st = cap.stats()
+        self.assertTrue(st["dropped"])
+        self.assertEqual(st["unwritten"], 0)
+        self.assertIsNone(st["fault"])
+
+    def test_it_is_said_once_per_outage_and_not_once_per_row(self):
+        cap = self.a_capture()
+        for _ in range(50):
+            cap.record("in", b"junk", peer="198.51.100.1")
+        self.assertEqual(cap.stats()["unwritten"], 50)
+        self.assertEqual(len(self.said), 1,
+                         "a full disk fails on every write; one line, not 50")
+
+    def test_recovery_is_said_too(self):
+        """An operator who freed the disk needs to know the capture came
+        back, or the fix reads as having done nothing."""
+        cap = self.a_capture()
+        cap.record("in", b"a", peer="198.51.100.1")
+        self.assertEqual(len(self.said), 1)
+        cap._fh = _Brick(ok=5)
+        cap.record("in", b"b", peer="198.51.100.1")
+        self.assertEqual(self.said[1], None)
+        self.assertIsNone(cap.stats()["fault"])
+        self.assertEqual(cap.stats()["unwritten"], 1,
+                         "the row lost in the outage is still lost")
+
+    def test_a_second_outage_is_said_again(self):
+        cap = self.a_capture()
+        cap.record("in", b"a", peer="1.1.1.1")
+        cap._fh = _Brick(ok=1)
+        cap.record("in", b"b", peer="1.1.1.1")     # recovers
+        cap.record("in", b"c", peer="1.1.1.1")     # and fails again
+        self.assertEqual(len(self.said), 3)
+        self.assertIsNotNone(self.said[0])
+        self.assertIsNone(self.said[1])
+        self.assertIsNotNone(self.said[2])
+
+    def test_a_path_that_cannot_be_opened_faults_at_the_start(self):
+        """The one outage the operator is standing there for."""
+        bad = os.path.join(self.path, "under-a-file", "cap.jsonl")
+        open(self.path, "w").close()
+        cap = exposed.Capture(bad, on_fault=self.said.append)
+        self.assertIsNotNone(cap.fault)
+        self.assertIn("cannot open", cap.fault)
+        self.assertEqual(len(self.said), 1)
+
+    def test_rows_are_counted_as_lost_while_the_file_will_not_open(self):
+        bad = os.path.join(self.path, "under-a-file", "cap.jsonl")
+        open(self.path, "w").close()
+        cap = exposed.Capture(bad, on_fault=self.said.append)
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")
+        cap.record("in", b"\x01I20200", peer="1.1.1.1")
+        self.assertEqual(cap.stats()["unwritten"], 2,
+                         "an outage reporting nothing lost is the same lie")
+
+    def test_a_ring_only_capture_is_not_a_fault(self):
+        """No path was named, so nothing was promised the disk."""
+        cap = exposed.Capture(on_fault=self.said.append)
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")
+        self.assertTrue(cap.healthy())
+        self.assertEqual(self.said, [])
+
+    def test_a_notifier_that_raises_cannot_kill_the_listener(self):
+        def angry(_why):
+            raise RuntimeError("the view fell over")
+        cap = exposed.Capture(self.path, on_fault=angry)
+        cap._fh = _Brick()
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")     # must not raise
+        self.assertIsNotNone(cap.fault)
+
+    def test_closing_on_purpose_is_not_an_outage(self):
+        """`close()` runs while the listener threads are still alive, so a
+        row already past the lock lands on a closed handle. Announcing that
+        would end every clean run with a fault it invented itself."""
+        cap = exposed.Capture(self.path, on_fault=self.said.append)
+        fh = cap._fh
+        cap.close()
+        cap._fh = fh                    # the row that was already in flight
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")
+        self.assertIsNone(cap.fault)
+        self.assertEqual(self.said, [])
+
+    def test_a_capture_reopened_after_a_close_can_fault_again(self):
+        """The counterpart: the silence is for the close, not for ever."""
+        cap = exposed.Capture(self.path, on_fault=self.said.append)
+        cap.close()
+        second = os.path.join(self.dir, "next.jsonl")
+        cap.enable(True, second)
+        cap.close()
+        cap._fh = _Brick()
+        cap._closed = False             # as `_open` leaves it
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")
+        self.assertIsNotNone(cap.fault)
+        self.assertEqual(len(self.said), 1)
+
+    def test_a_path_that_will_not_open_on_enable_still_says_so(self):
+        """`enable` closes the old file before opening the new one, and
+        the fault from the failed open must survive that close."""
+        cap = exposed.Capture(self.path, on_fault=self.said.append)
+        blocker = os.path.join(self.dir, "wall")
+        open(blocker, "w").close()
+        cap.enable(True, os.path.join(blocker, "under-a-file", "cap.jsonl"))
+        self.assertIsNotNone(cap.fault)
+        self.assertIn("cannot open", cap.fault)
+        self.assertEqual(len(self.said), 1)
+
+    def test_the_view_still_sees_the_rows_it_could_not_write(self):
+        """The ring is memory and the outage is the disk's. What arrived
+        during one is still worth showing."""
+        cap = self.a_capture()
+        cap.record("in", b"\x01I20100", peer="1.1.1.1")
+        self.assertEqual(len(cap.rows()), 1)
 
 
 class TheLevelsMeanWhatTheySay(unittest.TestCase):
@@ -941,7 +1145,8 @@ class ARepliesFrameCannotBeForgedFromInside(unittest.TestCase):
         self.c.values["S50301"] = "LINE ONE"
         self.c.values["S50302"] = "LINE TWO"
         reply = self.h.handle(b"\x01I10100")
-        self.assertIn(b"LINE ONE\r\nLINE TWO", reply)
+        # each header line padded to its twenty, as the bench sends it
+        self.assertIn(b"LINE ONE            \r\nLINE TWO", reply)
 
 
 class ARefusalCostsWhatAnAnswerCosts(unittest.TestCase):
@@ -1151,6 +1356,556 @@ class TheCardIsNotAReflector(unittest.TestCase):
                          "a bench card rate-limited its own discovery")
 
 
+class TheCaptureSeesTheTrafficWorthSeeing(unittest.TestCase):
+    """FIDELITY R28.
+
+    `xportweb` recorded a request only after its `Content-Length` had been
+    validated, so the malformed ones -- the ones a scanner sends -- were
+    refused with a 400 and recorded nowhere: `Content-Length: -1` produced
+    an answer and zero capture rows. HTTP responses were not captured at
+    all, and neither was anything the setup menu printed.
+    """
+
+    def setUp(self):
+        self.cap = exposed.Capture()
+        self.cfg = xport.XPortConfig()
+        self.srv = xportweb._Server(("127.0.0.1", 0), self.cfg,
+                                    capture=self.cap)
+        self.port = self.srv.server_address[1]
+        threading.Thread(target=self.srv.serve_forever, daemon=True).start()
+        self.addCleanup(self.srv.server_close)
+        self.addCleanup(self.srv.shutdown)
+
+    def raw(self, request):
+        s = socket.create_connection(("127.0.0.1", self.port), 5)
+        s.sendall(request)
+        out = b""
+        try:
+            while True:
+                b = s.recv(4096)
+                if not b:
+                    break
+                out += b
+        except OSError:
+            pass
+        s.close()
+        time.sleep(0.15)
+        return out
+
+    def rows(self, direction):
+        return [r for r in self.cap.rows() if r["dir"] == direction]
+
+    def test_a_malformed_length_is_recorded_and_not_only_refused(self):
+        out = self.raw(b"POST /secure/setup.cgi HTTP/1.0\r\n"
+                       b"Content-Length: -1\r\n\r\n")
+        self.assertIn(b"400", out, "it was not refused at all")
+        ins = self.rows("in")
+        self.assertTrue(ins, "the refused request was recorded nowhere")
+        self.assertIn("not a count", ins[0].get("note") or "")
+        self.assertIn(b"Content-Length: -1", bytes.fromhex(ins[0]["raw"]))
+
+    def test_an_over_long_form_is_recorded_too(self):
+        self.raw(b"POST /secure/setup.cgi HTTP/1.0\r\n"
+                 b"Content-Length: 999999999\r\n\r\n")
+        ins = self.rows("in")
+        self.assertTrue(ins)
+        self.assertIn("over the", ins[0].get("note") or "")
+
+    def test_the_response_is_captured_as_well_as_the_request(self):
+        """The file held one side of every exchange, so a reader could not
+        tell a 404 from a served page."""
+        self.raw(b"GET /nope HTTP/1.0\r\n\r\n")
+        outs = self.rows("out")
+        self.assertTrue(outs, "no HTTP response was ever captured")
+        body = bytes.fromhex(outs[-1]["raw"])
+        self.assertIn(b"404", body)
+        self.assertIn(b"ERROR 404", body)
+        self.assertEqual(outs[-1]["cmd"], "404")
+
+    def test_the_401_is_captured(self):
+        """The most interesting response this server sends: what a scanner
+        meets before it starts guessing."""
+        self.cfg.telnet_password = "ABCD"
+        self.raw(b"GET /secure/ltx_conf.htm HTTP/1.0\r\n\r\n")
+        outs = self.rows("out")
+        self.assertTrue(outs)
+        self.assertEqual(outs[-1]["cmd"], "401")
+        self.assertIn(b"WWW-Authenticate", bytes.fromhex(outs[-1]["raw"]))
+
+    def test_an_ordinary_page_still_records_both_directions(self):
+        self.raw(b"GET / HTTP/1.0\r\n\r\n")
+        self.assertTrue(self.rows("in"))
+        self.assertTrue(self.rows("out"))
+        self.assertEqual(self.rows("in")[0]["cmd"], "GET /")
+
+
+class TheSetupMenuRecordsWhatItPrints(unittest.TestCase):
+    """FIDELITY R28's third part. The capture held everything a stranger
+    typed at the setup menu and nothing the menu said back."""
+
+    def test_the_banner_and_the_prompt_are_captured(self):
+        cap = exposed.Capture()
+        cfg = xport.XPortConfig()
+        port = free_port()
+        srv = socket.socket()
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("127.0.0.1", port))
+        srv.listen(1)
+        try:
+            threading.Thread(
+                target=lambda: xportmenu._session(
+                    cfg, srv.accept()[0], None, peer=("198.51.100.5", 4444),
+                    capture=cap),
+                daemon=True).start()
+            s = socket.create_connection(("127.0.0.1", port), 5)
+            s.settimeout(3)
+            s.sendall(b"\r\n")
+            time.sleep(0.5)
+            try:
+                s.recv(4096)
+            except OSError:
+                pass
+            s.close()
+        finally:
+            srv.close()
+        time.sleep(0.3)
+        outs = [r for r in cap.rows() if r["dir"] == "out"]
+        self.assertTrue(outs, "the menu printed and nothing was recorded")
+        printed = b"".join(bytes.fromhex(r["raw"]) for r in outs)
+        self.assertTrue(printed.strip(), "the recorded output was empty")
+
+
+class AStoppedListenerStopsAnswering(unittest.TestCase):
+    """FIDELITY R30.
+
+    Every listener here was stopped by closing its socket from another
+    thread, and on Linux a thread already blocked in `accept()` is not
+    woken by that: the call stays blocked until a connection arrives, and
+    then it is served -- by a listener that was shut down. Reproduced by
+    connecting after `stop()` had returned and pulling inventory, and
+    getting it.
+    """
+
+    def setUp(self):
+        self.console = a_console()
+
+    def test_the_tunnel_refuses_after_it_is_stopped(self):
+        stop = threading.Event()
+        port = free_port()
+        holder = {}
+        threading.Thread(
+            target=wire.serve,
+            args=(self.console, "127.0.0.1", port, False, None),
+            kwargs={"on_socket": lambda s: holder.__setitem__("srv", s),
+                    "running": lambda: not stop.is_set()},
+            daemon=True).start()
+        for _ in range(100):
+            if "srv" in holder:
+                break
+            time.sleep(0.02)
+        self.assertIn("srv", holder, "the tunnel never came up")
+
+        # It answers while it is running.
+        s = socket.create_connection(("127.0.0.1", port), 5)
+        s.recv(len(wire.PROBE))
+        s.sendall(b"\x01I20100")
+        self.assertTrue(s.recv(4096), "it was not answering to begin with")
+        s.close()
+
+        # Now stop it, the way `CardNetwork.stop` does, and wait out one
+        # tick of the listener's own loop.
+        stop.set()
+        time.sleep(listen.TICK * 4)
+
+        served = False
+        try:
+            s = socket.create_connection(("127.0.0.1", port), 2)
+            s.settimeout(2)
+            s.sendall(b"\x01I20100")
+            served = bool(s.recv(4096))
+            s.close()
+        except OSError:
+            served = False          # refused or reset, which is the point
+        self.assertFalse(served,
+                         "a stopped tunnel answered a command")
+
+    def test_a_connection_in_the_gap_is_closed_unanswered(self):
+        """"Stop the listener" has to mean "refuse what arrives after it"
+        as well as "stop waiting", and there is always a gap between."""
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        stopped = {"yes": False}
+        out = {}
+
+        def loop():
+            out["got"] = listen.accept(srv, lambda: not stopped["yes"])
+
+        t = threading.Thread(target=loop, daemon=True)
+        t.start()
+        time.sleep(0.05)
+        stopped["yes"] = True                   # stopped, then knocked on
+        c = socket.create_connection(srv.getsockname(), 2)
+        t.join(5)
+        self.assertIsNone(out.get("got"),
+                          "a stopped listener took the connection")
+        c.close()
+        srv.close()
+
+    def test_a_closed_socket_ends_the_wait_instead_of_raising(self):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        srv.close()
+        self.assertFalse(listen.wait_readable(srv, timeout=0.05))
+        self.assertIsNone(listen.accept(srv, timeout=0.05))
+
+    def test_the_predicate_is_asked_and_not_only_the_socket(self):
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        asked = {"n": 0}
+
+        def running():
+            asked["n"] += 1
+            return asked["n"] < 3
+        self.assertIsNone(listen.accept(srv, running, timeout=0.01))
+        self.assertGreaterEqual(asked["n"], 3, "it never re-asked")
+        srv.close()
+
+    def test_with_no_predicate_it_still_waits_like_an_accept(self):
+        """Every existing caller hands none, and must be unaffected."""
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen(1)
+        out = {}
+        t = threading.Thread(target=lambda: out.__setitem__(
+            "got", listen.accept(srv)), daemon=True)
+        t.start()
+        c = socket.create_connection(srv.getsockname(), 2)
+        t.join(5)
+        self.assertIsNotNone(out.get("got"), "an ordinary accept was refused")
+        out["got"][0].close()
+        c.close()
+        srv.close()
+
+
+class TheCaptureIsBounded(unittest.TestCase):
+    """FIDELITY R32.
+
+    Every byte that arrives is stored hex-encoded, two characters a byte
+    before the JSON around it: 2.12 bytes on disk for every byte received,
+    so a connection sending junk filled the disk FASTER than it sent. There
+    was no size limit on the file, no rotation, no cap on one connection's
+    share and no rate on the bytes coming in -- only on the connections,
+    which a flood down one accepted connection never touches.
+
+    Hex is the right storage and the fix is not to decode it.
+    """
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "cap.jsonl")
+
+    def files(self):
+        return sorted(n for n in os.listdir(self.dir) if n.startswith("cap."))
+
+    def test_the_file_rotates_at_its_quota(self):
+        cap = exposed.Capture(self.path, max_bytes=4096, keep=2)
+        for i in range(400):
+            cap.record("in", bytes([i % 256]) * 64, peer="198.51.100.1")
+        cap.close()
+        self.assertTrue(cap.rotations, "it never rotated")
+        self.assertIn("cap.jsonl", self.files())
+        self.assertIn("cap.jsonl.1", self.files())
+
+    def test_nothing_grows_without_end(self):
+        """The whole point: bytes on disk stay bounded however many arrive."""
+        cap = exposed.Capture(self.path, max_bytes=4096, keep=2)
+        for i in range(3000):
+            cap.record("in", b"\xde\xad\xbe\xef" * 64, peer="198.51.100.1")
+        cap.close()
+        total = sum(os.path.getsize(os.path.join(self.dir, n))
+                    for n in self.files())
+        self.assertLess(total, 4096 * 5,
+                        "the quota did not bound the disk: %d bytes in %s"
+                        % (total, self.files()))
+
+    def test_only_keep_old_files_survive(self):
+        cap = exposed.Capture(self.path, max_bytes=2048, keep=2)
+        for i in range(2000):
+            cap.record("in", b"x" * 64, peer="198.51.100.1")
+        cap.close()
+        self.assertEqual(self.files(),
+                         ["cap.jsonl", "cap.jsonl.1", "cap.jsonl.2"])
+
+    def test_the_old_file_is_renamed_and_not_truncated(self):
+        """A capture is evidence. The quota bounds the disk; it does not
+        decide that the last minute was the interesting one."""
+        cap = exposed.Capture(self.path, max_bytes=2048, keep=2)
+        for _ in range(60):
+            cap.record("in", b"y" * 64, peer="198.51.100.1")
+        cap.close()
+        older = os.path.join(self.dir, "cap.jsonl.1")
+        self.assertTrue(os.path.exists(older))
+        self.assertTrue(os.path.getsize(older) > 0,
+                        "the rotated file was emptied instead of kept")
+        with open(older, encoding="utf-8") as fh:
+            rows = [json.loads(ln) for ln in fh if ln.strip()]
+        self.assertTrue(rows)
+        self.assertEqual(bytes.fromhex(rows[0]["raw"]), b"y" * 64)
+
+    def test_a_restart_counts_what_is_already_in_the_file(self):
+        """Seeded from zero, a process restarted every few minutes would
+        append past the quota for ever."""
+        with open(self.path, "w", encoding="utf-8") as fh:
+            fh.write("x" * 5000)
+        cap = exposed.Capture(self.path, max_bytes=4096, keep=1)
+        self.assertGreaterEqual(cap._written, 5000)
+        cap.record("in", b"z", peer="1.1.1.1")
+        self.assertTrue(cap.rotations, "it appended past the quota")
+        cap.close()
+
+    def test_no_quota_still_means_no_quota(self):
+        cap = exposed.Capture(self.path, max_bytes=None)
+        for _ in range(200):
+            cap.record("in", b"q" * 64, peer="1.1.1.1")
+        cap.close()
+        self.assertEqual(cap.rotations, 0)
+        self.assertEqual(self.files(), ["cap.jsonl"])
+
+    def test_the_default_is_a_quota_and_not_none(self):
+        """A bound nobody switches on is not a bound."""
+        cap = exposed.Capture(self.path)
+        self.assertIsNotNone(cap.max_bytes)
+        self.assertGreater(cap.keep, 0)
+        cap.close()
+
+
+class OneConnectionCannotCrowdOutTheRest(unittest.TestCase):
+    """FIDELITY R32's second half: a cap on one connection's share."""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        self.path = os.path.join(self.dir, "cap.jsonl")
+        self.cap = exposed.Capture(self.path)
+        self.cap.MAX_SESSION_BYTES = 1024
+
+    def test_the_bytes_stop_and_the_rows_do_not(self):
+        s = self.cap.session(peer="198.51.100.1", port=4444)
+        for _ in range(40):
+            s.record("in", b"j" * 64)
+        rows = self.cap.rows()
+        self.assertEqual(len(rows), 40, "the rows stopped, not just the hex")
+        self.assertTrue(s.truncated)
+        self.assertEqual(sum(len(bytes.fromhex(r["raw"])) for r in rows),
+                         1024, "more than the budget was stored")
+
+    def test_the_length_is_still_the_truth(self):
+        """The volume of a flood is the part worth keeping."""
+        s = self.cap.session(peer="198.51.100.1", port=4444)
+        for _ in range(40):
+            s.record("in", b"j" * 64)
+        rows = self.cap.rows()
+        self.assertEqual(sum(r["bytes"] for r in rows), 40 * 64)
+        self.assertEqual(s.bytes, 40 * 64)
+
+    def test_it_says_once_where_the_line_was_drawn(self):
+        s = self.cap.session(peer="198.51.100.1", port=4444)
+        for _ in range(40):
+            s.record("in", b"j" * 64)
+        notes = [r for r in self.cap.rows() if r.get("note")]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("storing lengths only", notes[0]["note"])
+
+    def test_another_connection_has_its_own_budget(self):
+        """The point of a PER-CONNECTION cap: a flooder must not spend
+        anybody else's share."""
+        flood = self.cap.session(peer="198.51.100.1", port=4444)
+        for _ in range(40):
+            flood.record("in", b"j" * 64)
+        polite = self.cap.session(peer="203.0.113.9", port=5555)
+        polite.record("in", b"\x01I20100")
+        self.assertFalse(polite.truncated)
+        last = self.cap.rows()[-1]
+        self.assertEqual(bytes.fromhex(last["raw"]), b"\x01I20100")
+        self.assertEqual(last["cmd"], "I20100")
+
+    def test_an_ordinary_session_is_stored_whole(self):
+        s = self.cap.session(peer="203.0.113.9", port=5555)
+        s.record("in", b"\x01I20100")
+        s.record("out", b"\x01ok\x03")
+        self.assertFalse(s.truncated)
+        self.assertEqual([bytes.fromhex(r["raw"]) for r in self.cap.rows()],
+                         [b"\x01I20100", b"\x01ok\x03"])
+
+
+class TheBytesAreRatedAndNotOnlyTheConnections(unittest.TestCase):
+    """FIDELITY R32's third half, on a real socket.
+
+    Counting connections is no limit on a flood that arrives down ONE of
+    them, and the response delay does not slow it either, because that
+    delay is per command and junk never becomes one.
+    """
+
+    def setUp(self):
+        self.console = a_console()
+
+    def test_a_flood_down_one_connection_is_cut_off(self):
+        cap = exposed.Capture(ring=4000)
+        policy = exposed.Policy(exposed.EXPOSED, capture=cap)
+        policy._delay = None            # the delay is not what is measured
+        policy.pace = None
+        policy.max_bytes_per_min = 8192
+        gate = exposed.Gate(policy, capture=cap)
+        with _Served(self.console, policy=policy, capture=cap,
+                     gate=gate) as served:
+            s = served.connect()
+            sent = 0
+            try:
+                for _ in range(200):
+                    s.sendall(b"\x00" * 1024)
+                    sent += 1024
+            except OSError:
+                pass                    # the far end hung up, which is the point
+            time.sleep(0.6)
+            s.close()
+        notes = [r for r in cap.rows() if "byte rate" in (r.get("note") or "")]
+        self.assertTrue(notes, "the flood was never cut off")
+        stored = sum(r["bytes"] for r in cap.rows() if r["dir"] == "in")
+        self.assertLessEqual(stored, 8192 + 4096,
+                             "more than the budget was taken in")
+
+    def test_an_ordinary_poller_is_untouched(self):
+        cap = exposed.Capture()
+        policy = exposed.Policy(exposed.EXPOSED, capture=cap)
+        policy._delay = None
+        policy.pace = None
+        gate = exposed.Gate(policy, capture=cap)
+        with _Served(self.console, policy=policy, capture=cap,
+                     gate=gate) as served:
+            s = served.connect()
+            for _ in range(20):
+                s.sendall(b"\x01I20100")
+                self.assertTrue(s.recv(4096), "the console stopped answering")
+            s.close()
+        self.assertFalse([r for r in cap.rows()
+                          if "byte rate" in (r.get("note") or "")])
+
+    def test_a_bench_tunnel_has_no_byte_limit(self):
+        self.assertIsNone(exposed.Policy(exposed.BENCH).max_bytes_per_min)
+        self.assertIsNotNone(exposed.Policy(exposed.EXPOSED).max_bytes_per_min)
+
+    def test_the_exposed_budget_is_under_what_the_hardware_could_take(self):
+        """A real card reads a 9600 baud line: 72,000 bytes a minute is its
+        physical ceiling, so a limit above that is not a limit."""
+        self.assertLess(exposed.Policy(exposed.EXPOSED).max_bytes_per_min,
+                        72000)
+
+
+class TheSourceTablesHaveACeilingAndNotAThreshold(unittest.TestCase):
+    """FIDELITY R33.
+
+    `datagram_ok` swept its table when it passed 4,096, and a sweep only
+    removed addresses whose timestamps had aged out. Under source churn
+    nothing had aged, so nothing was removed, the table went on growing --
+    6,000 retained past a threshold of 4,096 -- and the O(n) scan ran again
+    on the next packet. Both the memory and the CPU were the attacker's to
+    spend, and a UDP source address is whatever the sender wrote, so the
+    churn costs them nothing.
+    """
+
+    def a_gate(self, level=exposed.EXPOSED):
+        self.t = 1000.0
+        pol = exposed.Policy(level)
+        return exposed.Gate(pol, clock=lambda: self.t)
+
+    def test_the_datagram_table_stops_at_its_ceiling(self):
+        g = self.a_gate()
+        g.DATAGRAM_RATE_ALL = 10 ** 9       # the ceiling, not the rate
+        for i in range(exposed.Gate.SOURCES + 2000):
+            g.datagram_ok("10.%d.%d.%d" % (i >> 16 & 255, i >> 8 & 255,
+                                           i & 255))
+        self.assertLessEqual(len(g._datagrams), exposed.Gate.SOURCES)
+        self.assertTrue(g.sources_evicted)
+
+    def test_the_oldest_source_is_the_one_that_goes(self):
+        g = self.a_gate()
+        g.DATAGRAM_RATE_ALL = 10 ** 9
+        g.SOURCES = 4
+        for ip in ("1.1.1.1", "2.2.2.2", "3.3.3.3", "4.4.4.4"):
+            g.datagram_ok(ip)
+        g.datagram_ok("1.1.1.1")            # touched, so no longer oldest
+        g.datagram_ok("5.5.5.5")            # over the ceiling
+        self.assertNotIn("2.2.2.2", g._datagrams, "the oldest should go")
+        self.assertIn("1.1.1.1", g._datagrams, "a touched source should stay")
+        self.assertIn("5.5.5.5", g._datagrams)
+        self.assertEqual(len(g._datagrams), 4)
+
+    def test_a_forged_flood_is_bounded_by_the_global_rate(self):
+        """The per-source rate is no limit at all when the source is
+        forged: a new address on every packet is under its own allowance
+        for ever. This is what actually stops a reflector."""
+        g = self.a_gate()
+        answered = sum(1 for i in range(5000)
+                       if g.datagram_ok("10.%d.%d.%d"
+                                        % (i >> 16 & 255, i >> 8 & 255,
+                                           i & 255)))
+        self.assertEqual(answered, exposed.Gate.DATAGRAM_RATE_ALL)
+        self.assertEqual(len(g._datagrams), answered,
+                         "a refused datagram must not buy a table entry")
+
+    def test_the_global_window_moves(self):
+        g = self.a_gate()
+        for i in range(exposed.Gate.DATAGRAM_RATE_ALL):
+            self.assertTrue(g.datagram_ok("10.0.0.%d" % (i % 250)))
+        self.assertFalse(g.datagram_ok("10.9.9.9"))
+        self.t += 61.0
+        self.assertTrue(g.datagram_ok("10.9.9.9"),
+                        "the window never reopened")
+
+    def test_one_polite_source_is_still_rate_limited_on_its_own(self):
+        """The global rate must not have replaced the per-source one."""
+        g = self.a_gate()
+        ok = sum(1 for _ in range(100) if g.datagram_ok("198.51.100.1"))
+        self.assertEqual(ok, exposed.Gate.DATAGRAM_RATE)
+
+    def test_a_bench_card_is_not_bounded_at_all(self):
+        g = self.a_gate(exposed.BENCH)
+        self.assertTrue(all(g.datagram_ok("198.51.100.1")
+                            for _ in range(1000)))
+        self.assertFalse(g._datagrams, "a bench gate should not even tally")
+
+    def test_the_connection_table_has_the_same_ceiling(self):
+        """A TCP source cannot be forged, so this table grows far slower --
+        but the defect and the fix are the same shape."""
+        g = self.a_gate()
+        g.policy.rate_per_min = 10 ** 9
+        g.policy.max_total = 10 ** 9
+        g.policy.max_per_ip = 10 ** 9
+        g.SOURCES = 8
+        for i in range(200):
+            ip = "10.0.%d.%d" % (i >> 8 & 255, i & 255)
+            g.admit(ip)
+            g.release(ip)
+        self.assertLessEqual(len(g._recent), 8)
+
+    def test_a_source_holding_a_connection_keeps_its_rate_history(self):
+        """Evicting it would let one held connection buy an unlimited rate
+        on all the others."""
+        g = self.a_gate()
+        g.policy.rate_per_min = 10 ** 9
+        g.policy.max_total = 10 ** 9
+        g.policy.max_per_ip = 10 ** 9
+        g.SOURCES = 4
+        g.admit("198.51.100.7")             # held, and never released
+        for i in range(100):
+            ip = "10.0.%d.%d" % (i >> 8 & 255, i & 255)
+            g.admit(ip)
+            g.release(ip)
+        self.assertIn("198.51.100.7", g._recent)
+
+
 class TheUpdaterDoesNotTrustAServerFilename(unittest.TestCase):
     """`os.path.join` obeys a traversing or absolute name.
 
@@ -1168,7 +1923,7 @@ class TheUpdaterDoesNotTrustAServerFilename(unittest.TestCase):
                            ("../../etc/cron.d/x", "x"),
                            ("", "update"),
                            ("..", "update")):
-            safe = os.path.basename(name or "").strip() or "update"
+            safe = ntpath.basename(name or "").strip() or "update"
             if safe in (".", ".."):
                 safe = "update"
             self.assertEqual(safe, want, "%r -> %r" % (name, safe))
@@ -1178,7 +1933,7 @@ class TheUpdaterDoesNotTrustAServerFilename(unittest.TestCase):
         has not drifted away from it."""
         src = open(os.path.join(os.path.dirname(PKG), "tls350sim",
                                 "update.py"), encoding="utf-8").read()
-        self.assertIn("os.path.basename(release.installer_name", src,
+        self.assertIn("ntpath.basename(release.installer_name", src,
                       "update.download stopped sanitising the asset name")
 
 

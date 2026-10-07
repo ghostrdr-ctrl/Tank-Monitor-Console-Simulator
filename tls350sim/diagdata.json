@@ -827,7 +827,8 @@
    {
     "l1": "Q 1: (PRODUCT LABEL)",
     "l2": "DISPENSING DISABLED",
-    "depth": 0
+    "depth": 0,
+    "live": "line_dispensing"
    },
    {
     "l1": "Q 1: XX.XXX PSI PUMP OFF",
@@ -947,7 +948,8 @@
    {
     "l1": "W 1: (PRODUCT LABEL)",
     "l2": "DISPENSING DISABLED",
-    "depth": 0
+    "depth": 0,
+    "live": "line_dispensing"
    },
    {
     "l1": "W 1: PENDING    PUMP OFF",

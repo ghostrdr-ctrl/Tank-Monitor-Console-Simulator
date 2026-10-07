@@ -26,6 +26,7 @@ from tests.test_console import a_tank, float_value        # noqa: E402
 from tls350sim import autotx                              # noqa: E402
 from tls350sim.console import Console, FIELDS, describe_alarms
 from tls350sim.wire import Handler                        # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def dialing_console():
@@ -366,7 +367,7 @@ class TheMaintenanceTrackerKey(unittest.TestCase):
         h = Handler(c, verbose=False)
         for code in ("I8A300", "I8A400"):
             reply = h.handle((chr(1) + code + chr(13)).encode())
-            self.assertIn(b"9999", reply, code)
+            self.assertTrue(is_bare(reply), code)
 
 
 class TheAutoDialMethodIsItsOwnScreen(unittest.TestCase):
@@ -528,22 +529,38 @@ class TheSatelliteBoardOwnsItsOwnSetting(unittest.TestCase):
         return c
 
     def test_no_satellite_no_dtr(self):
-        self.assertIn("9999", self.ask(self.a_console(), "I88901"))
-        self.assertIn("9999", self.ask(self.a_console(), "S889010"))
+        self.assertTrue(is_bare(self.ask(self.a_console(), "I88901")))
+        # A Set for a card that is not in the cage is the bare echo, and
+        # nothing is kept: the bench TLS-350 answered `S7A1011` -- a WPLLD
+        # line on a console with no WPLLD card -- that way (2026-09-18).
+        c = self.a_console()
+        said = self.ask(c, "S889010")
+        self.assertTrue(said.startswith(chr(1) + chr(13) + chr(10) + "S88901"),
+                        said)
+        self.assertEqual(said.split(chr(13) + chr(10))[3:], ["", chr(3)])
+        self.assertIsNone(c.values.get("S88901"))
 
     def test_a_satellite_answers(self):
+        """On its own port: the bench TLS-350 answered `I88902`, its
+        satellite, with the DTR line, and `I88901`, its RS-232 board, with
+        the frame alone (2026-09-22)."""
         for card in ("ssat", "asat"):
             c = self.a_console(**{card: 1})
+            port = c.comm_ports_for(card)[0]
             self.assertNotIn("9999", self.ask(c, "S889010"), card)
-            self.assertIn("DTR NORMAL STATE", self.ask(c, "I88901"), card)
+            self.assertIn("DTR NORMAL STATE", self.ask(c, f"I889{port:02d}"),
+                          card)
+            self.assertTrue(is_bare(self.ask(c, "I88901")), card)
 
     def test_and_so_does_the_dual_port_one(self):
         """330586-015 and -016 are satellites on their DB-9 halves, and the
         console reads a port by what is on it."""
         c = self.a_console(ssat4=1)
         c.board = "E6"
+        port = next(p for p in sorted(c.comm_positions())
+                    if c.comm_board_name(p).startswith("S-SAT"))
         self.assertNotIn("9999", self.ask(c, "S889010"))
-        self.assertIn("DTR NORMAL STATE", self.ask(c, "I88901"))
+        self.assertIn("DTR NORMAL STATE", self.ask(c, f"I889{port:02d}"))
 
     def test_the_screen_belongs_to_the_satellite_port(self):
         """And on the panel it is one board's screen, not every board's:
@@ -732,11 +749,15 @@ class TheCommunicationStatusReport(unittest.TestCase):
 
     def test_device_00_answers_for_every_port_in_the_bay(self):
         """"PP - Communication Port Number (00=all)", and this answered for
-        port 1 alone on a console with three cards in the bay."""
+        port 1 alone on a console with three cards in the bay. Every PORT:
+        a card with no serial port is not one, and the bench, with a WPLLD
+        Comm Board in comm 3, listed boards 1 and 2 alone (2026-09-24) --
+        this fixture's EDIM in comm 3 is the same case."""
         c, h = self.a_console()
         reply = send(h, "I88800")
-        for position in sorted(c.comm_positions()):
+        for position in c.serial_positions():
             self.assertIn(f"COMM BOARD  : {position} ", reply)
+        self.assertNotIn("COMM BOARD  : 3 ", reply)
 
     def test_a_port_with_no_errors_prints_its_connection_and_stops(self):
         _c, h = self.a_console()
@@ -748,29 +769,39 @@ class TheCommunicationStatusReport(unittest.TestCase):
         """p.474's own pair, and it is what says the connect type is the
         LAST connection rather than this instant: port 1 reads
         `CONNECTION : NONE` and has no TIME OF LAST COMM DATA line under it,
-        while port 2 reads MODEM DIAL IN over a stamp of 9:12 AM. Port 3
-        here is the one nothing has ever talked to."""
+        while port 2 reads MODEM DIAL IN over a stamp of 9:12 AM. Port 2
+        here, the modem, is the one nothing has ever talked to."""
         _c, h = self.a_console()
         reply = send(h, "I88800").replace(chr(1), "").replace(chr(3), "")
-        block = reply.split("COMM BOARD  : 3 ")[1]
+        block = reply.split("COMM BOARD  : 2 ")[1]
         self.assertIn(" CONNECTION : NONE", block)
         self.assertNotIn("TIME OF LAST COMM DATA", block)
 
-    def test_the_port_the_command_arrived_on_says_rs232_request(self):
-        """The stamp and the connect type are the same event seen twice:
-        "06=RS232 REQUEST" is what a port serving a command is doing, and
-        888 was answering NONE on every port whatever had happened.
-        FIDELITY S13."""
+    def test_the_port_the_command_arrived_on_says_none(self):
+        """Asking is NOT a connection. This read RS232 REQUEST on the port
+        the command came in on (FIDELITY S13's reading of "06=RS232
+        REQUEST"); the bench TLS-350 answers I88800 with CONNECTION : NONE
+        and no time line on both its boards after hours of commands on one
+        of them (2026-09-18), and p.474's sample has NONE on the port being
+        asked too."""
         _c, h = self.a_console()
         reply = send(h, "I88801").replace(chr(1), "").replace(chr(3), "")
-        self.assertIn(" CONNECTION : RS232 REQUEST", reply)
-        self.assertIn("TIME OF LAST COMM DATA", reply)
+        self.assertIn(" CONNECTION : NONE", reply)
+        self.assertNotIn("TIME OF LAST COMM DATA", reply)
 
     def test_the_computer_format_carries_the_same_connect_type(self):
-        """`PPnnCC`, and CC was the literal `00` on every port."""
-        _c, h = self.a_console()
+        """`PPnnCC`: the port's own connect type, NONE (00) here -- in a
+        port block, which follows only when there are error reports. With
+        none, `NN - Total Number of Error Reports To Follow` is the whole of
+        it: the bench TLS-350 answered `i88800` with `00` alone, both ports
+        connected to nothing (`cap_swept`, and every capture since)."""
+        c, h = self.a_console()
         body = send(h, "i88801").replace(chr(1), "").replace(chr(3), "")
-        self.assertIn("010006", body)
+        self.assertEqual(body.split("&&")[0][16:], "00")
+        c.comm_errors[1] = [{"state": 0, "error": 1}]
+        body = send(h, "i88801").replace(chr(1), "").replace(chr(3), "")
+        self.assertIn("010100", body)
+        self.assertNotIn("010106", body)
 
     def test_an_error_prints_the_manuals_eight_lines(self):
         """p.474's own block, and the UART settings are the PORT's rather
@@ -805,13 +836,14 @@ class TheCommunicationStatusReport(unittest.TestCase):
                       body)
         self.assertNotIn("09600", body)
 
-    def test_the_port_a_tool_talks_on_remembers_that_it_did(self):
-        """Half of what 888 reports is when a port last carried data, and
-        this simulator's socket IS the console's RS-232 port."""
+    def test_a_tool_talking_on_a_port_is_not_888s_to_remember(self):
+        """The bench TLS-350 answers I88800 with no TIME OF LAST COMM DATA
+        on the board its commands arrive on, after hours of them
+        (2026-09-18). A tool asking is not what 888 records."""
         c, h = self.a_console()
         self.assertEqual(c.comm_data_at, {})
         send(h, "I10100")
-        self.assertIn(c.rs232_port(), c.comm_data_at)
+        self.assertNotIn(c.rs232_port(), c.comm_data_at)
 
 
 if __name__ == "__main__":
@@ -1135,12 +1167,10 @@ class AutoTransmit(unittest.TestCase):
         c.tick()
         self.assertEqual(c.comm_connect.get(c.autotx.port()), "04")
 
-    def test_888_cannot_show_it_on_the_port_you_asked_over(self):
-        """Asking is itself a connection, so the port serving the request
-        reads RS232 REQUEST whatever it was doing a moment ago -- and the
-        manual's own sample has the same shape, its interesting connection
-        on the port that is NOT answering. A second port is where you see
-        one."""
+    def test_888_shows_it_on_the_port_it_happened_on(self):
+        """Asking is not a connection (the bench console, 2026-09-18), so the
+        port serving the request reads what it last connected for -- NONE
+        here -- and the auto transmit shows on the port it went out on."""
         c = self.a_console(10, auto_delay="000")
         c.modules["modem"] = 1
         c.sensor_state[("liquid", "1")] = "fuel"
@@ -1148,7 +1178,9 @@ class AutoTransmit(unittest.TestCase):
         c.comm_connect[2] = autotx.CONNECT_AUTO_TRANSMIT
         reply = send(Handler(c, verbose=False), "I88800")
         first, second = reply.split("COMM BOARD  : 2 ")
-        self.assertIn(" CONNECTION : RS232 REQUEST", first)
+        # port 1 is where the auto transmit went out, and asking over it no
+        # longer overwrites that with RS232 REQUEST
+        self.assertIn(" CONNECTION : AUTO TRANSMIT", first)
         self.assertIn(" CONNECTION : AUTO TRANSMIT", second)
 
 
@@ -1182,3 +1214,75 @@ class TheDialledReceiverSaysWhatItIs(unittest.TestCase):
         c.cover_open = True
         c.tick()
         self.assertEqual(c.comm_connect, {})
+
+
+class TheWplldCommBoardInTheBay(unittest.TestCase):
+    """A WPLLD Communications Module (330812-001) in the bench TLS-350's comm
+    3, beside its RS-232 and satellite boards, with no AC Interface or
+    controller behind it (2026-09-24). FIDELITY M24."""
+
+    def a_console(self):
+        c = Console()
+        c.modules = {"probe": 1, "rs232": 1, "ssat": 1, "wplldcom": 1}
+        c.comm_slots = {1: "rs232", 2: "ssat", 3: "wplldcom"}
+        return c, Handler(c, verbose=False)
+
+    def test_the_configuration_names_it_and_packs_its_type(self):
+        c, h = self.a_console()
+        self.assertIn("COMM 3 WPLLD COMM BD", send(h, "I10200"))
+        self.assertEqual(c.module_type("wplldcom"), "21")
+
+    def test_its_software_is_on_the_wplld_diagnostic(self):
+        """"the software version number of the WPLLD Comm Module", with the
+        comm module alone: the bench's 349751-001-A of 96.02.14."""
+        _c, h = self.a_console()
+        shown = send(h, "I90400")
+        self.assertIn("#: 349751-001-A  \r\n96.02.14.11.38\r\n", shown)
+        self.assertIn("349751-001-A  96.02.14.11.3800000000", send(h, "i90400"))
+
+    def test_it_is_not_a_serial_port(self):
+        c, h = self.a_console()
+        self.assertEqual(c.serial_positions(), [1, 2])
+        self.assertNotIn("COMM BOARD  : 3 ", send(h, "I88800"))
+        for code in ("I88103", "i88103", "I88903"):
+            self.assertTrue(is_bare(send(h, code)), code)
+
+    def test_fitted_since_the_cold_start_it_reads_empty_at_the_reset(self):
+        """"POR = ID resistor value of module in this slot read at last
+        system reset": the bench's card, fitted with the power off two days
+        after the console's cold start, printed 15000000 there and 202958
+        now, while every other card's POR stayed at its cold-start figure to
+        the ohm. A power cycle is not a reset; a cold start is."""
+        c = Console()
+        c.modules = {"probe": 1, "rs232": 1, "ssat": 1}
+        c.cold_boot()
+        c.modules["wplldcom"] = 1
+        c.comm_slots = {1: "rs232", 2: "ssat", 3: "wplldcom"}
+        row = next(r for r in c.configuration_lines() if "COMM 3" in r)
+        por, now = (float(x) for x in row.split()[-2:])
+        self.assertEqual(por, 15000000)
+        self.assertLess(abs(now - 200000) / 200000, 0.05)
+        # the next cold start reads it as there
+        c.cold_boot()
+        row = next(r for r in c.configuration_lines() if "COMM 3" in r)
+        self.assertLess(float(row.split()[-2]), 1000000)
+
+    def test_a_card_pulled_since_keeps_its_figure_over_unused(self):
+        c = Console()
+        c.modules = {"probe": 1, "rs232": 1, "ssat": 1, "wplldcom": 1}
+        c.comm_slots = {1: "rs232", 2: "ssat", 3: "wplldcom"}
+        c.cold_boot()
+        del c.modules["wplldcom"]
+        c.comm_slots = {1: "rs232", 2: "ssat"}
+        row = next(r for r in c.configuration_lines() if "COMM 3" in r)
+        por, now = (float(x) for x in row.split()[-2:])
+        self.assertLess(por, 1000000)
+        self.assertEqual(now, 15000000)
+
+    def test_it_raises_nothing_and_opens_no_wplld_code(self):
+        """No alarm with nothing behind it, and the WPLLD setup codes stay
+        bare: the bench's were unchanged by the board."""
+        c, h = self.a_console()
+        c.tick()
+        self.assertNotIn("WPLLD", send(h, "I10100"))
+        self.assertTrue(is_bare(send(h, "I7A100")))

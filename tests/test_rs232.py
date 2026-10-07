@@ -81,37 +81,56 @@ class Security(unittest.TestCase):
 
 
 class EndOfMessage(unittest.TestCase):
-    """531 enables it, 537 sets the two characters, and it lands only on
-    computer-format replies."""
+    """531 enables it; 537 holds the display format's characters and 538 the
+    computer format's, per port, and they REPLACE the ETX. Measured on the
+    bench TLS-350, 2026-09-25 (`test_bench_framing` replays the logs)."""
 
     def setUp(self):
         self.c = a_console()
         self.h = Handler(self.c, verbose=False)
         self.c.values["S53100"] = "1"           # EOM enabled
+        self.port = self.c.rs232_port()
 
-    def test_two_characters_follow_the_etx(self):
-        self.c.values["S53799"] = "0D0A"        # CR LF
+    def set(self, tok, data):
+        send(self.h, b"", b"S" + tok + b"99" + data)
+
+    def test_two_characters_take_the_place_of_the_etx(self):
+        self.set(b"538", b"*#")
         out = send(self.h, b"", b"i10100")
-        self.assertTrue(out.endswith(ETX + b"\x0d\x0a"))
+        self.assertEqual(out[-8:-6], b"&&")       # && CCCC, then the two
+        self.assertTrue(out.endswith(b"*#"))
+        self.assertNotIn(ETX, out)
 
-    def test_display_format_is_untouched(self):
-        self.c.values["S53799"] = "0D0A"
-        out = send(self.h, b"", b"I10100")      # display format
-        self.assertTrue(out.endswith(ETX))
-        self.assertFalse(out.endswith(ETX + b"\x0d"))
-
-    def test_disabled_means_bare_etx(self):
-        self.c.values["S53100"] = "0"
-        self.c.values["S53799"] = "0D0A"
+    def test_537_is_the_display_format_and_538_the_computer(self):
+        self.set(b"537", b"+\x00")
+        self.assertTrue(send(self.h, b"", b"I10100").endswith(b"+"))
         self.assertTrue(send(self.h, b"", b"i10100").endswith(ETX))
 
-    def test_a_null_first_character_reverts_to_default(self):
-        self.c.values["S53799"] = "000A"        # NUL then LF
+    def test_disabled_means_the_etx(self):
+        self.set(b"538", b"*#")
+        self.c.values["S53100"] = "0"
+        self.assertTrue(send(self.h, b"", b"i10100").endswith(ETX))
+
+    def test_a_null_first_character_clears_both(self):
+        self.set(b"538", b"\x00#")
+        self.assertEqual(self.c.values[f"S538{self.port:02d}"], "")
         self.assertTrue(send(self.h, b"", b"i10100").endswith(ETX))
 
     def test_a_null_second_character_sends_only_the_first(self):
-        self.c.values["S53799"] = "2A00"        # '*' then NUL
-        self.assertTrue(send(self.h, b"", b"i10100").endswith(ETX + b"\x2a"))
+        self.set(b"538", b"*\x00")
+        out = send(self.h, b"", b"i10100")
+        self.assertEqual(out[-7:-5], b"&&")       # && CCCC, then the one
+        self.assertTrue(out.endswith(b"*"))
+        self.assertNotIn(ETX, out)
+
+    def test_the_table_prints_what_is_stored(self):
+        self.set(b"537", b"*#")
+        self.assertIn(b"\r\n 1       *    #\r\n",
+                      send(self.h, b"", b"I53701"))
+        self.assertIn(b"*#&&", send(self.h, b"", b"i53701"))
+        # 01 to 06 and 99 only: 07 and 00 are bare
+        self.assertNotIn(b"ETX CHARACTERS", send(self.h, b"", b"I53707"))
+        self.assertNotIn(b"ETX CHARACTERS", send(self.h, b"", b"I53700"))
 
 
 class CardPresence(unittest.TestCase):
@@ -137,8 +156,17 @@ class ADefectIsARefusalNotAHangUp(unittest.TestCase):
 
     def test_malformed_commands_are_refused(self):
         h = Handler(Console(), verbose=False)
-        for cmd in ("I21300AB", "I21B00xx", "s68301A100"):
+        for cmd in ("I21300AB", "I21B00xx"):
             self.assertIn(b"9999FF1B", h.handle(SOH + cmd.encode()), cmd)
+        # A Set whose VALUE is wrong is answered the way the bench TLS-350
+        # answers one -- `?` in place of the field, or, for data short of the
+        # field's width as this four-character float is, the bare echo -- not
+        # with 9999, which is for a function code the console does not know.
+        # Still an answer, still no hang-up, which is what this test is for.
+        out = h.handle(SOH + b"s68301A100")
+        self.assertTrue(out.startswith(SOH + b"s68301")
+                        and b"9999" not in out, out)
+        self.assertTrue(b"?" in h.handle(SOH + b"s68301ZZZZZZZZ"))
 
     def test_the_chart_of_no_tank_is_an_empty_one(self):
         """A probe card and no tank programmed: `tanks[0]` raised."""
@@ -180,6 +208,130 @@ class ADefectIsARefusalNotAHangUp(unittest.TestCase):
         second = ask(b"I20100")
         self.assertIn(b"9999FF1B", first)
         self.assertIn(b"I20100", second)
+
+
+
+class WhatTheBenchConsoleDidWithTheEdges(unittest.TestCase):
+    """The bench TLS-350, security disabled on every port (2026-09-19,
+    `transcripts/edge2`)."""
+
+    def test_a_code_in_front_with_security_off_is_not_understood(self):
+        """`000000I20100` -- the console's own code -- answered 9999FF: the
+        six digits are read as the function code."""
+        h = Handler(a_console(), verbose=False)
+        self.assertEqual(send(h, b"000000", b"I20100"),
+                         SOH + b"9999FF1B" + ETX)
+        self.assertNotEqual(send(h, b"", b"I20100"),
+                            SOH + b"9999FF1B" + ETX)
+
+    def test_a_digit_then_a_letter_is_a_device_the_console_has_not_got(self):
+        """`I2010A` answered the bare frame and `I201A0` 9999FF."""
+        h = Handler(a_console(), verbose=False)
+        bare = send(h, b"", b"I2010A")
+        self.assertTrue(bare.startswith(SOH + b"\r\nI2010A\r\n"), bare)
+        self.assertNotIn(b"9999", bare)
+        self.assertEqual(send(h, b"", b"I201A0"), SOH + b"9999FF1B" + ETX)
+
+    def test_the_clock_is_a_date_or_it_is_a_refusal(self):
+        """`S501000602300100` (FEB 30) and `S501000601192400` (hour 24) were
+        answered with ten `?` and the clock left alone, where FEB 28 and
+        23:59 were taken (`transcripts/clockset4`). This read them through
+        `mktime` and set the clock to MAR 2 and the next midnight."""
+        h = Handler(a_console(), verbose=False)
+        self.assertIn(b"0601192359", send(h, b"", b"S501000601192359"))
+        for bad in (b"0602300100", b"0601192400", b"0601196000",
+                    b"0601320045", b"ABCDEFGHIJ"):
+            out = send(h, b"", b"S50100" + bad)
+            self.assertIn(b"?" * 10, out, bad)
+            self.assertNotIn(b"9999", out, bad)
+            self.assertIn(b"JAN 19, 2006 11:59 PM", out, bad)
+
+    def test_the_clock_set_answers_with_the_clock_it_leaves(self):
+        """The echo, the stamp as it WAS, and the ten digits taken -- in both
+        formats (`transcripts/clockset`). It had been a bare echo stamped
+        with the new time."""
+        h = Handler(a_console(), verbose=False)
+        send(h, b"", b"S501000602280101")
+        out = send(h, b"", b"S501000601192359")
+        self.assertEqual(out.split(b"\r\n")[2:4],
+                         [b"FEB 28, 2006  1:01 AM", b"0601192359"])
+        packed = send(h, b"", b"s501000601190050")
+        self.assertEqual(packed.split(b"&&")[0][1:],
+                         b"s50100" + b"0601192359" + b"0601190050")
+
+    def test_the_clock_ignores_the_device_number(self):
+        """`S501010601190035` set the clock on the bench and answered
+        `S50101`, where this stored it where nothing reads it."""
+        h = Handler(a_console(), verbose=False)
+        out = send(h, b"", b"S501010601190035")
+        self.assertIn(b"S50101", out)
+        self.assertIn(b"0601190035", out)
+        self.assertIn(b"JAN 19, 2006 12:35 AM", send(h, b"", b"I50100"))
+
+    def test_the_print_header_is_bare_for_device_00_in_both_formats(self):
+        """With two lines programmed the bench answered `I50300` and
+        `i50300` with the echo and the stamp alone, `i50301` with the twenty
+        characters (`transcripts/header503b`). The packed form had been
+        running every line's text together."""
+        h = Handler(a_console(), verbose=False)
+        send(h, b"", b"S50301ACME FUEL\r")
+        send(h, b"", b"S50302SECOND LINE\r")
+        self.assertNotIn(b"ACME", send(h, b"", b"I50300"))
+        self.assertNotIn(b"ACME", send(h, b"", b"i50300"))
+        self.assertIn(b"# 1:ACME FUEL           ", send(h, b"", b"I50301"))
+        self.assertIn(b"ACME FUEL           &&", send(h, b"", b"i50301"))
+        # and all four lines still reach a report's header block
+        # each at its twenty, as a set header line prints (S41)
+        self.assertIn(b"\r\nACME FUEL           \r\nSECOND LINE         \r\n",
+                      send(h, b"", b"I10100"))
+
+    def test_the_shift_times_answer_one_at_a_time_and_are_right_aligned(self):
+        """Three shifts programmed on the bench: `I50200` bare, `I50201` one
+        line, the value right-aligned in eight -- which is what DISABLED is
+        (`transcripts/shifts2`, `shifts3`). `EE00` disables one."""
+        h = Handler(a_console(), verbose=False)
+        send(h, b"", b"S502010600")
+        send(h, b"", b"S502032200")
+        self.assertIn(b"SHIFT TIME 1 :  6:00 AM", send(h, b"", b"I50201"))
+        self.assertIn(b"SHIFT TIME 3 : 10:00 PM", send(h, b"", b"I50203"))
+        self.assertIn(b"SHIFT TIME 4 : DISABLED", send(h, b"", b"I50204"))
+        for code in (b"I50200", b"i50200"):
+            self.assertNotIn(b"0600", send(h, b"", code), code)
+        self.assertIn(b"SHIFT TIME 1 : DISABLED",
+                      send(h, b"", b"S50201EE00"))
+        # and a device family still lists every position
+        self.assertIn(b"   8 ", send(h, b"", b"I52B00"))
+
+    def test_precision_print_is_a_setting(self):
+        """55D, in no manual: `S55D001` ENABLED, `S55D000` DISABLED, packed
+        1 and 0, and `S55D002` refused (`transcripts/p55d.log`)."""
+        h = Handler(a_console(), verbose=False)
+        self.assertIn(b"RESULTS: DISABLED", send(h, b"", b"I55D00"))
+        self.assertIn(b"RESULTS: ENABLED", send(h, b"", b"S55D001\r"))
+        self.assertIn(b"RESULTS: ENABLED", send(h, b"", b"I55D00"))
+        self.assertTrue(send(h, b"", b"i55D00").split(b"&&")[0].endswith(b"1"))
+        self.assertIn(b"?", send(h, b"", b"S55D002\r"))
+        self.assertIn(b"RESULTS: DISABLED", send(h, b"", b"S55D000\r"))
+
+    def test_the_tank_maximum_volume_limit_is_a_sixteen_bit_setting(self):
+        """7C3, in no manual (`transcripts/p7c3*`): six digits read, a
+        fraction dropped, held modulo 65536, and 0 refused."""
+        c = a_console()
+        c.modules["probe"] = 1
+        h = Handler(c, verbose=False)
+
+        def held(sent):
+            send(h, b"", b"S7C301" + sent + b"\r")
+            row = [r for r in send(h, b"", b"I7C301").split(b"\r\n")
+                   if r.startswith(b" 1 ")][0]
+            return row.split()[-1]
+        self.assertEqual(held(b"200"), b"200")
+        self.assertEqual(held(b"132.5"), b"132")
+        self.assertEqual(held(b"9999999"), b"16959")
+        self.assertEqual(held(b"65536"), b"0")
+        self.assertEqual(held(b"65537"), b"1")
+        self.assertIn(b"?", send(h, b"", b"S7C3010\r"))
+        self.assertIn(b"?", send(h, b"", b"S7C301ABC\r"))
 
 
 if __name__ == "__main__":

@@ -16,6 +16,8 @@
     python run.py                     front panel + bench, serial on 10001
     python run.py --port 10002        somewhere else
     python run.py --seed site.vrset   start out looking like a real site
+    python run.py --site site.vrset   ...and its cards, tanks, alarms and
+                                      history, from a site snapshot
     python run.py --headless          serial only, no window
 
 Point any TLS tool at 127.0.0.1 and the port it prints.
@@ -43,7 +45,7 @@ if sys.stderr is None:
     sys.stderr = io.StringIO()
 
 from tls350sim import APP_NAME, DISCLAIMER, PUBLISHER, __version__
-from tls350sim import exposed, paths, update, xport, xportnet
+from tls350sim import exposed, paths, sitebackup, update, xport, xportnet
 from tls350sim.console import Console
 from tls350sim.wire import serve
 
@@ -119,6 +121,20 @@ def exposure_banner(level, a, capture_path):
     return out
 
 
+def capture_fault(why):
+    """Say when the capture stops reaching the disk, and when it comes back.
+
+    On stderr, and NOT silenced by `--quiet`: a honeypot whose product is
+    the capture has to say when it has stopped collecting one, and a run
+    asked to be quiet still wants this one line. FIDELITY R34.
+    """
+    if why:
+        print("[sim] capture STOPPED: %s -- exchanges are being counted and "
+              "not written" % why, file=sys.stderr)
+    else:
+        print("[sim] capture is writing again", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -136,6 +152,11 @@ compatible tank monitor consoles.""",
                          "without it, 10001")
     ap.add_argument("--seed", metavar="FILE.vrset",
                     help="preload programming from a backup")
+    ap.add_argument("--site", metavar="FILE.vrset",
+                    help="load a whole site from a backup: programming, and "
+                         "from a site snapshot's reports the cards, tank "
+                         "levels, sensors, alarms, deliveries and leak "
+                         "results. Replaces what the console had")
     ap.add_argument("--state", metavar="FILE.json",
                     default=paths.default_state_file(),
                     help="where programming is kept between runs "
@@ -215,14 +236,27 @@ compatible tank monitor consoles.""",
     # Always built, even on a bench. The listeners take this object once
     # and keep it, so the bench's own dropdown can only reach them by
     # arming the object they already hold -- never by making a new one.
+    #
+    # Armed by the exposure OR by a path given on the command line. It used
+    # to be the exposure alone, so `--headless --capture capture.jsonl`
+    # recorded nothing and did not even create the file, with no word said
+    # about it. A path typed out in full is somebody asking for a capture in
+    # as many words, and the bench is where a person debugging a tool of
+    # their own most wants one. FIDELITY R29.
     capture = exposed.Capture(capture_path,
-                              enabled=level != exposed.BENCH)
+                              enabled=bool(a.capture)
+                              or level != exposed.BENCH,
+                              on_fault=capture_fault)
     policy = exposed.Policy(level, capture=capture)
     if policy.readonly:
         exposed.freeze_writes(True)
     if level != exposed.BENCH and not a.quiet:
         for line in exposure_banner(level, a, capture_path):
             print(line)
+    elif capture_path and not a.quiet:
+        # The banner is the exposed run's; a bench run that was asked for a
+        # capture still has to say where it is going.
+        print("[sim] capture: %s" % capture_path)
 
     if a.check_update:
         sys.exit(update.cli_check())
@@ -231,6 +265,41 @@ compatible tank monitor consoles.""",
     if a.seed:
         n = console.seed(a.seed)
         print(f"[sim] seeded {n} value(s) from {os.path.basename(a.seed)}")
+    if a.site:
+        done = sitebackup.load(console, a.site)
+        print(f"[sim] site {os.path.basename(a.site)}: {done['values']} "
+              f"value(s), {done['reports']} report(s)")
+        for line in done["applied"]:
+            print(f"[sim]   {line}")
+        for line in done["skipped"]:
+            print(f"[sim]   not loaded: {line}")
+
+    cards = []
+
+    def shut_down(app=None):
+        """Give back what this process claimed, on every way out of it.
+
+        `--claim-ip` runs an elevated `netsh` to add the card's address to
+        this machine's adapter, and `CardNetwork.stop()` is what takes it
+        off again. Nothing called it: the window's path and the headless
+        interrupt both ran off the end of `main`, so the address outlived
+        the program and was still on the adapter for the next run -- or the
+        next machine to be given it -- to collide with. FIDELITY R27.
+
+        The window's card is fetched from the app as well as from `cards`
+        because the bench's own menu can start one (`ui._start_xport`) that
+        the launcher never saw. Stopping the same card twice is harmless;
+        missing one is not.
+        """
+        for net in dict.fromkeys(
+                n for n in cards + [getattr(app, "_card_net", None)]
+                if n is not None):
+            net.stop()
+        # The capture is flushed on every row, so this loses nothing. It
+        # closes the handle rather than leaving it to the interpreter, so a
+        # `--capture` file is a complete file the moment the process is
+        # gone.
+        capture.close()
 
     def start_card(log):
         """Bring the card up on the address it is programmed with.
@@ -276,6 +345,7 @@ compatible tank monitor consoles.""",
                                    trace=a.card_trace,
                                    policy=policy, capture=capture)
         net.start()
+        cards.append(net)
         return cfg, net
 
     tunnel_port = a.port or 10001
@@ -305,14 +375,24 @@ compatible tank monitor consoles.""",
                 while True:
                     time.sleep(3600)
             except KeyboardInterrupt:
-                return
-        serve(console, a.host, tunnel_port, not a.quiet,
-              policy=policy, capture=capture,
-              gate=exposed.Gate(policy, capture=capture))
+                pass
+            finally:
+                shut_down()
+            return
+        try:
+            serve(console, a.host, tunnel_port, not a.quiet,
+                  policy=policy, capture=capture,
+                  gate=exposed.Gate(policy, capture=capture))
+        finally:
+            shut_down()
         return
 
     from tls350sim.ui import SimApp
-    app = SimApp(console, tunnel_port, policy=policy, capture=capture)
+    # `--host` goes with it: the window is what lowers the exposure, and it
+    # cannot decide whether that is safe without knowing where the tunnel
+    # it does not own was bound. FIDELITY R26.
+    app = SimApp(console, tunnel_port, policy=policy, capture=capture,
+                 host=a.host)
     if a.xport:
         cfg, net = start_card(app.log)
         app.attach_card(cfg, net)
@@ -324,7 +404,10 @@ compatible tank monitor consoles.""",
             kwargs={"policy": policy, "capture": capture,
                     "gate": exposed.Gate(policy, capture=capture)},
             daemon=True).start()
-    app.mainloop()
+    try:
+        app.mainloop()
+    finally:
+        shut_down(app)
 
 
 if __name__ == "__main__":

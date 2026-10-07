@@ -98,6 +98,7 @@ unchanged, and "H0BBIT LANE" and the rest became a published signature that
 identified a GasPot on sight. A default site is a fingerprint. This
 simulator ships a demo site, and on a public address it says so.
 """
+import collections
 import json
 import os
 import random
@@ -195,11 +196,30 @@ class Policy:
     }
 
     # The serial round trip a real card cannot beat. A TLS-350 answers over
-    # RS-232 at 9600 baud -- a hundred byte reply is 104 ms of line time
-    # before the console has thought about it -- through a bridge that adds
-    # its own. GasPot uses 0.15 to 0.75 s and that bracket is a reasonable
-    # read of the real thing, so it is the bracket used here.
-    DELAY = {BENCH: None, LAN: None, EXPOSED: (0.15, 0.75)}
+    # RS-232 at 9600 baud through a bridge. GasPot used 0.15 to 0.75 s
+    # before the whole reply, and so did this, until the bench TLS-350 was
+    # timed from a host on its own subnet (2026-09-19, six rounds of eleven
+    # codes): the FIRST byte comes 35 to 120 ms after the command, median
+    # about 65 ms, whatever the report -- and the rest follows at the
+    # line's pace, about 1.25 ms a byte, so a 1565 byte I102 takes 2.4 s and
+    # a 10 byte 9999FF 0.12 s. A reply that arrives whole is the tell, not
+    # only one that arrives early. So: this first-byte delay, then `PACE`.
+    DELAY = {BENCH: None, LAN: None, EXPOSED: (0.035, 0.12)}
+    PACE = {BENCH: None, LAN: None, EXPOSED: 0.00125}
+
+    # Bytes one connection may SEND in a minute. The limits above count
+    # connections, and counting connections is no limit on a flood that
+    # arrives down one of them: the response delay does not slow it either,
+    # because that delay is per COMMAND and junk never becomes one. So a
+    # single connection could pour bytes in as fast as the link allowed and
+    # the capture wrote 2.12 of them to disk for each one.
+    #
+    # A real card reads a 9600 baud line: 72,000 bytes a minute is its
+    # ceiling, and a polling host sends a few dozen bytes a second. 64 KiB
+    # a minute on a public address is therefore MORE than the hardware
+    # could physically accept, and still 30 times less than a cheap flood.
+    # FIDELITY R32.
+    BYTES_PER_MIN = {BENCH: None, LAN: 1 << 20, EXPOSED: 1 << 16}
 
     def __init__(self, level=BENCH, capture=None, seed=None):
         if level not in LEVELS:
@@ -212,6 +232,8 @@ class Policy:
         self.rate_per_min = rate
         self.idle_timeout = idle
         self._delay = self.DELAY[level]
+        self.pace = self.PACE[level]
+        self.max_bytes_per_min = self.BYTES_PER_MIN[level]
         # Its own generator, seeded, because `traffic.py` is documented as
         # the only module in the package that draws a random number and the
         # test suite depends on the console being deterministic. A response
@@ -282,7 +304,7 @@ class Gate:
         self._clock = clock
         self._lock = threading.Lock()
         self._held = {}          # ip -> how many open now
-        self._recent = {}        # ip -> [connect times inside the window]
+        self._recent = collections.OrderedDict()   # ip -> connect times
         # Datagrams are counted SEPARATELY from connections, and the
         # separation is the point rather than tidiness.
         #
@@ -299,9 +321,14 @@ class Gate:
         # allowance. The datagram limiter protects third parties from
         # reflection; the connection limiter protects this host; neither
         # can be used to attack the other.
-        self._datagrams = {}     # ip -> [datagram times inside the window]
+        # Both tables are ordered oldest-first so the ceiling below can
+        # evict without scanning. See `Gate.SOURCES`. FIDELITY R33.
+        self._datagrams = collections.OrderedDict()
+        self._dg_all = 0             # datagrams answered in this window
+        self._dg_all_since = self._clock()
         self._total = 0
         self.refused_total = 0
+        self.sources_evicted = 0
 
     WINDOW = 60.0
 
@@ -320,12 +347,22 @@ class Gate:
                     return self._refuse(ip, port, "rate", len(seen))
                 seen.append(now)
                 self._recent[ip] = seen
+                self._recent.move_to_end(ip)
                 # Addresses that have gone quiet stop costing memory. Without
                 # this the dictionary is an unbounded record of every source
                 # that ever connected, which on a public address is the leak
                 # that eventually ends the process.
-                if len(self._recent) > 4096:
+                #
+                # The sweep alone was a THRESHOLD: it only dropped entries
+                # whose timestamps had aged out, so under churn it dropped
+                # nothing and ran again on the next connection. `_evict`
+                # is the ceiling underneath it. A TCP source cannot be
+                # forged -- the handshake came back -- so this table grows
+                # far slower than the datagram one, but the shape of the
+                # defect is identical and so is the fix. FIDELITY R33.
+                if len(self._recent) > self.SOURCES:
                     self._sweep(now)
+                    self._evict(ip)
             if self._total >= p.max_total:
                 return self._refuse(ip, port, "total", self._total)
             if p.max_per_ip is not None:
@@ -349,6 +386,22 @@ class Gate:
                                 if now - t < self.WINDOW]
             if not self._recent[ip] and not self._held.get(ip):
                 del self._recent[ip]
+
+    def _evict(self, keep):
+        """Bring the connection table back to its ceiling, oldest first.
+
+        An address that currently HOLDS a connection is skipped, and so is
+        the one being admitted right now: their entries are what the rate
+        limit counts from, and dropping either would let a source that
+        keeps one connection open dodge the rate on all the rest. There
+        are at most `max_total` of those, so the walk is bounded.
+        """
+        for ip in list(self._recent):
+            if len(self._recent) <= self.SOURCES:
+                return
+            if ip != keep and not self._held.get(ip):
+                del self._recent[ip]
+                self.sources_evicted += 1
 
     def release(self, ip):
         """Give a slot back. Deliberately NOT conditional on the policy.
@@ -387,6 +440,28 @@ class Gate:
     # This is per source per minute.
     DATAGRAM_RATE = 12
 
+    # And this is every source together, per minute. A per-source rate is
+    # no limit at all against a forged source address: the sender writes a
+    # new one on every packet and each is under its own allowance for ever.
+    # 240 answers a minute is 4 a second, which is more discovery than a
+    # real site does and about half a kilobyte a second of reflected
+    # traffic, where the per-source limit alone left it unbounded.
+    # FIDELITY R33.
+    DATAGRAM_RATE_ALL = 240
+
+    # How many source addresses either table will hold. A CEILING, not a
+    # threshold: what was here swept the table when it passed 4,096 and the
+    # sweep only dropped addresses whose timestamps had aged out, so under
+    # churn nothing had aged, nothing was dropped, the table went on
+    # growing -- measured at 6,000 retained -- and the full-table scan ran
+    # again on the very next packet. Both the memory and the O(n) scan were
+    # the attacker's to spend, and forged addresses cost them nothing.
+    #
+    # The tables are `OrderedDict`s now and the oldest entry is evicted
+    # when a new source arrives at capacity, which is O(1) and needs no
+    # scan at all. FIDELITY R33.
+    SOURCES = 4096
+
     def datagram_ok(self, ip):
         """May we answer one more datagram from `ip`?
 
@@ -410,30 +485,104 @@ class Gate:
             return True                  # a bench card, on loopback
         now = self._clock()
         with self._lock:
+            # The global rate FIRST, and before the table is touched, so a
+            # flood of forged sources is stopped without being recorded:
+            # letting it write an entry per packet and only then refusing
+            # is the leak this is here to close. FIDELITY R33.
+            if self._all_datagrams(now) >= self.DATAGRAM_RATE_ALL:
+                return self._refuse_datagram(
+                    ip, "datagram rate limit, all sources (%d/min)"
+                        % self.DATAGRAM_RATE_ALL)
             seen = [t for t in self._datagrams.get(ip, ())
                     if now - t < self.WINDOW]
             if len(seen) >= self.DATAGRAM_RATE:
                 self._datagrams[ip] = seen
-                self.refused_total += 1
-                if self.capture:
-                    self.capture.event("refused", peer=ip, proto="77fe/udp",
-                                       note="datagram rate limit (%d/min)"
-                                            % self.DATAGRAM_RATE)
-                return False
+                self._datagrams.move_to_end(ip)
+                return self._refuse_datagram(
+                    ip, "datagram rate limit (%d/min)" % self.DATAGRAM_RATE)
             seen.append(now)
             self._datagrams[ip] = seen
-            if len(self._datagrams) > 4096:
-                # Its own sweep, over its own dictionary. A source that has
-                # gone quiet stops costing memory; without this, a reflector
-                # attack walking forged addresses is an unbounded record of
-                # every address it ever claimed.
-                for other in list(self._datagrams):
-                    self._datagrams[other] = [
-                        t for t in self._datagrams[other]
-                        if now - t < self.WINDOW]
-                    if not self._datagrams[other]:
-                        del self._datagrams[other]
+            self._datagrams.move_to_end(ip)
+            self._dg_all += 1
+            # A hard ceiling, applied on the way in and costing one pop.
+            # The least recently heard from goes, which is the entry whose
+            # window is nearest to expiring anyway.
+            while len(self._datagrams) > self.SOURCES:
+                self._datagrams.popitem(last=False)
+                self.sources_evicted += 1
         return True
+
+    def _all_datagrams(self, now):
+        """How many datagrams have been answered in the current window.
+
+        A fixed window rather than a rolling list of timestamps: a rolling
+        one is a list as long as the limit, trimmed on every packet, which
+        is the same O(n)-per-packet cost this entry is about. The edge of a
+        fixed window lets through at most one extra window's worth, which
+        against a reflector is a rounding error.
+        """
+        if now - self._dg_all_since >= self.WINDOW:
+            self._dg_all_since = now
+            self._dg_all = 0
+        return self._dg_all
+
+    def _refuse_datagram(self, ip, note):
+        self.refused_total += 1
+        if self.capture:
+            self.capture.event("refused", peer=ip, proto="77fe/udp",
+                               note=note)
+        return False
+
+
+class _CaptureSession:
+    """One connection's share of the capture. See `Capture.session`.
+
+    Under the budget this is `Capture.record` with the peer filled in.
+    Over it, the rows keep coming and the BYTES stop: the time, the
+    source, the direction, the command and the length are all still
+    recorded, and only the hex is dropped, with one note saying where the
+    line was drawn. The capture then says how much a flooder sent without
+    storing it, which is the only part of a flood worth keeping.
+    """
+
+    def __init__(self, capture, peer, port, proto):
+        self.capture = capture
+        self.peer = peer
+        self.port = port
+        self.proto = proto
+        self.bytes = 0          # what this connection has sent and been sent
+        self.stored = 0         # how much of it is in the file
+        self.truncated = False
+
+    @property
+    def budget(self):
+        return getattr(self.capture, "MAX_SESSION_BYTES", None)
+
+    def record(self, direction, data, cmd=None, note=None):
+        if self.capture is None:
+            return None
+        raw = bytes(data or b"")
+        self.bytes += len(raw)
+        cap = self.budget
+        if cap is not None and self.stored + len(raw) > cap:
+            if not self.truncated:
+                self.truncated = True
+                note = ("recorded %d bytes of this connection; storing "
+                        "lengths only from here" % self.stored)
+            return self.capture.record(direction, b"", peer=self.peer,
+                                       port=self.port, proto=self.proto,
+                                       cmd=cmd or command_of(raw),
+                                       note=note, length=len(raw))
+        self.stored += len(raw)
+        return self.capture.record(direction, raw, peer=self.peer,
+                                   port=self.port, proto=self.proto,
+                                   cmd=cmd, note=note)
+
+    def event(self, kind, note=None):
+        if self.capture is None:
+            return None
+        return self.capture.event(kind, peer=self.peer, port=self.port,
+                                  proto=self.proto, note=note)
 
 
 class _Admitted:
@@ -489,7 +638,36 @@ class Capture:
 
     RING = 500
 
-    def __init__(self, path=None, ring=None, on_record=None, enabled=True):
+    # A quota on the file, and how many older ones are kept behind it.
+    #
+    # Every byte that arrives is stored hex-encoded, which is two
+    # characters a byte before the JSON around it: measured at 2.12 bytes
+    # on disk for every byte received, so 64 KiB of junk produced about
+    # 133 KiB of log. An unbounded capture therefore fills the disk FASTER
+    # than the attacker can send, and the response delay does not slow it
+    # down at all, because that delay is per COMMAND and junk never
+    # becomes one.
+    #
+    # Hex is the right storage -- the whole value of a honeypot capture is
+    # the bytes that were ACTUALLY sent, and decoding them loses exactly
+    # what made them interesting -- so the bound goes on the file rather
+    # than on the encoding. 64 MiB a file and two older files behind it is
+    # a little under 200 MiB, whatever arrives. FIDELITY R32.
+    MAX_BYTES = 64 * 1024 * 1024
+    KEEP = 2
+
+    # How much of ONE connection's traffic is stored. The quota above
+    # bounds the disk; this bounds a single flooder's SHARE of it, so one
+    # connection sending junk cannot push every other source's evidence
+    # out of the file and out of the rotation. Past it the row is still
+    # written -- its time, source, direction and LENGTH -- and only `raw`
+    # is dropped, because what matters after a quarter megabyte of one
+    # stranger's noise is that it happened and how much of it there was.
+    # `Capture.session` is how a listener opts in. FIDELITY R32.
+    MAX_SESSION_BYTES = 256 * 1024
+
+    def __init__(self, path=None, ring=None, on_record=None, enabled=True,
+                 on_fault=None, max_bytes=-1, keep=-1):
         # Whether anything is actually recorded. The listeners are handed
         # this object ONCE, when the card comes up, and they keep it for
         # the life of the card -- so an exposure changed from the bench's
@@ -500,7 +678,20 @@ class Capture:
         self.path = path
         self.ring = ring or self.RING
         self.on_record = on_record
+        # Two locks, and the order between them is always `_file_lock`
+        # first. `_lock` guards the ring, the tallies and the fault state,
+        # which the view reads every 400 ms; `_file_lock` guards the
+        # handle, the byte count and the rotation. Writing the file under
+        # the ring's lock would put a `flush()` -- and, on a rotation, a
+        # rename -- in front of every repaint. FIDELITY R32.
         self._lock = threading.Lock()
+        self._file_lock = threading.RLock()
+        # -1 means "the class default", so a caller can still pass None for
+        # no quota at all and 0 is not mistaken for unset.
+        self.max_bytes = self.MAX_BYTES if max_bytes == -1 else max_bytes
+        self.keep = self.KEEP if keep == -1 else keep
+        self._written = 0            # bytes in the file open right now
+        self.rotations = 0
         self._rows = []
         self._fh = None
         self._opened = False
@@ -508,6 +699,26 @@ class Capture:
         self.total = 0
         self.by_peer = {}
         self.peers_untallied = 0
+        # Whether what is being counted is actually reaching the disk, and
+        # what stopped it. A full disk, a revoked permission or a volume
+        # pulled out from under the process used to be swallowed whole:
+        # `total` went on climbing, the view went on scrolling, and the
+        # file stopped growing -- a silence that looks exactly like a quiet
+        # night. A honeypot whose product is the capture has to say when it
+        # has stopped collecting one. FIDELITY R34.
+        #
+        # `on_fault` is called with the reason when the recording stops and
+        # with None when it comes back, ONCE each way rather than once per
+        # row: a full disk fails on every write, and a line per row is the
+        # same silence with noise in front of it.
+        self.fault = None
+        self.unwritten = 0
+        self.on_fault = on_fault
+        # Shut on purpose, which is not an outage. `close()` runs while the
+        # listener threads are still alive, so a row already past the lock
+        # lands on a closed handle and raises -- and announcing THAT would
+        # end every clean run with a fault it invented itself.
+        self._closed = False
         if path and enabled:
             self._open()
 
@@ -527,27 +738,134 @@ class Capture:
             self._open()
 
     def _open(self):
+        # Before the attempt, not after it: `enable()` closes the old file
+        # first, so leaving this set would swallow the very fault that an
+        # open FAILING here is there to raise.
+        self._closed = False
+        with self._file_lock:
+            try:
+                d = os.path.dirname(os.path.abspath(self.path))
+                if d:
+                    os.makedirs(d, exist_ok=True)
+                # Append, never truncate: a capture file is evidence and a
+                # restart must not be able to destroy the last one.
+                #
+                # This is the one write the freeze deliberately does NOT
+                # stop. It is the honeypot's whole product, it goes to a
+                # path the operator named rather than one the network can
+                # steer, and it is append-only.
+                self._fh = open(self.path, "a", encoding="utf-8")
+                self._opened = True
+                # What is already there counts against the quota. Seeded
+                # from the file rather than from zero, or a restart every
+                # few minutes would append past the quota for ever and the
+                # bound would be one this process could not see. FIDELITY
+                # R32.
+                try:
+                    self._written = os.path.getsize(self.path)
+                except OSError:
+                    self._written = 0
+            except OSError as e:
+                self._fh = None
+                # A capture file that could not be opened at all is the
+                # same outage as one that stopped being written, and it is
+                # the one an operator can still do something about: it
+                # happens at startup, while they are standing there.
+                self._fault("cannot open %s: %s" % (self.path, e))
+            else:
+                self._clear_fault()
+
+    def _rotate(self):
+        """Start a new capture file and shift the old ones along.
+
+        Called with `_file_lock` held. A capture is evidence, so the old
+        file is renamed and not truncated, and `keep` of them survive: the
+        quota bounds the disk, it does not decide that the last hour was
+        the interesting one.
+        """
+        if not self.path:
+            return
         try:
-            d = os.path.dirname(os.path.abspath(self.path))
-            if d:
-                os.makedirs(d, exist_ok=True)
-            # Append, never truncate: a capture file is evidence and a
-            # restart must not be able to destroy the last one.
-            #
-            # This is the one write the freeze deliberately does NOT stop.
-            # It is the honeypot's whole product, it goes to a path the
-            # operator named rather than one the network can steer, and it
-            # is append-only.
-            self._fh = open(self.path, "a", encoding="utf-8")
-            self._opened = True
+            if self._fh:
+                self._fh.close()
         except OSError:
-            self._fh = None
+            pass
+        self._fh = None
+        try:
+            for n in range(self.keep, 0, -1):
+                older = "%s.%d" % (self.path, n)
+                if n == self.keep and os.path.exists(older):
+                    os.remove(older)
+                    continue
+                if os.path.exists(older):
+                    os.replace(older, "%s.%d" % (self.path, n + 1))
+            if self.keep > 0:
+                os.replace(self.path, self.path + ".1")
+            else:
+                os.remove(self.path)
+        except OSError as e:
+            # The rotation failed, so the quota cannot be held. Say so and
+            # go on appending rather than stopping: an over-quota capture
+            # is a smaller failure than a silent one, and `_open` below
+            # will report it again if the file itself has gone.
+            self._fault("cannot rotate %s: %s" % (self.path, e))
+        self.rotations += 1
+        self._opened = False
+        self._open()
+
+    # -- is it reaching the disk ------------------------------------------
+
+    def _fault(self, why):
+        """Record that the capture has stopped reaching the disk."""
+        with self._lock:
+            if self._closed:
+                return              # shut on purpose; nothing went wrong
+            first = self.fault is None
+            self.fault = why
+        if first:
+            self._say(why)
+
+    def _lost(self):
+        """Count a row that was counted and did not reach the disk.
+
+        Not after a deliberate `close()`: the listener threads outlive it
+        by a moment at shutdown, and the rows they lose there are the
+        program ending rather than an outage to report.
+        """
+        with self._lock:
+            if not self._closed:
+                self.unwritten += 1
+
+    def _clear_fault(self):
+        """Record that it is reaching the disk again."""
+        with self._lock:
+            was, self.fault = self.fault, None
+        if was:
+            self._say(None)
+
+    def _say(self, why):
+        if not self.on_fault:
+            return
+        try:
+            self.on_fault(why)
+        except Exception:           # noqa: BLE001  -- a notifier must not
+            pass                    # be able to kill a listener thread
+
+    def healthy(self):
+        """Is every row that has been counted on the disk?"""
+        return self.fault is None and not self.unwritten
 
     # -- writing ----------------------------------------------------------
 
     def record(self, direction, data, peer=None, port=None, proto="tunnel",
-               cmd=None, note=None):
-        """One direction of one exchange."""
+               cmd=None, note=None, length=None):
+        """One direction of one exchange.
+
+        `length` is how many bytes there really were, for the caller that
+        has decided not to store them: `bytes` stays true while `raw` goes
+        empty, so a truncated connection still reports its volume. See
+        `_CaptureSession` and FIDELITY R32.
+        """
         raw = bytes(data or b"")
         row = {
             "ts": time.time(),
@@ -556,7 +874,7 @@ class Capture:
             "proto": proto,
             "dir": direction,
             "cmd": cmd or command_of(raw),
-            "bytes": len(raw),
+            "bytes": len(raw) if length is None else length,
             "raw": raw.hex(),
         }
         if note:
@@ -569,6 +887,17 @@ class Capture:
         self._put({"ts": time.time(), "src": peer, "sport": port,
                    "proto": proto, "dir": kind, "note": note or "",
                    "bytes": 0, "raw": ""})
+
+    def session(self, peer=None, port=None, proto="tunnel"):
+        """A recorder for ONE connection, with its own byte budget.
+
+        The budget lives on the connection's own stack rather than in a
+        table here, which is the point: a table keyed by source and port
+        would need a ceiling of its own -- a new ephemeral port arrives
+        with every connection -- and would be one more thing an attacker
+        could spend. See `Capture.MAX_SESSION_BYTES` and FIDELITY R32.
+        """
+        return _CaptureSession(self, peer, port, proto)
 
     # How many distinct sources the tally will name before it stops
     # growing. It is a tally for the view's "N sources", not a record --
@@ -595,13 +924,29 @@ class Capture:
             if len(self._rows) > self.ring:
                 del self._rows[:-self.ring]
                 self.dropped += 1
+        with self._file_lock:
             fh = self._fh
-        if fh:
-            try:
-                fh.write(json.dumps(row, separators=(",", ":")) + "\n")
-                fh.flush()
-            except (OSError, ValueError):
-                pass
+            if fh:
+                line = json.dumps(row, separators=(",", ":")) + "\n"
+                try:
+                    fh.write(line)
+                    fh.flush()
+                except (OSError, ValueError) as e:
+                    self._lost()
+                    self._fault("%s: %s" % (type(e).__name__, e))
+                else:
+                    if self.fault is not None:
+                        self._clear_fault()
+                    self._written += len(line)
+                    if (self.max_bytes is not None
+                            and self._written >= self.max_bytes):
+                        self._rotate()
+        if not fh and self.path:
+            # A path was named and there is no handle to write it to, so
+            # `_open` has already said why. Go on counting what is being
+            # lost anyway: an outage that reports nothing unwritten is the
+            # same lie in a smaller font.
+            self._lost()
         if self.on_record:
             try:
                 self.on_record(row)
@@ -620,15 +965,24 @@ class Capture:
             return {"total": self.total, "dropped": self.dropped,
                     "peers": len(self.by_peer),
                     "peers_untallied": self.peers_untallied,
-                    "top": top}
+                    "top": top,
+                    # `dropped` is rows that fell off the VIEW's ring and
+                    # are safe on the disk; `unwritten` is rows that never
+                    # reached the disk at all. They are not the same number
+                    # and must not be shown as one. FIDELITY R34.
+                    "fault": self.fault, "unwritten": self.unwritten}
 
     def clear(self):
         with self._lock:
             self._rows = []
 
     def close(self):
-        with self._lock:
+        # `_file_lock` before `_lock`, which is the order everywhere: the
+        # handle belongs to the file lock now that a rotation can swap it.
+        with self._file_lock:
             fh, self._fh = self._fh, None
+            with self._lock:
+                self._closed = True
         if fh:
             try:
                 fh.close()

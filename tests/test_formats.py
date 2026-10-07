@@ -56,6 +56,9 @@ def a_console():
     c = Console()
     for card in list(c.modules):
         c.modules[card] = 4
+    # a tank whose probe reports: without one the bench answers CSLD's
+    # settings with their title whatever the Set carries
+    c.tank_level[1] = {"volume": 6000.0, "water": 0.0}
     return c, Handler(c, verbose=False)
 
 
@@ -64,7 +67,15 @@ def send(h, cmd):
 
 
 def refused(h, cmd):
-    return send(h, cmd).strip(chr(1) + chr(3) + chr(13) + chr(10)).startswith("9999")
+    """A value the console would not take. 9999 was this console's answer
+    for it; a real TLS-350 answers one `?` per character sent under the
+    echo and the stamp (the bench console, 2026-09-18), and keeps 9999 for a
+    function code it does not know. Either counts as a refusal here."""
+    out = send(h, cmd)
+    if out.strip(chr(1) + chr(3) + chr(13) + chr(10)).startswith("9999"):
+        return True
+    rows = out.split(chr(13) + chr(10))
+    return len(rows) > 3 and rows[3] != "" and set(rows[3]) == {"?"}
 
 
 class ItCatchesGarbage(unittest.TestCase):
@@ -150,6 +161,15 @@ class TheFourMistakesItMade(unittest.TestCase):
         self.assertFalse(formats.valid("5E2", "AB00"))
 
 
+# The list Sets that add one entry at a time, whose inquiry a backup stores
+# as it came back: with nothing on the list, the count alone -- `0100` for
+# receiver 1's autodial alarms, `00` for the custom alarm labels. Sent back,
+# the bench TLS-350 refused every one `??` and left the list as it was
+# (2026-09-25, `bench-2026-09-25/emptylists.jsonl`), and so does this
+# console. They are no part of a restore on either.
+EMPTY_LISTS = {"5BC", "5BE", "5BF", "7BD"}
+
+
 class ItRefusesNothingARealSiteSends(unittest.TestCase):
     """The regression test that found every mistake above. If a change to
     `formats` refuses a line in either of these files, that change is wrong --
@@ -175,6 +195,10 @@ class ItRefusesNothingARealSiteSends(unittest.TestCase):
                 continue
             tok, dev = code[1:4], code[4:6]
             if tok not in SETTABLE:
+                continue
+            if tok in EMPTY_LISTS and data in ("00", dev + "00"):
+                # an empty list, which a Set cannot carry: the console
+                # refuses it too
                 continue
             seen += 1
             if not formats.valid(tok, data,

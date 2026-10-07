@@ -52,7 +52,9 @@ from . import pscal
 from . import masks
 from . import pressure as _pressure
 from . import packed
+from . import groundtemp
 from . import readings
+from . import units as _units
 from . import versions
 
 
@@ -117,10 +119,21 @@ SELF_CLEARING = {
     # against. See the alarm-lifecycle audit, A4 and A5.
     "0222",                          # Tank Siphon Break
     "0220",                          # Tank Test Active
+    # Measured, not read: on the bench TLS-350 (2026-09-19) a PRINTER ERROR
+    # raised by taking the paper out and never acknowledged left the glass
+    # the second the paper went back -- 5FA read at 2:26:23 showed the PLLD
+    # alarm alone, with the history's CLEAR at 2:26. A SETUP DATA WARNING
+    # cleared unacknowledged on 2026-09-18 did stay until ALARM/TEST, so
+    # this is the alarm's own and not a rule. PAPER OUT was not watched.
+    "0102",                          # Printer Error
 }
 STATUS_DEVICE_WORD = DATA["status_device_word"]
 STATUS_DEVICE_CODE = DATA["status_device_code"]
 DEVICE_PREFIXED = {int(x) for x in DATA["device_prefixed"]}
+# 5E2 is on the list and the bench TLS-350 does not prefix it: `i5E201` packs
+# `EE00` and nothing before it (2026-09-22), so a restore of its own dump came
+# back here as `01EE00`
+DEVICE_PREFIXED.discard(0x5E2)
 MULTI_DEVICE = {int(x) for x in DATA["multi_device"]}
 FIELDS = DATA["fields"]
 SETUP_MENU = DATA["setup_menu"]
@@ -228,6 +241,15 @@ MODULES = [
     ("plld",    "Six-Input PLLD Interface",             "330843-001", "is",    6,  1),
     ("plldctl", "Three-Output PLLD Controller",         "330374-001", "power", 3,  1),
     ("wplld",   "WPLLD AC Interface",                   "330874-001", "power", 3,  3),
+    # The WPLLD Communications Module carries four numbers. 330883-001 is the
+    # TLS-350 Plus brochure's, "Maximum one per console"; 847490-309 is the
+    # spare 576013-923 orders; a board in hand (2026-09-24) is labelled
+    # 330812-001, which is what distributors sell it as, and its bare PCB is
+    # 330811-001. It takes cable 330869-001 over the partition from the AC
+    # Interface (577013-481 Rev C p.8), and slots 1 or 2 only on a standard
+    # CPU with a printer, whose printer card is the third -- an ECPU drives the
+    # printer itself and has all three (FIDELITY M23). Its software shows on
+    # the WPLLD DIAGNOSTIC DATA screen (576013-818 Rev AB ch.6).
     ("wplldcom", "WPLLD Comm Board",                    "330883-001", "comm",  0,  1),
     ("io",      "Two-Input/Two-Relay Output Interface", "329360-001", "power", 2,  4),
     ("relay",   "Four-Relay Output Module",             "329359-001", "power", 4,  4),
@@ -749,6 +771,9 @@ MODULE_PAPER = {
     "ssat": "SERIAL SAT BD",         # the capture, comm 2
     "modem": "FAXMODEM  BOARD",      # p.49's sample, comm 1
     "edim": "ELEC DISP INT.",        # p.49's sample, comm 3
+    # the bench, comm 3, 202958 ohms against Table 6-1's "WPLLD Comm 200K"
+    # (2026-09-24, a 330812-001 fitted for the purpose)
+    "wplldcom": "WPLLD COMM BD",
 }
 
 # A tank lying on its side is not a wedge, and the manuals' own examples say
@@ -1193,11 +1218,20 @@ class Console:
         # Module, or the Probe/Thermistor Interface Module that carries four
         # thermistor positions beside its four probes. FIDELITY M4.
         self.probe_gt = False
+        # What is wired on that card's four thermistor inputs, {input:
+        # ohms}, and when each last changed; an input not listed is open.
+        # See `groundtemp`.
+        self.thermistors = {}
+        self.thermistor_since = {}
         # Which of the comm bay's four slots each card is in, {slot: key}.
         # Empty means nobody has arranged the bay by hand and `comm_layout`
         # will lay it out legally; an entry is somebody having put a card
         # somewhere, including somewhere Table 7-2 says it will not work.
         self.comm_slots = {}
+        # what was in the cage at the last system reset -- a cold start --
+        # for function 102's POWER ON RESET column; None where not known
+        # (`power_on_reading`)
+        self.reset_cage = None
         # The wiring harness a dual-port module needs before it does
         # anything: "connect the 4-pin connector (of the included wiring
         # harness) to J4 on the Module ... the 8-pin connector of the harness
@@ -1416,6 +1450,12 @@ class Console:
         self.clock_speed = 1.0    # a bench control: a 12 hour test in a minute
         self.posted = set()       # alarms a test has raised, AANNTT
         self.in_setup = False     # the warning waits until you leave Setup
+        # FIDELITY S35: whether the tank checks that post PROBE OUT and a
+        # SETUP DATA WARNING for a switched-on tank with no probe are armed,
+        # and the day of the cold boot that disarmed them (`tank_checks_armed`)
+        self.tank_checks = False
+        self.cold_day = None
+        self._was_in_setup = False
         self.chart_code = ""      # Tank Chart Security passcode, "" = off
         self.chart_code_set = ""  # when it was last changed, for I56A
         self.serial_number = ""   # the console's own, off the label
@@ -1489,6 +1529,10 @@ class Console:
         self.autodial = _autodial.Autodial(self)
         self.autotx = _autotx.AutoTransmit(self)
         self.accuchart_log = []   # (tank, when) each time a chart was applied
+        # The last site backup loaded whole (`sitebackup.load`): which file,
+        # its header, and the site's own reports as it printed them, kept so
+        # the Site Reports window can put them beside this console's.
+        self.site_backup = {}
         # The E2 chip's other tenant. "AccuChart users should note that you
         # archive system setup data only in the E2 chip. If AccuChart is
         # complete, the final calibration values are automatically stored in
@@ -1586,11 +1630,20 @@ class Console:
         # Module, or the Probe/Thermistor Interface Module that carries four
         # thermistor positions beside its four probes. FIDELITY M4.
         self.probe_gt = False
+        # What is wired on that card's four thermistor inputs, {input:
+        # ohms}, and when each last changed; an input not listed is open.
+        # See `groundtemp`.
+        self.thermistors = {}
+        self.thermistor_since = {}
         # Which of the comm bay's four slots each card is in, {slot: key}.
         # Empty means nobody has arranged the bay by hand and `comm_layout`
         # will lay it out legally; an entry is somebody having put a card
         # somewhere, including somewhere Table 7-2 says it will not work.
         self.comm_slots = {}
+        # what was in the cage at the last system reset -- a cold start --
+        # for function 102's POWER ON RESET column; None where not known
+        # (`power_on_reading`)
+        self.reset_cage = None
         # The wiring harness a dual-port module needs before it does
         # anything: "connect the 4-pin connector (of the included wiring
         # harness) to J4 on the Module ... the 8-pin connector of the harness
@@ -1627,6 +1680,7 @@ class Console:
         self.autodial = _autodial.Autodial(self)
         self.autotx = _autotx.AutoTransmit(self)
         self.accuchart_log.clear()
+        self.site_backup = {}
         if keep_clock:
             self.clock_offset, self.clock_speed = offset, speed
         else:
@@ -1720,7 +1774,8 @@ class Console:
         # not the bay's arrangement.
         slots = dict(self.comm_slots)
         harness = (self.dual_harness, self.double_harness)
-        variants = (self.smart_press, self.probe_gt)
+        variants = (self.smart_press, self.probe_gt,
+                    dict(self.thermistors))
         # The Maintenance Tracker's key lists are not RAM either: a log-in
         # record goes "to FPROM", 576013-610 ch.33, and the feature wants an
         # NVMEM203 to exist at all. The SESSION does not survive -- nobody is
@@ -1747,7 +1802,12 @@ class Console:
         self.modules = modules
         self.comm_slots = slots
         self.dual_harness, self.double_harness = harness
-        self.smart_press, self.probe_gt = variants
+        self.smart_press, self.probe_gt, self.thermistors = variants
+        # and a cold start is the "system reset" 102's first column is read
+        # at: the cage as it is now is what that column reads from here on
+        self.reset_cage = self.current_cage()
+        # and out of a cold start the no-probe tank checks are not armed
+        self.tank_checks = False
         self.mt_keys, self.blocked_keys = keys
         self.board, self.software = board, software
         self.tank_level = tanks
@@ -1775,10 +1835,30 @@ class Console:
         self.traffic.c = self
         self.blends = mixes
         self._ram_held = True
-        self.clock_set = False    # the battery backed the clock too
+        # The battery backed the clock too, and the clock does not come back
+        # blank: it comes back at the software's own CREATED date, 8:00 AM.
+        # Both of the bench TLS-350's cold starts read JAN 16, 2006 8:00 AM
+        # after them -- 326.01 was created 06.01.16 -- and neither posted
+        # 01/17 CLOCK IS INCORRECT (2026-09-18, and FIDELITY S29 on the
+        # 2006 capture). This kept the wall clock and posted the alarm.
+        self.clock_offset = self.firmware_morning() - time.time()
+        # the day the cold start came up on, by its own clock, for the
+        # midnight that arms the tank checks (`tank_checks_armed`)
+        self.cold_day = time.strftime("%Y%m%d", self.now())
+        self.clock_set = True
         self.rom_at_boot = self.version
         self._mt_seen = self.has("mt")
         self.save()
+
+    def firmware_morning(self):
+        """8:00 AM on the day this console's software was CREATED, as a
+        timestamp: where a cold start sets the clock."""
+        yy, mm, dd = (int(x) for x in
+                      self.software_info()["created"].split(".")[:3])
+        if not mm:
+            return time.time()
+        year = 2000 + yy if yy < 70 else 1900 + yy
+        return time.mktime((year, mm, max(dd, 1), 8, 0, 0, 0, 0, -1))
 
     # ---- persistence -------------------------------------------------------
     def load(self):
@@ -1791,6 +1871,9 @@ class Console:
             # JSON has no integer keys, so the slot numbers come back as text
             self.comm_slots = {int(k): v for k, v
                                in blob.get("comm_slots", {}).items()}
+            self.reset_cage = blob.get("reset_cage")
+            self.tank_checks = bool(blob.get("tank_checks", False))
+            self.cold_day = blob.get("cold_day")
             # tuples do not survive JSON either
             self.mt_keys = [tuple(x) for x in blob.get("mt_keys", [])]
             self.blocked_keys = [tuple(x)
@@ -1798,6 +1881,8 @@ class Console:
             self.dual_harness = bool(blob.get("dual_harness", True))
             self.smart_press = bool(blob.get("smart_press", False))
             self.probe_gt = bool(blob.get("probe_gt", False))
+            self.thermistors = {int(k): float(v) for k, v in
+                                blob.get("thermistors", {}).items()}
             self.double_harness = bool(blob.get("double_harness", False))
             self.tank_level = {int(k): v for k, v in blob.get("tanks", {}).items()}
             self.sensor_state = {tuple(k.split("|")): v
@@ -1834,6 +1919,7 @@ class Console:
             self.traffic.restore(blob.get("traffic"))
             self.settings = self._settings_from(blob.get("settings"))
             self._stores_load(blob)
+            self.site_backup = blob.get("site_backup") or {}
         except Exception as e:
             print(f"[sim] could not load state: {e}")
 
@@ -1852,11 +1938,16 @@ class Console:
             with atomicfile.replacing(self.state_path) as fh:
                 json.dump({"values": self.values, "modules": self.modules,
                            "comm_slots": self.comm_slots,
+                           "reset_cage": self.reset_cage,
+                           "tank_checks": self.tank_checks,
+                           "cold_day": self.cold_day,
                            "mt_keys": self.mt_keys,
                            "blocked_keys": self.blocked_keys,
                            "dual_harness": self.dual_harness,
                            "smart_press": self.smart_press,
                            "probe_gt": self.probe_gt,
+                           "thermistors": {str(k): v for k, v in
+                                           self.thermistors.items()},
                            "double_harness": self.double_harness,
                            "tanks": self.tank_level,
                            "sensors": {"|".join(k): v
@@ -1878,6 +1969,7 @@ class Console:
                            "meters": self.meters.as_json(),
                            "blends": self.blends.as_json(),
                            "traffic": self.traffic.state(),
+                           "site_backup": self.site_backup,
                            "settings": self._settings_json(),
                            **self._stores_json()},
                           fh, indent=1)
@@ -1962,8 +2054,8 @@ class Console:
             setattr(self, name, {})
 
     def seed(self, path):
-        n = 0
         with open(path, encoding="utf-8") as fh:
+            rows = {}
             for line in fh:
                 if line.startswith("#"):
                     continue
@@ -1971,17 +2063,98 @@ class Console:
                 if not code.startswith("S") or not data.strip():
                     continue
                 try:
-                    self.values[code.upper()] = bytes.fromhex(data).decode(
+                    rows[code.upper()] = bytes.fromhex(data).decode(
                         "ascii", "replace")
                 except ValueError:
                     continue
-                n += 1
+        n = 0
+        for code, value in rows.items():
+            if code[4:6] == "00" and (
+                    self.is_prefixed(code[1:4]) or self.is_multi(code[1:4])
+            ) and value == "".join(
+                    rows.get(f"{code[:4]}{d:02d}", "") for d in range(1, 17)):
+                # A dump asks device 00 as well as each device, and for a
+                # per-device code 00's reply is every device's record run
+                # together: `S62D00` is `01000020000300004000`. Held as a
+                # value, that is what the reports printed (the bench
+                # TLS-350's snapshot, 2026-09-22). A system code is asked per
+                # device too and answers its one value each time, which is
+                # not the rows run together, so it stays.
+                continue
+            value = self._stored_form(code, value)
+            if code.startswith("S52B") and code[4:6].isdigit():
+                # 52B has a store of its own, which 520 and 52B both read; in
+                # `values` it printed every receiver DISABLED (the same
+                # snapshot). Device 00 is all eight at once, and each is on
+                # its own row too.
+                if code[4:6] != "00":
+                    self.store(code, value)
+            else:
+                self.values[code] = value
+            n += 1
         return n
+
+    def _stored_form(self, code, value):
+        """A dump's packed value, in the form a Set would have stored it.
+
+        Nearly every code stores what its computer reply packs, so a dump
+        seeds as it is. Three do not, and on the bench TLS-350's snapshot
+        (2026-09-22) the reports printed their packed text: 7C3's `132`
+        gallons as `143040000`, 78F's 25 psi as `41C80000`, 78A's HIGH
+        PRESSURE as `03`. 7C3 is held in whole gallons with no prefix, 78F
+        in whole psi and 78A as its one digit, each behind the device.
+        """
+        tok, dev = code[1:4], code[4:6]
+        if not dev.isdigit() or dev == "00":
+            return value
+        field = FIELDS.get(f"S{tok}01") or {}
+        try:
+            if tok == "7C3" and len(value) == 10:
+                return str(int(round(packed.unhexfloat(value[2:]))))
+            if field.get("packed_float") and len(value) == 10:
+                return value[:2] + str(int(packed.unhexfloat(value[2:])))
+            if (field.get("kind") == "enum" and field.get("packed_width") == 2
+                    and len(value) == 4 and value[2:].isdigit()
+                    and all(len(ch[0]) == 1 for ch in field["choices"])):
+                return value[:2] + str(int(value[2:]))
+        except (ValueError, OverflowError):
+            pass
+        return value
 
     # ---- the board and the software on it ----------------------------------
     def software_info(self):
         """The revision block this console prints: version, part, date."""
-        return versions.info(self.version, self.board)
+        info = versions.info(self.version, self.board)
+        info["smodule"] = self.s_module_number()
+        return info
+
+    # 330160-000 Rev V sheet 2, the units digit's subsets (UNKNOWNS A77)
+    SEM_UNITS = {(): "0", ("csld",): "2", ("fuelman",): "3", ("isd",): "4",
+                 ("csld", "fuelman"): "5", ("csld", "isd"): "6",
+                 ("fuelman", "isd"): "7", ("csld", "fuelman", "isd"): "9"}
+
+    def s_module_number(self):
+        """`330160-HTU-A`, the SEM part number, composed from the keys.
+
+        330160-000 Rev V sheet 2 makes it positional: hundreds BIR (and VLD,
+        which this does not count -- whether the drawing's VLD is this
+        console's VLLD card is not stated), tens the line leak bundle, units
+        CSLD, Fuel Manager and ISD as a subset. The bench TLS-350's own pair
+        is `330160-012-A` over CSLD and PLLD 0.10 and 0.20 REPETITIV with no
+        BIR: 0, 1 (P1C2C, ".1 and .2 continuous"), 2 (CS), exactly the
+        decode (2026-09-18). This reported `330160-115-A` whatever was keyed.
+
+        The tens digit: both line leak keys are P1C2C (1), as on the bench;
+        the 0.10 key alone is WP1D (5), the on-demand bundle, which is what
+        this console's 0.10 key is named; the 0.20 key alone is in no
+        bundle and reads 0. TLC is not keyed here. See UNKNOWNS A77.
+        """
+        hundreds = "1" if self.licensed("bir") else "0"
+        p10, p20 = self.licensed("plld010"), self.licensed("plld020")
+        tens = "1" if (p10 and p20) else "5" if p10 else "0"
+        units = self.SEM_UNITS[tuple(k for k in ("csld", "fuelman", "isd")
+                                     if self.licensed(k))]
+        return f"330160-{hundreds}{tens}{units}-A"
 
     def supports(self, feature):
         """Is that feature in this console's cell of the manual's table?
@@ -2185,8 +2358,18 @@ class Console:
 
         Two eight-input liquid sensor modules is sixteen sensors, and each
         module's own config screen switches on the eight positions it has.
+
+        A pressure line takes an input on the Six-Input PLLD Interface AND an
+        output on the Three-Output PLLD Controller that runs its pump, so a
+        cage with one of each has three lines, not six. The bench TLS-350
+        (one of each) lists Q 1 to Q 3 on every 77x and 78x report and
+        nothing past them. A cage with no controller fitted keeps the
+        interface's own count, which is what every console here did before.
         """
-        return self.wires(module) * self.count(module)
+        n = self.wires(module) * self.count(module)
+        if module == "plld" and self.count("plldctl"):
+            n = min(n, self.wires("plldctl") * self.count("plldctl"))
+        return n
 
     def most(self, module):
         """The most of that card this console takes.
@@ -5361,11 +5544,22 @@ class Console:
         yy, mm, dd = int(raw[0:2]), int(raw[2:4]), int(raw[4:6])
         hh, mi = int(raw[6:8]), int(raw[8:10])
         year = 2000 + yy if yy < 70 else 1900 + yy
+        # A date that is not a date is refused, not rolled over. The bench
+        # TLS-350 answered `S501000602300100` (FEB 30) and `S501000601192400`
+        # (hour 24) with a `?` per character and kept the clock it had, while
+        # FEB 28 and 23:59 were taken (2026-09-19, `transcripts/clockset4`).
+        # `mktime` normalises, so this had been reading them as MAR 2 and the
+        # next midnight and setting the clock to them.
+        if not (1 <= mm <= 12 and 1 <= dd <= 31 and hh <= 23 and mi <= 59):
+            return False
         try:
             want = time.mktime((year, mm, dd, hh, mi, 0, 0, 1, -1))
         except (ValueError, OverflowError):
             return False
+        if time.localtime(want)[:3] != (year, mm, dd):
+            return False          # FEB 30 and its kind
         before = time.mktime(self.now())
+        self.tank_checks = True           # FIDELITY S35: a clock set arms
         self.clock_offset = want - time.time()
         self.clock_set = True
         # "Time Change Detected at:", stamped on the clock it came to with
@@ -5379,17 +5573,23 @@ class Console:
         """The status line, in the format programmed at DATE/TIME FORMAT."""
         t = self.now()
         fmt = (self.values.get("S50F00") or "01").strip()[-2:]
+        # As the bench TLS-350's glass reads them (5FA, 2026-09-19): 02 keeps
+        # the comma, and every hour is space padded, never zero padded --
+        # `JAN 16, 2006 20:29:57`, `01-16-06  8:30:03 PM`
+        hms = f"{t.tm_hour:2d}:{t.tm_min:02d}:{t.tm_sec:02d}"
+        mm, dd, yy = (f"{t.tm_mon:02d}", f"{t.tm_mday:02d}",
+                      f"{t.tm_year % 100:02d}")
         if fmt == "02":
-            return (clock_date(t, sep=" ")
-                    + time.strftime(" %H:%M:%S", t))
+            return f"{clock_date(t)} {hms}"
         if fmt == "03":
-            return time.strftime("%m-%d-%y %I:%M:%S %p", t).upper()
+            return (f"{mm}-{dd}-{yy} {t.tm_hour % 12 or 12:2d}:{t.tm_min:02d}:"
+                    f"{t.tm_sec:02d} " + ("AM" if t.tm_hour < 12 else "PM"))
         if fmt == "04":
-            return time.strftime("%m-%d-%y %H:%M:%S", t)
+            return f"{mm}-{dd}-{yy} {hms}"
         if fmt == "05":
-            return time.strftime("%d-%m-%y %H:%M:%S", t)
+            return f"{dd}-{mm}-{yy} {hms}"
         if fmt == "06":
-            return time.strftime("%y-%m-%d %H:%M:%S", t)
+            return f"{yy}-{mm}-{dd} {hms}"
         return clock_words(t, seconds=True)
 
     def clock_stamp(self):
@@ -5411,7 +5611,11 @@ class Console:
         text = self.clock_text()
         # the programmed formats differ, so take the seconds out of whichever
         # one is set rather than re-spelling six of them
-        return re.sub(SECONDS_IN_STAMP, lambda m: m.group(1), text)
+        text = re.sub(SECONDS_IN_STAMP, lambda m: m.group(1), text)
+        # and the four numeric ones stand four columns in: `    01-16-06
+        # 8:29 PM` over every reply on the bench TLS-350 (2026-09-19)
+        fmt = (self.values.get("S50F00") or "01").strip()[-2:]
+        return ("    " + text) if fmt in ("03", "04", "05", "06") else text
 
     # ---- what the console says it is ---------------------------------------
     def features(self):
@@ -5423,13 +5627,49 @@ class Console:
         """
         out = []
         for key, feats in MODULE_FEATURES.items():
+            if key in ("plld", "wplld"):
+                continue                  # the line leak keys, below
             if not self.has(key):
                 continue
             out.extend(f for f in feats
                        if self.supports(FEATURE_LINE.get(f.strip())))
+        # The line leak section is the KEYS', both families, whatever cards
+        # are in the cage: the bench TLS-350 (2026-09-18, S-Module
+        # 330160-012, a PLLD card and no WPLLD card) prints
+        #
+        #     PLLD                    WPLLD
+        #       0.10 REPETITIV          0.10 AUTO
+        #       0.20 REPETITIV          0.20 REPETITIV
+        #
+        # one under the other, and not the keys' long names this used to
+        # add. The bench's 0.10 key is the Repetitive one (P1C2C); what the
+        # On Demand key prints is not captured, and this console still
+        # models the two as one -- UNKNOWNS A77.
+        #
+        # And the rates are in the console's units: `0.38 REPETITIV` and
+        # `0.76` in metric, `0.08` and `0.17` in imperial, on the same bench
+        # (`cap_metric`, `cap_imperial`, 2026-09-19) -- litres and imperial
+        # gallons an hour, at two places.
+        from . import units as _units
+        system = _units.system(self)
+
+        def rate(gph):
+            return f"{_units.out('rate', gph, system, display=True):.2f}"
+        low, high = rate(0.10), rate(0.20)
+        k010, k020 = self.licensed("plld010"), self.licensed("plld020")
+        if (k010 or k020) and self.supports("plld"):
+            out.append("PLLD")
+            out += ([f"{low} REPETITIV"] * k010
+                    + [f"{high} REPETITIV"] * k020)
+            if self.supports("wplld"):
+                out.append("WPLLD")
+                out += ([f"{low} AUTO"] * k010
+                        + [f"{high} REPETITIV"] * k020)
         for key, name, _part in SOFTWARE_MODULES:
             if not self.licensed(key):
                 continue
+            if key in ("plld010", "plld020"):
+                continue                  # drawn as the section above
             # A feature the CARD list has already named is not named again
             # under its licence's longer title. CSLD is both: the probe
             # module earns the line and the S-Module licenses it, so this
@@ -5463,16 +5703,21 @@ class Console:
         """
         probe = self.has("probe")
         line = self.has("plld") or self.has("wplld")
+        p10, p20 = self.licensed("plld010"), self.licensed("plld020")
         state = {
             "PERIODIC IN-TANK TESTS":      probe,
             "ANNUAL IN-TANK TESTS":        probe,
             "CSLD":                        probe and self.licensed("csld"),
             "BIR":                         self.licensed("bir"),
             "FUEL MANAGER":                self.licensed("fuelman"),
-            "PRECISION PLLD":              line and self.licensed("plld010"),
+            # the bench TLS-350, with both line keys, flagged PRECISION
+            # PLLD 01 and 0.2 GPH PLLD and ON DEMAND 00 (i90500, 2026-09-18)
+            # -- the P1C2C bundle its S-Module number names. So the pair is
+            # PRECISION, the 0.10 key alone ON DEMAND, and 0.20 alone 0.2 GPH
+            "PRECISION PLLD":              line and p10 and p20,
             "TANKER LOAD":                 self.loads.enabled(),
-            "0.2 GPH PLLD":                line and self.licensed("plld020"),
-            "PRECISION PLLD ON DEMAND":    line and self.licensed("plld010"),
+            "0.2 GPH PLLD":                line and p20 and not p10,
+            "PRECISION PLLD ON DEMAND":    line and p10 and not p20,
             "SPECIAL 3-TANK/LINE CONSOLE": False,
             "ISD":                         self.licensed("isd"),
             "UNUSED WAS PMC":              False,
@@ -5750,29 +5995,51 @@ class Console:
         """
         return bool(self.rs232_security and self.security_code())
 
-    def rs232_eom_chars(self, port=1):
-        """The extra characters appended after <ETX> on computer-format
-        replies, or b"" for the bare <ETX>.
+    def etx_port(self, dev):
+        """537's and 538's port: 01 to 06, or 99 for "this port"; None for
+        anything else, which the bench TLS-350 answered bare (00 and 07,
+        2026-09-25). Every one of 1 to 6 answers, card or no card."""
+        if not dev.isdigit():
+            return None
+        n = int(dev)
+        if n == 99:
+            return self.rs232_port()
+        return n if 1 <= n <= 6 else None
 
-        576013-635: End of Message (531) enables the feature; ETX-per-port
-        (537) sets up to two characters, each 0-255, held as four hex digits
-        AABB per port. A first character of NUL (00) reverts to the default
-        (nothing extra); if only the second is NUL, just the first is sent.
-        With 531 disabled, nothing extra is sent whatever 537 holds.
+    @staticmethod
+    def etx_chars(data):
+        """What a 537 or 538 Set stores: its two characters as sent, each
+        0-255 -- 576013-635 p.207, "The TLS accepts any ASCII character
+        (000-255)". Measured on the bench TLS-350, 2026-09-25
+        (`bench-2026-09-25/etxset.jsonl`): a NUL first character clears both,
+        whatever the second (`<NUL>#` stored nothing); a NUL second leaves the
+        first alone; a space is kept (` #`); a control byte is kept as itself
+        and printed raw; a byte from 80 to FF is stored as `A`, as a label's
+        is (UNKNOWNS A76)."""
+        data = (data or "")[:2]
+        if not data or data[0] == "\x00":
+            return ""
+        data = data.split("\x00", 1)[0]
+        return "".join("A" if ord(ch) > 0x7F else ch for ch in data)
+
+    def reply_end(self, computer, port=None):
+        """The bytes a reply ends with in place of <ETX>.
+
+        576013-635 p.206-207: End of Message (531) enables it, and 537
+        (display format) and 538 (computer format) hold up to two characters
+        per port. On the bench TLS-350 they REPLACE the ETX, in both formats
+        and from the reply to the Set itself: with 538 at `*#`, `i20100`
+        ended `&&FC5E*#` with no ETX and the same checksum, and with 537 at
+        `+` a display reply ended `+` (2026-09-25, `etxeom.jsonl`). With 531
+        disabled, as it is out of a cold start, nothing changes whatever
+        the tables hold. This used to append them after the ETX, for the
+        computer format only, and read them from 537.
         """
-        if (self.values.get("S53100") or "0").strip() not in ("1",):
-            return b""
-        raw = (self.values.get(f"S537{port:02d}")
-               or self.values.get("S53799") or "").strip()
-        if len(raw) < 4:
-            return b""
-        try:
-            a, b = int(raw[0:2], 16), int(raw[2:4], 16)
-        except ValueError:
-            return b""
-        if a == 0:                       # NUL first char: default, nothing
-            return b""
-        return bytes([a]) if b == 0 else bytes([a, b])
+        if (self.values.get("S53100") or "0").strip() != "1":
+            return b"\x03"
+        port = self.rs232_port() if port is None else port
+        chars = self.values.get(f"S{'538' if computer else '537'}{port:02d}")
+        return chars.encode("latin-1") if chars else b"\x03"
 
     def slot_report(self):
         """SYSTEM CONFIGURATION, slot by slot, as the console shows it.
@@ -5785,6 +6052,7 @@ class Console:
         for slot, bay, key, name in self.cage_slots():
             por, now = (self.empty_slot_reading(bay, slot) if key is None
                         else self.module_id_resistance(key, slot))
+            por = self.power_on_reading(f"S{slot}", key, por, bay, slot)
             out.append((f"SLOT {slot} {name}",
                         self.resistance_line(por, now)))
         # The comm bay is walked by POSITION rather than by card: a dual-port
@@ -5828,11 +6096,15 @@ class Console:
         `slot_name`. `UNUSED` is `UNUSED` on both.
         """
         half = self.comm_half(port, paper)
+        seat = self.comm_positions().get(port)
+        key = seat[1] if seat else None
         if half is None:
             empty = EMPTY_OHMS["comm"]
-            return "UNUSED", empty, empty
-        por, now = self.module_id_resistance(
-            self.comm_positions()[port][1], 100 + port, ohms=half[2])
+            return ("UNUSED", self.power_on_reading(
+                f"C{port}", key if seat else None, empty, "comm", 100 + port),
+                empty)
+        por, now = self.module_id_resistance(key, 100 + port, ohms=half[2])
+        por = self.power_on_reading(f"C{port}", key, por, "comm", 100 + port)
         return half[1], por, now
 
     def module_id_resistance(self, module, slot=1, ohms=None):
@@ -5855,12 +6127,21 @@ class Console:
                                   period=900.0))
         return por, now
 
-    # "TT - Type of Module (Hex)" in i10200, for the cards this cage takes
+    # "TT - Type of Module (Hex)" in i10200, for the cards this cage takes.
+    # The PLLD sensor board is 1A and its controller 1B -- this had the
+    # sensor board at 1B and the controller at nothing -- and the satellite
+    # and the WPLLD comm module had no code: the bench TLS-350 packed slot 2
+    # 1A, slot 9 1B, comm 2 25 and comm 3 21 (2026-09-24), each the name
+    # 576013-635 Rev AA's list gives the number. `wplld` is the AC Interface,
+    # 20, where this had the WPLLD Controller's 22; the remote printer is 1D.
+    # All but the four measured are read off the list.
     MODULE_TYPE = {"probe": "01", "vapor": "02", "liquid": "03",
                    "relay": "04", "io": "05", "rs232": "07", "modem": "08",
                    "mdim": "18", "edim": "19", "rdu": "0D",
                    "vlld": "09", "gw": "0B", "2wire": "0C", "3wire": "10",
-                   "pump": "14", "plld": "1B", "wplld": "22", "smart": "28",
+                   "pump": "14", "plld": "1A", "plldctl": "1B",
+                   "rprinter": "1D", "wplld": "20", "wplldcom": "21",
+                   "ssat": "25", "smart": "28",
                    "mt": "2D", "pumpmon": "2E", "vmc": "2F"}
 
     # What an empty slot reads, on every console anyone here can check.
@@ -5934,6 +6215,40 @@ class Console:
             base = last
         return out
 
+    def current_cage(self):
+        """{position: card key or None} across both bays, as fitted now:
+        `S<slot>` for the card cage and `C<position>` for the comm bay."""
+        out = {f"S{slot}": key for slot, _bay, key, _name in self.cage_slots()}
+        positions = self.comm_positions()
+        for port in range(1, BAY_SLOTS["comm"] + 1):
+            seat = positions.get(port)
+            out[f"C{port}"] = seat[1] if seat else None
+        return out
+
+    def power_on_reading(self, where, key_now, por, bay, slot):
+        """POWER ON RESET for one position: its card's reading at the last
+        system reset, which is not the card fitted now if the cage changed
+        since.
+
+        "POR = ID resistor value of module in this slot read at last system
+        reset" -- and a reset is a COLD start, not a power cycle. The bench
+        TLS-350, cold started on 2026-09-18, printed the same five POR
+        figures to the ohm on 09-22 and again on 09-24, after being powered
+        off to have a WPLLD Comm Board fitted in comm 3; and that card's own
+        POR read 15000000, an empty slot's, against 202958 CURRENT. So what
+        was fitted at the reset is remembered (`reset_cage`, taken by
+        `cold_boot` and by a site backup's own 102), and a position whose card
+        has changed since reads the old one. None where it is not known,
+        which reads every card fitted now as there at the reset."""
+        if self.reset_cage is None or where not in self.reset_cage:
+            return por
+        then = self.reset_cage[where]
+        if then == key_now:
+            return por
+        if then is None:
+            return self.empty_slot_reading(bay, slot)[0]
+        return self.module_id_resistance(then, slot)[0]
+
     def slot_readings(self):
         """[(slot, key, name, power-on reset, current)] down the whole cage.
 
@@ -5957,6 +6272,7 @@ class Console:
         for slot, bay, key, name in self.cage_slots(paper=True):
             por, now = (self.empty_slot_reading(bay, slot) if key is None
                         else self.module_id_resistance(key, slot))
+            por = self.power_on_reading(f"S{slot}", key, por, bay, slot)
             out.append((slot, key, name, float(por), float(now)))
         # Same again for the communication bay: its cards have ID resistances
         # too -- RS-232 15K, SiteFax 47K, MT 402K, WPLLD Comm 200K -- and the
@@ -6416,8 +6732,110 @@ class Console:
                       for m, rate in self.meter_flow.items())
         return "ON" if selling else "OFF"
 
+    # The pipe types that take TWO lengths, and what I780 calls each of them.
+    # Read off the bench TLS-350 on 2026-09-18 with Q1 set to each type in
+    # turn: fiberglass prints `2.0IN DIA LEN:` and `3.0IN DIA LEN:`, and the
+    # three flexible pairs all print `1.5IN DIA LEN:` over a literal
+    # `2.xIN DIA LEN:`. These are also exactly the five types whose shortest
+    # accepted length is 0, since either half may be unused. USER DEFINED is
+    # the fifth and is drawn in its own long form.
+    PLLD_TWO_LENGTHS = {"01": ("2.0IN", "3.0IN"), "07": ("1.5IN", "2.xIN"),
+                        "11": ("1.5IN", "2.xIN"), "13": ("1.5IN", "2.xIN")}
+    PLLD_USER_DEFINED = "18"
+
+    def _plld_word(self, tok, line):
+        """A PLLD setting's wire word, defaulted the way a blank console is."""
+        from . import fieldio
+        from .screens import shown
+        key = f"S{tok}{line:02d}"
+        field = FIELDS.get(key) or FIELDS.get(f"S{tok}01")
+        if not field:
+            return ""
+        raw = self.values.get(key)
+        if raw is None:
+            return str(shown(self, field, "")).strip()
+        return str(fieldio.decode(field, key, raw, self)).strip()
+
+    def plld_setup_block(self, line):
+        """One configured pressure line's block of I780, as the bench prints it.
+
+        Every row below is the bench TLS-350's, software 326.01, read on
+        2026-09-18 with the line set to a single-length pipe, to each of the
+        two-length pipes, to USER DEFINED, and with and without a tank. The
+        576013-635 page draws a shorter block with a PIPE TYPE: line this
+        console does not print.
+        """
+        num = lambda tok: self.limit_or_default(tok, line) or 0.0
+        pipe = (self.values.get(f"S788{line:02d}") or "").strip()[-2:]
+        field = FIELDS.get("S78801") or {}
+        if not pipe:
+            default = field.get("default")
+            pipe = next((c for c, name in field.get("choices", [])
+                         if name == default), "03")
+        # the pipe's name as the firmware spells it and no wider: the bench
+        # TLS-350 printed `TYP:PETRO UPP EXTRA` with nothing after it, where
+        # 788 showed ENVIROFLEX PP1501 carrying three spaces of its own
+        # (2026-09-24; `wiretables.pad_line`)
+        word = self._plld_word("788", line)
+        if word == "ENVIROFLEX PP1501":
+            word += "   "
+        rows = [f"Q {line}:{self.text('782', line):<20.20s}", "",
+                f"TYP:{word}"]
+        first, second = num("789"), num("77F")
+        if pipe == self.PLLD_USER_DEFINED:
+            rows += [f"1ST LINE LEN:{first:4.0f} FEET  ",
+                     f"2ND LINE LEN:{second:4.0f} FEET  ",
+                     f"1ST LINE DIAM:{num('777'):5.2f} IN.",
+                     f"2ND LINE DIAM:{num('778'):5.2f} IN.",
+                     f"1ST BULK MOD:{num('779'):7.0f} PSI",
+                     f"2ND BULK MOD:{num('77A'):7.0f} PSI",
+                     f"THERMAL COEFF  :{num('77B'):.6f}"]
+        elif pipe in self.PLLD_TWO_LENGTHS:
+            small, large = self.PLLD_TWO_LENGTHS[pipe]
+            rows += [f"{small} DIA LEN:{first:4.0f} FEET  ",
+                     f"{large} DIA LEN:{second:4.0f} FEET  "]
+        else:
+            rows.append(f"LINE LENGTH: {first:4.0f} FEET  ")
+            if pipe == "19":
+                # Petrotechnik UPP Extra prints its coefficient too: the
+                # bench, with Q1 on that pipe, `THERMAL COEFF  :0.000000`
+                # under the length (`cap_site`, 2026-09-19); the other
+                # single-length types seen do not
+                rows.append(f"THERMAL COEFF  :{num('77B'):.6f}")
+        if self.licensed("plld020"):
+            rows.append("0.20 GPH TEST: " + self._plld_word("78C", line))
+        if self.licensed("plld010"):
+            rows.append("0.10 GPH TEST: " + self._plld_word("783", line))
+        # the rate's number right-aligned in four: `SHUTDOWN RATE:  3.0 GPH`
+        # and `SHUTDOWN RATE: NONE` (the cold start and `cap_site`)
+        rate = self._plld_word("784", line).split(" ", 1)
+        rows += ["SHUTDOWN RATE: " + " ".join([rate[0].rjust(4)] + rate[1:]),
+                 f"LOW PRESSURE SHUTOFF:{self._plld_word('77C', line):<3s}",
+                 f"LOW PRESSURE :{num('78F'):4.0f} PSI", ""]
+        tank = int(num("785"))
+        if tank:
+            # the tank's label and no wider: `T 1:REGULAR UNLEADED` on the
+            # bench (2026-09-24), where the line's own head is padded
+            rows += [f"T {tank}:{self.text('602', tank)[:20]}",
+                     "DISPENSE MODE:", "  " + self._plld_word("786", line)]
+        else:
+            rows.append("TANK: NONE")
+        rows += [f"SENSOR: {self._plld_word('78A', line)}",
+                 f"PRESSURE OFFSET: {num('77D'):.1f}PSI"]
+        return rows
+
     def line_setup_lines(self, kind, lines):
         """I780 and I7A0: the line leak setup, in the console's own words."""
+        if kind == "plld":
+            # Configured lines only, and nothing but the title with none: the
+            # bench answers I78000 on a console with all three lines OFF with
+            # the title alone. Each block is followed by a blank line.
+            rows = ["PRESSURE LINE LEAK SETUP"]
+            for line in lines:
+                if not self._configured("781", line):
+                    continue
+                rows += [""] + self.plld_setup_block(line)
+            return rows
         titles = {"plld": "PRESSURE LINE LEAK SETUP",
                   "wplld": "WPLLD LINE LEAK SETUP"}
         label_code = {"plld": "782", "wplld": "7A2"}[kind]
@@ -6496,13 +6914,19 @@ class Console:
     # The line leak diagnostics are the one place a technician watches a
     # number move, so they answer for the line the panel is on rather than
     # printing the manual's placeholder.
-    LINE_DIAG = {"line_pressure", "line_counts", "line_switches",
-                 "line_leg_gross", "line_leg_periodic", "line_leg_mid"}
+    LINE_DIAG = {"line_dispensing", "line_pressure", "line_counts",
+                 "line_switches", "line_leg_gross", "line_leg_periodic",
+                 "line_leg_mid"}
 
     # The part numbers the manuals print for the two satellite processors, so
     # the screens that report them report something a technician recognises:
     # "PC SWARE# 330269-002-B", "EDIM:1 VR:330273-002-C".
     PC_SOFTWARE = "330269-002-B"
+    # ...and its own date, which is the PC's and not the console's: the
+    # manual's sample (576013-635 Rev AA, 903) and the bench TLS-350 both
+    # print `CREATED - 94.12.16.13.26` under that part number, where this
+    # printed the main software's date
+    PC_CREATED = "94.12.16.13.26"
     DIM_SOFTWARE = "330273-002-C"
     WPLLD_SOFTWARE = "332738-001-B"
 
@@ -6576,11 +7000,18 @@ class Console:
         A receiver ADDRESS exists whether or not anybody has filled it in --
         L14's reading, and the one the whole `52x` family now follows -- so
         the console is not blank here either. It reads method 1, ON DATE,
-        with today's date and the time disabled:
-        `tests/console_capture/raw/I52000.bin` prints
-        `ON DATE     JAN 16, 2006    DISABLED` on all eight rows of a
-        console nobody had autodialled from, and the date it prints is the
-        date in that reply's own stamp.
+        with the time disabled, and a date of zeros: the bench TLS-350 out
+        of a cold start (`cap_coldstart`, 2026-09-18) printed `??? 16, 2006`
+        on all eight rows and packed `1000000EE00`, and `??? 17, 2006` a
+        day later -- the month unknown, the console's own day and year
+        (`wirelists._dial_text`).
+
+        This used to store TODAY, off `tests/console_capture/raw/I52000.bin`
+        printing `JAN 16, 2006` on the day of its stamp. The same console as
+        found in 2026, its clock at SEP 1995, printed `JAN 16, 2006` too, so
+        that date was stored, not today's -- written after the 2006 cold
+        start by something not recorded, most likely the keypad's receiver
+        setup. The cold start itself stores zeros.
 
         The PAPER is a different surface and is left alone: the tape's
         AUTO DIAL TIME SETUP block lists the one receiver that site had
@@ -6590,7 +7021,7 @@ class Console:
         stored = (self.receiver_dial.get(receiver) or "").strip()
         if stored:
             return stored
-        return "1" + time.strftime("%y%m%d", self.now()) + "EE00"
+        return "1000000EE00"
 
     def pc_counters(self):
         """The five numbers on the PERIPHERAL CONTROLLER diagnostic.
@@ -6648,7 +7079,7 @@ class Console:
 
         if token == "pc_software":
             return (f"PC SWARE# {self.PC_SOFTWARE}" + chr(10)
-                    + f"CREATED - {self.software_info()['created']}")
+                    + f"CREATED - {self.PC_CREATED}")
         if token == "pc_resets":
             return ("PC ROM CHECKSUM=PASSED" + chr(10)
                     + f"PC RESET COUNTS = {self.pc_counters()['resets']}")
@@ -6926,6 +7357,13 @@ class Console:
         if what == "remote_alarm_reset":
             # The same thing ALARM/TEST does from the panel: it silences, and
             # it clears what has already gone away rather than a live alarm.
+            # This silenced and cleared nothing, so a latched warning stayed
+            # on the glass that the bench TLS-350 took off it: Q3's SETUP
+            # DATA WARNING, switched off and then `S00300`, left 5FA showing
+            # the standing Q 1 PLLD OPEN alone (2026-09-25,
+            # `bench-2026-09-25/q3.jsonl`). No key comes over the wire, so a
+            # Maintenance Tracker's protected alarms stay.
+            self.acknowledge()
             self.silenced = True
             return "alarms silenced"
         if what == "cancel_autodial":
@@ -7156,6 +7594,17 @@ class Console:
                 out[second] = (slot, key, "db9")
         return out
 
+    def serial_positions(self):
+        """The bay positions that are serial ports, which not every card in
+        the bay is.
+
+        A WPLLD Comm Board is a comm-bay card and no port: the bench, with one
+        in comm 3 beside its RS-232 and satellite boards, listed boards 1 and
+        2 alone in I888 and answered I88103 bare (2026-09-24). A card with no
+        port name -- `comm_board_name` UNUSED -- is not a port."""
+        return sorted(n for n in self.comm_positions()
+                      if self.comm_board_name(n) != "UNUSED")
+
     def rs232_port(self):
         """The bay position the serial port a tool talks to sits on.
 
@@ -7225,6 +7674,30 @@ class Console:
             when if when is not None else _time.mktime(self.now()))
         if connect is not None:
             self.comm_connect[port] = connect
+
+    def session_cut(self, port=None, when=None):
+        """A tunnel session that stopped in the middle of a command.
+
+        This is the one thing seen to put a record on 888. The bench TLS-350
+        carried two days of sessions over its TCP/IP card with `I88800`
+        reading `CONNECTION : NONE` for that board and no stamps at all
+        (`cap_unprogrammed`, `cap_coldstart`, `cap_site`); after one session
+        died while the console was waiting for the rest of a command, the
+        board read
+
+             CONNECTION : MODEM DIAL IN
+             FUNCTION   : WAITING FOR DATA
+             ERROR      : DATA TIMED OUT
+
+        with its UART settings under it, a TIME OF LAST COMM ERROR at the
+        minute it happened, and a TIME OF LAST COMM DATA that went on
+        following the traffic afterwards (2026-09-19, `transcripts/comm888`).
+        So the connect type and the error are one event, and the last-data
+        stamp is live once there is a record to print it under. FIDELITY S36.
+        """
+        port = port or self.rs232_port()
+        self.note_comm(port, when=when, connect=5)       # MODEM DIAL IN
+        self.fault_comm(port, 5, state=5, when=when)     # waiting, timed out
 
     def comm_half(self, port, paper=False):
         """(screen name, slot line, ohms, reads as) for that position.
@@ -7954,6 +8427,35 @@ class Console:
         """
         return int(time.mktime(self.now())) % 100
 
+    def wire_thermistor(self, number, ohms):
+        """Put `ohms` on thermistor input `number` of the Probe/Thermistor
+        Interface Module, or take it off with None. The input's sample
+        counter starts again, as the bench's did when a resistor went in."""
+        if ohms is None:
+            self.thermistors.pop(number, None)
+        else:
+            self.thermistors[number] = float(ohms)
+        self.thermistor_since[number] = time.mktime(self.now())
+
+    def thermistor_ohms(self, number):
+        """The resistance on a thermistor input, or None when it is open.
+
+        A resistance put there on the bench wins. Otherwise a site with a
+        VLLD card has its ground temperature thermistor on input 1, "the
+        thermistor must be wired to thermistor position number 1",
+        576013-879 Rev W p.60, and it reads the ground's temperature.
+        """
+        if number in self.thermistors:
+            return self.thermistors[number]
+        if number == 1 and self.has("vlld"):
+            return ground_ohms(self.product_temperature(1))
+        return None
+
+    def thermistor_row(self, number):
+        """(counter, high ref, low ref, last, average) for one input."""
+        return groundtemp.row(self, number, self.thermistor_ohms(number),
+                              self.thermistor_since.get(number))
+
     def _sensor_diag(self, token, number):
         """"CNTR = X VALUE = XXXXXX": the resistance the module is reading.
 
@@ -7988,6 +8490,10 @@ class Console:
             # the one screen whose whole job is telling a short from a live
             # probe. Fuel underground sits near the ground temperature, so
             # the tank's own reading stands in for it.
+            if self.probe_gt:
+                # the card's own input, read as the bench reads it
+                count, _hi, _lo, _last, average = self.thermistor_row(number)
+                return f"CNTR = {count} VALUE = {average:.0f}"
             warm = self.product_temperature(number)
             return f"CNTR = {counter} VALUE = {ground_ohms(warm):.0f}"
         two = readings.sensor_value(self, module, number, state, channel=2)
@@ -8852,6 +9358,25 @@ class Console:
         """
         ln = self.lines.line(kind, device)
         letter = self.lines.code(kind)
+        if token == "line_dispensing":
+            # The first screen of both families' diagnostics: the line's
+            # label over its DISPENSING flag. 577013-344 Rev H Figure 19
+            # draws `Q 1: (PRODUCT LABEL)` over `DISPENSING DISABLED` and
+            # annotates that second line "Dispensing is ENABLED or
+            # DISABLED"; 576013-902 Rev AA and 576013-923 Rev V draw the
+            # same screen for PLLD and WPLLD.
+            #
+            # It was the figure's own line, drawn verbatim. So the screen a
+            # technician goes to in order to find out whether a line is
+            # dispensing said DISABLED on every line of every site in every
+            # state -- with the 3.0 passed, the shutdown cleared and fuel
+            # going out of the nozzle -- and the one screen that could have
+            # contradicted it, the pressure screen behind it, reads
+            # ENABLED's own words. The console was telling a technician the
+            # opposite of what it was doing. See FIDELITY U51.
+            return ("DISPENSING ENABLED"
+                    if self.lines.dispensing_enabled(kind, device)
+                    else "DISPENSING DISABLED")
         if token == "line_pressure":
             return chr(10).join(ln.screen())
         if token == "line_counts":
@@ -8966,13 +9491,27 @@ class Console:
         chosen = self.tank_profiles.get(tank)
         if chosen in self.PROFILE_NAME:
             return chosen
-        if self.values.get(f"S63C{tank:02d}") or self.values.get(
-                f"S63B{tank:02d}"):
+        # A table decides only when it holds something. A backup carries
+        # every one of these codes whatever the profile, zero-filled: the
+        # bench TLS-350's own snapshot (2026-09-22) held 63C at 0 and 605 and
+        # 606 at the full volume and zeros for four tanks its 60A printed
+        # `1 PT`, and presence alone read all four as 50 PTS.
+        if self._table_holds("63C", tank, 0) or self.chart_points(tank):
             return "04"
         for code, profile in (("606", "02"), ("605", "01")):
-            if self.values.get(f"S{code}{tank:02d}"):
+            # the first is the full volume, which a one point tank has too
+            if self._table_holds(code, tank, 1):
                 return profile
         return "00"
+
+    def _table_holds(self, code, tank, skip):
+        """Is any of this code's packed floats past the first `skip` non-zero?
+
+        The device prefix is there or not depending on who wrote it: eight
+        characters a float, so two over is a prefix."""
+        raw = (self.values.get(f"S{code}{tank:02d}") or "").strip()
+        body = raw[2:] if len(raw) % 8 == 2 else raw
+        return any(ch != "0" for ch in body[8 * skip:])
 
     def set_tank_profile(self, tank, profile):
         """Move the tank onto another profile.
@@ -9023,9 +9562,11 @@ class Console:
 
     def chart_report(self, tank):
         """I63B: the chart, with the W&M block when it is secured."""
-        label = self.text("602", tank) or f"TANK {tank}"
-        out = ["TANK 50 POINT HEIGHTS AND VOLUMES", "", f"T {tank}: {label}",
-               ""]
+        # `T 1:` and the label twenty wide, blank for a tank nobody labelled:
+        # the bench TLS-350's I63B00 (2026-09-19, `cap_tank1on`)
+        label = self.text("602", tank) or ""
+        out = ["TANK 50 POINT HEIGHTS AND VOLUMES", "",
+               f"T {tank}:{label:<20.20s}", ""]
         capacity = self.tank_capacity.get(tank) or self.full_volume(tank)
         if self.chart_secured():
             out.append(f"TANK CAPACITY : {capacity:.0f}")
@@ -9038,9 +9579,11 @@ class Console:
         diam = self.limit("607", tank) or 0.0
         # p.302: DIAMETER at 6 and FULL VOLUME at 17 over figures held
         # right against 12 and 27, then PAIR at 0, HEIGHT at 7 and VOLUME at
-        # 22 over figures right against 3, 12 and 27
+        # 22 over figures right against 3, 12 and 27 -- but the bench TLS-350
+        # holds the diameter against 13: `        999.99        999999`
+        # (`cap_tank1on`)
         out.append("      DIAMETER   FULL VOLUME")
-        out.append(f"{diam:13.2f}{self.full_volume(tank):15.0f}")
+        out.append(f"{diam:14.2f}{self.full_volume(tank):14.0f}")
         out.append("")
         out.append("PAIR   HEIGHT         VOLUME")
         for i, (height, volume) in enumerate(self.chart_points(tank), start=1):
@@ -9197,6 +9740,10 @@ class Console:
         this asked the length. See FIDELITY R17.
         """
         raw = self.values.get(f"S{tok}{dev:02d}")
+        if not raw and tok in self.SHARED_STORE:
+            # one value under two names (`SHARED_CODES`): a Set of either
+            # lands on whichever key already holds it
+            raw = self.values.get(f"S{self.SHARED_STORE[tok]}{dev:02d}")
         if not raw:
             return None
         body = raw[2:] if self.is_prefixed(tok) and len(raw) > 2 else raw
@@ -9319,6 +9866,8 @@ class Console:
             self.receiver_dial[int(rr)] = data[2:] if data[:2] == rr else data
             return
         self.values[code] = data
+        if code.startswith("S61E") and code[4:6].isdigit() and int(code[4:6]):
+            self.density_entered(int(code[4:6]))
 
     def text(self, tok, dev):
         """A stored label, with the device prefix off it if it is there.
@@ -9334,6 +9883,21 @@ class Console:
         if self.is_prefixed(tok) and raw.startswith(f"{dev:02d}")                 and len(raw) > 2:
             return raw[2:].strip()
         return raw.strip()
+
+    def header_line(self, n):
+        """Station header line `n` as a report's header block prints it.
+
+        One that has been set is its twenty characters, padding and all --
+        `HEADER ONE          ` and, cleared with blanks, twenty spaces --
+        and one never set is nothing: the bench TLS-350 printed its line 1
+        (set to blanks) as twenty spaces and lines 2 to 4 as empty lines in
+        every capture from `cap_swept` on, where this stripped them all."""
+        raw = self.values.get(f"S503{n:02d}")
+        if raw is None:
+            return ""
+        label = (raw[2:] if self.is_prefixed("503") and raw.startswith(
+            f"{n:02d}") and len(raw) > 2 else raw)
+        return f"{label:<20.20s}"
 
     def is_prefixed(self, tok):
         try:
@@ -9470,11 +10034,18 @@ class Console:
     def programmed_lines(self):
         """[(kind, number, label)] for every line the console has.
 
-        Same rule as the sensors: a line exists once its position is switched
-        on at LINE CONFIG, or once it has been given a label. A card in the
-        cage is wires, not lines; four unprogrammed PLLD positions are four
-        pieces of pipe nobody has told the console about, and the console
+        A line exists once its position is switched on at LINE CONFIG. A card
+        in the cage is wires, not lines; four unprogrammed PLLD positions are
+        four pieces of pipe nobody has told the console about, and the console
         neither tests them nor reports them.
+
+        A LABEL does not make one. This took the sensors' rule, "switched on
+        or given a label", so that a seeded backup still showed its lines;
+        the bench TLS-350 with Q1 switched off and still labelled REG TURBINE
+        answered I373, I374, I381 to I384 with the frame and the stamp alone
+        (site snapshot, 2026-09-22), exactly as it did off and unlabelled
+        (`cap_swept`). A backup carries 781 as well as 782, so the seeded
+        site needs no second rule. CLOSED S37.
         """
         out = []
         for kind, (config, label_code) in self.LINE_CODES.items():
@@ -9482,7 +10053,7 @@ class Console:
                 continue
             for n in range(1, max(self.capacity(kind), 1) + 1):
                 label = self.text(label_code, n)
-                if not (self._configured(config, n) or label):
+                if not self._configured(config, n):
                     continue
                 out.append((kind, n, label or f"LINE {n}"))
         return out
@@ -9524,6 +10095,34 @@ class Console:
         body = raw[2:] if len(raw) > 2 else raw
         return body[-1:] not in ("", "0")
 
+    def tank_checks_armed(self):
+        """Are a switched-on tank's no-probe checks armed? FIDELITY S35.
+
+        The bench TLS-350 posts SETUP DATA WARNING and PROBE OUT for a tank
+        switched on with no probe, within 1.6 s, and clears both when it is
+        switched off -- on 2026-09-19, and again on 2026-09-24 for tank 1,
+        days on from any cold start. But out of its cold start of 09-18 it
+        posted neither, for all four tanks, until one of three things had
+        happened: Setup Mode left, the clock set, or midnight passed. Which one
+        is not known, so each arms them. A console loaded from a working
+        site's backup is armed, and a new one here counts as cold started."""
+        if self._was_in_setup and not self.in_setup:
+            self.tank_checks = True
+        self._was_in_setup = self.in_setup
+        if self.tank_checks:
+            return True
+        if self.cold_day and time.strftime("%Y%m%d", self.now()) != \
+                self.cold_day:
+            self.tank_checks = True
+        return self.tank_checks
+
+    def unprobed_tanks(self):
+        """The tanks switched on at 601 with no probe reporting."""
+        if not self.has("probe"):
+            return []
+        return [n for n in range(1, max(self.capacity("probe"), 1) + 1)
+                if self._configured("601", n) and n not in self.tank_level]
+
     def conditions(self):
         """[AANNTT] for every condition that is TRUE right now.
 
@@ -9534,6 +10133,11 @@ class Console:
         will shut off."
         """
         out = []
+        if self.tank_checks_armed():
+            # 02/09 for a switched-on tank that has no probe at all, which
+            # the bench posts at once (FIDELITY S35); the two-minute Probe
+            # Out delay is for a probe lost from a working tank
+            out += ["0209" + f"{n:02d}" for n in self.unprobed_tanks()]
         for tank, st in sorted(self.tank_level.items()):
             vol = st.get("volume", 0.0)
             # not the float's depth: below the Programmable Minimum Water
@@ -9905,6 +10509,12 @@ class Console:
                         and (self.limit("60A", n) or self.limit("604", n))):
                     out.append("0201" + f"{n:02d}")
                     continue
+                if n not in self.tank_level and self.tank_checks_armed():
+                    # with its PROBE OUT, whatever else is set: the bench's
+                    # tank 3 had a density and posted it all the same
+                    # (FIDELITY S35)
+                    out.append("0201" + f"{n:02d}")
+                    continue
                 # Mass/Density has a warning of its own, and the NOTE
                 # that gives it is on the page that documents the field:
                 # "A Setup Data Warning is posted from the time the
@@ -9968,6 +10578,19 @@ class Console:
                 continue
             for n in range(1, self.capacity(module) + 1):
                 if not self._configured(config, n):
+                    continue
+                if module == "plld":
+                    # The bench TLS-350, 2026-09-18: a pressure line switched
+                    # on with its pipe type, its tank (NONE) and everything
+                    # else at the cold-start defaults raises NO warning once
+                    # its length is 200, and raises one the moment the
+                    # length is put back to 501 -- and clears it again on
+                    # 200, unacknowledged. The length at its default is the
+                    # whole of it: the pipe type has a default of its own
+                    # (PP1501) and no tank is not a gap.
+                    feet_now = self.limit_or_default("789", n)
+                    if feet_now is None or float(feet_now) == 501.0:
+                        out.append(aa + "01" + f"{n:02d}")
                     continue
                 feet = lengths.get(module) or ()
                 if not all(self.text(code, n) for code in needs):
@@ -10317,6 +10940,14 @@ class Console:
         """
         return sorted(self._seen)
 
+    #: How many rows each alarm history keeps. Measured on the bench
+    #: TLS-350 (2026-09-19, `transcripts/historycap.log`): a tank switched
+    #: on and off thirty times, four rows a cycle, and I111 and I112 each
+    #: stopped growing at fifty -- fifty PRIORITY and fifty non-priority,
+    #: counted separately, not fifty rows between them. This kept one log of
+    #: 200 rows, so an old alarm outlived the console's own memory of it.
+    HISTORY_KEPT = 50
+
     def _log_alarms(self, records, state):
         """What I111, I112 and I206 read: when each alarm came and went."""
         when = time.strftime("%y%m%d%H%M", self.now())
@@ -10324,7 +10955,14 @@ class Console:
             self.alarm_log.insert(0, {"aa": record[:2], "nn": record[2:4],
                                       "tt": record[4:6], "at": when,
                                       "state": state})
-        del self.alarm_log[200:]
+        kept, out = {True: 0, False: 0}, []
+        for row in self.alarm_log:
+            which = bool(self.priority(row))
+            if kept[which] >= self.HISTORY_KEPT:
+                continue
+            kept[which] += 1
+            out.append(row)
+        self.alarm_log[:] = out
 
     # The alarms i10100's own list calls warnings rather than alarms. The
     # panel abbreviates some of them, "DELIVERY NEEDED" for what the serial
@@ -10664,8 +11302,32 @@ class Console:
         entries already assert this fix -- Y10 and O13a's residue in
         UNKNOWNS -- and both were true of `live_reading` alone. FIDELITY O27.
         """
-        return (self.limit("61E", tank)
-                or readings.fixed(*self.DENSITY_BAND, "density", tank))
+        # The ENTERED value may be a specific gravity or an API number as
+        # well as pounds per gallon -- the bench console tells them apart by
+        # magnitude -- so it is converted before anything is weighed with it.
+        # A 0.74 is 6.17 lb/gal, not 0.74. UNKNOWNS A23, `density`.
+        from . import density
+        entered = self.limit("61E", tank)
+        if entered:
+            converted = density.pounds_per_gallon(entered)
+            if converted:
+                return converted
+            return entered
+        return readings.fixed(*self.DENSITY_BAND, "density", tank)
+
+    def density_entered(self, tank):
+        """A density was entered for `tank`: its thermal coefficient follows.
+
+        The bench TLS-350 rewrites 609 the moment 61E is set -- 0.74 made
+        tank 1's coefficient 0.000681 where it had read 0.000000 -- off ASTM
+        D1250 Table 6B. `density.thermal_coefficient`. UNKNOWNS A23.
+        """
+        from . import density
+        entered = self.limit("61E", tank)
+        coefficient = density.thermal_coefficient(entered) if entered else None
+        if coefficient is not None:
+            self.values[f"S609{tank:02d}"] = (f"{tank:02d}"
+                                               + packed.hexfloat(coefficient))
 
     def product_mass(self, tank):
         """"MASS 20357" against "VOLUME 5329" and "DENSITY 5.9987"."""
@@ -10727,25 +11389,98 @@ class Console:
         of their acknowledgement state" -- so it is the live set and not the
         log, and an alarm the console has never logged a transition for is
         still on it.
+
+        Its date is the alarm history's, and one the history no longer holds
+        has none: the bench TLS-350, its fifty priority rows all PROBE OUT
+        by then, printed its standing PLLD OPEN ALARM with nothing after the
+        type, and packed ten spaces for the stamp (2026-09-22). This used to
+        stamp such an alarm with the time the report was asked for. `at` is
+        None for it.
+
+        And it is the CONDITIONS, not the glass. Four tanks switched on and
+        off again over the wire left their SETUP DATA WARNING and PROBE OUT
+        rotating on the glass, unacknowledged, while 113 and 121 had already
+        dropped them (2026-09-25, `bench-2026-09-25/glass.jsonl`). This
+        listed the latched ones too. They come in category, then device,
+        then alarm order: T 1's two, T 2's two, then Q 1 before Q 2 although
+        Q 2's 21/01 is the lower number (`order.jsonl`, `p121.jsonl`).
         """
+        self.compute_alarms()
+        return self._alarm_records(sorted(
+            self.active_alarms(), key=lambda r: (r[:2], r[4:6], r[2:4])))
+
+    def _alarm_records(self, standing):
+        """Each [AANNTT] with the stamp of its newest row in the history."""
         out = []
-        for record in self.compute_alarms():
+        for record in standing:
             when = None
             for entry in self.alarm_log:
                 if (entry["aa"] + entry["nn"] + entry["tt"]) == record:
                     when = entry["at"]
                     break
             out.append({"aa": record[:2], "nn": record[2:4], "tt": record[4:6],
-                        "at": when or time.strftime("%y%m%d%H%M", self.now())})
+                        "at": when})
         return out
 
+    # 121's float per alarm type, as the bench TLS-350 packed it. What the
+    # number is, is not known: it does not follow the units (cap_metric sent
+    # the same bytes), nor the tank, nor the minute. Types never seen take
+    # the tank warnings' 1.875. FIDELITY S38.
+    ALARM_121_FLOAT = {
+        "0101": "40080000",     # PAPER OUT, 2.125 (2026-09-18)
+        "0201": "3FF00000",     # SETUP DATA WARNING, 1.875 (2026-09-25)
+        "0209": "3FF00000",     # PROBE OUT, 1.875 (2026-09-24/25)
+        "2101": "3FF00000",     # PLLD SETUP DATA WARNING (2026-09-25)
+        "2106": "C0D9ABCB",     # PLLD OPEN ALARM, -6.80 (2026-09-18)
+    }
+
+    def alarm_121_records(self):
+        """121's packed form, a record of its own and not 113's.
+
+        The units digit, then per standing alarm an index from 01, the
+        history's ALARM stamp, AA NN TT with no 00, the device's label and a
+        float -- the priority alarms first, then the rest, each newest first,
+        as 114 orders them. An alarm the history no longer holds is left
+        out, where 113 lists it with a blank stamp; and the device number is
+        not a filter: i12101 and i12102 answered as i12100 with a tank and a
+        line alarmed. A tank's label is right justified, a line's left
+        (2026-09-25, `bench-2026-09-25/p121.jsonl`). FIDELITY S38."""
+        order = {}
+        for i, e in enumerate(self.alarm_log):
+            order.setdefault(e["aa"] + e["nn"] + e["tt"], i)
+        live = [dict(r, key=r["aa"] + r["nn"] + r["tt"])
+                for r in self.active_alarm_records() if r.get("at")]
+        live.sort(key=lambda r: order.get(r["key"], 0))
+        live = ([r for r in live if self.priority(r)]
+                + [r for r in live if not self.priority(r)])
+        digit = str(int(_units.system(self)) - 1)
+        out = self.station_header_field() + digit
+        for i, r in enumerate(live, 1):
+            label = self.device_label(r)[:20]
+            label = f"{label:>20s}" if r["aa"] == "02" else f"{label:<20s}"
+            out += (f"{i:02d}" + r["at"] + r["key"] + label
+                    + self.ALARM_121_FLOAT.get(r["aa"] + r["nn"], "3FF00000"))
+        # and none at all is an index of 00, `000` with the units digit
+        return out if live else out + "00"
+
     def cleared_alarm_records(self):
-        """114: what has gone away, with the state byte that only it carries."""
-        return [dict(e) for e in self.alarm_log if e.get("state") == "01"]
+        """114: what has gone away, with the state byte that only it carries.
+
+        The priority alarms first and then the rest, each newest first --
+        not one list by time. The bench TLS-350 put T 2 PROBE OUT (7:06) and
+        BATTERY IS OFF (8:00 the day before) above T 2 SETUP DATA WARNING
+        (7:06), and in `cap_site` BATTERY IS OFF (8:00) above PAPER OUT
+        (20:03), in both formats (2026-09-19, `transcripts/sdw3`)."""
+        cleared = [dict(e) for e in self.alarm_log if e.get("state") == "01"]
+        return ([e for e in cleared if self.priority(e)]
+                + [e for e in cleared if not self.priority(e)])
 
     def unacknowledged_alarm_records(self):
-        """115: active and not acknowledged. Maintenance Tracker's list."""
-        return [r for r in self.active_alarm_records()
+        """115: active and not acknowledged. Maintenance Tracker's list.
+
+        The glass's list, latched alarms and all, since what it waits on is
+        the acknowledgement; no 115 has been read with anything on it."""
+        return [r for r in self._alarm_records(self.compute_alarms())
                 if (r["aa"] + r["nn"] + r["tt"]) not in self.acked]
 
     @staticmethod
@@ -10764,18 +11499,55 @@ class Console:
     ALARM_ROW_HEAD = ("ID  CATEGORY  DESCRIPTION          ALARM TYPE"
                       "           STATE    DATE    TIME")
 
+    def alarm_when(self, t, history=False):
+        """An alarm row's DATE and TIME, in the DATE/TIME FORMAT set.
+
+        The bench TLS-350 (2026-09-19, `transcripts/datefmt.log`), 113 and
+        111 alike but for the comma in 02: ` 1-16-06  8:10AM`,
+        `JAN 16, 2006  8:10` (`JAN 16 2006` in the history), `01-16-06
+        8:10 AM`, `01-16-06  8:10`, `16-01-06  8:10`, `06-01-16  8:10` --
+        the month and the day zero padded but for 01, the hour space
+        padded throughout."""
+        fmt = (self.values.get("S50F00") or "01").strip()[-2:]
+        if fmt not in ("02", "03", "04", "05", "06"):
+            when, clock = alarm_report_stamp(t)
+            return f"{when:>8s} {clock:>7s}"
+        hour = f"{t.tm_hour:2d}:{t.tm_min:02d}"
+        if fmt == "02":
+            return f"{clock_date(t, sep=' ' if history else ', ')} {hour}"
+        mm, dd, yy = (f"{t.tm_mon:02d}", f"{t.tm_mday:02d}",
+                      f"{t.tm_year % 100:02d}")
+        if fmt == "03":
+            return (f"{mm}-{dd}-{yy} {t.tm_hour % 12 or 12:2d}:{t.tm_min:02d} "
+                    + ("AM" if t.tm_hour < 12 else "PM"))
+        date = {"04": (mm, dd, yy), "05": (dd, mm, yy),
+                "06": (yy, mm, dd)}[fmt]
+        return "-".join(date) + " " + hour
+
     def alarm_row(self, record, described, cell=None):
         """One line of a 111, 112, 113, 114 or 115 report."""
         letter = STATUS_DEVICE_CODE.get(record["aa"], "")
         number = int(record["tt"]) if record["tt"].isdigit() else 0
         ident = f"{letter} {number}" if letter and number else "    "
-        when, clock = alarm_report_stamp(time.strptime(record["at"],
-                                                       "%y%m%d%H%M"))
+        stamped = ("" if not record.get("at") else
+                   self.alarm_when(time.strptime(record["at"], "%y%m%d%H%M"),
+                                   history=cell is not None))
+        if cell is None:
+            # The active alarm report -- 113, and 121 which prints it --
+            # sets the category one column further right than the three
+            # reports with a STATE column do, and the description does not
+            # move: `Q 1  OTHER    RUL` against 112's `Q 1 OTHER     RUL`,
+            # and `     SYSTEM` against `    SYSTEM`. Measured on the bench
+            # TLS-350 on 2026-09-18, both reports taken a second apart.
+            return (f"{ident:<5s}{self.device_category(record):<9.9s}"
+                    f"{self.device_label(record):<21.21s}"
+                    f"{described['description'].upper():<21.21s}"
+                    + stamped)
         return (f"{ident:<4s}{self.device_category(record):<10.10s}"
                 f"{self.device_label(record):<21.21s}"
                 f"{described['description'].upper():<21.21s}"
                 + (f"{cell:<7s}" if cell is not None else "")
-                + f"{when:>8s} {clock:>7s}")
+                + stamped)
 
     def alarm_report_lines(self, records, title, state=False):
         """The printed form of 113, 114 and 115.
@@ -10811,7 +11583,7 @@ class Console:
             out += record["aa"] + "00" + record["nn"] + record["tt"]
             if state:
                 out += record.get("state", "02")
-            out += record["at"]
+            out += record.get("at") or " " * 10
         return out
 
     def station_header_field(self):
@@ -10924,6 +11696,12 @@ class Console:
         """The CATEGORY column: what kind of place the device is watching."""
         if record["aa"] == "01":
             return "SYSTEM"
+        if record["aa"] == "02":
+            # a tank's alarm is filed under TANK: `T 2  TANK     PREMIUM
+            # UNLEADED     SETUP DATA WARNING` and PROBE OUT the same, on the
+            # bench TLS-350's I111 to I114 (2026-09-19, `transcripts/sdw2`).
+            # This said OTHER, a sensor's word for no category.
+            return "TANK"
         _label, category = self.ALARM_DEVICE.get(record["aa"], (None, None))
         if not category:
             return "OTHER"
@@ -10999,7 +11777,16 @@ class Console:
         # A failed test is a stored result, so acknowledging it IS correcting
         # the cause, and a shut-down line comes back only if the Line
         # Re-Enable Method says an acknowledgement is what re-enables it.
-        self.posted -= shown
+        #
+        # Not a line's OPEN alarm, which is its transducer and not a test's
+        # verdict: the bench TLS-350's Q1 PLLD OPEN ALARM, standing with the
+        # line switched off, stayed on 113 and the glass through every
+        # `S00300` from 2026-09-18 on, and ALARM/TEST at the keypad; only a
+        # passing test or a cold start takes it off.
+        opens = {aa + nn for aa, nn in (
+            names["open"] for names in _pressure.LINE_ALARMS.values()
+            if "open" in names)}
+        self.posted -= {r for r in shown if r[:4] not in opens}
         self.leaks.re_enable()
         # the FILTERED view again: an alarm Appendix A is still holding is
         # one the console is still showing, and acknowledging it must not

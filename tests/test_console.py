@@ -34,6 +34,7 @@ from tls350sim.console import (Console, DIAG_MENU, FIELDS,  # noqa: E402
                                NORMAL_MENU, SENSOR_STATE_NN, SETUP_MENU,
                                SOFTWARE_MODULES, describe_alarms)
 from tls350sim.wire import Handler, parse_command           # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 SOH, ETX, CR = chr(1), chr(3), chr(13)
 NOT_UNDERSTOOD_TEXT = SOH + "9999FF1B" + ETX
@@ -376,11 +377,24 @@ class TankProfile(unittest.TestCase):
         four volumes in 605 could have come from nowhere but the four point
         profile."""
         c = fitted()
-        for code, profile in (("605", "01"), ("606", "02"), ("63C", "04")):
+        for code, points, profile in (("605", 4, "01"), ("606", 20, "02"),
+                                      ("63C", 1, "04")):
             c.values.clear()
             c.tank_profiles.clear()
-            c.values[f"S{code}01"] = "01" + float_value(9728.0)
+            c.values[f"S{code}01"] = "01" + "".join(
+                float_value(9728.0 * (points - n) / points)
+                for n in range(points))
             self.assertEqual(c.tank_profile(1), profile, code)
+
+    def test_a_table_of_zeros_is_no_profile(self):
+        """A backup carries every table whatever the profile. The bench
+        TLS-350's snapshot (2026-09-22) held 605 and 606 as the full volume
+        and zeros, and 63C as 0, for four tanks its 60A printed `1 PT`."""
+        c = fitted()
+        c.values["S60501"] = "01" + float_value(9728.0) + "0" * 24
+        c.values["S60601"] = "01" + float_value(9728.0) + "0" * 152
+        c.values["S63C01"] = "01" + "0" * 8
+        self.assertEqual(c.tank_profile(1), "00")
 
     def test_a_full_volume_alone_says_nothing_about_linear(self):
         """The rule this class used to carry, and 576013-635's own `I60A`
@@ -491,8 +505,12 @@ class ChartSecurity(unittest.TestCase):
     def test_the_status_and_the_audit_trails_answer(self):
         c = fitted()
         c.set_slots("601", "1 X X X")
+        # a probe reporting: with none, the bench TLS-350 answers I219 with a
+        # bare frame -- whose stamp's last digit once passed the `0&&` below
+        c.tank_level[1] = {"volume": 5000.0, "water": 0.0}
         h = Handler(c, verbose=False)
-        self.assertIn(b"0&&", h.handle(b"\x01i21900\r"))
+        # the data after SOH, the echo and the ten-digit stamp: the flag
+        self.assertEqual(h.handle(b"\x01i21900\r")[17:].split(b"&&")[0], b"0")
         c.set_chart_code("778899")
         self.assertIn(b"1&&", h.handle(b"\x01i21900\r"))
         self.assertIn(c.chart_code_set.encode(), h.handle(b"\x01i56A00\r"))
@@ -2349,6 +2367,11 @@ class Fields(unittest.TestCase):
                 elif kind == "float":
                     lo = f.get("min") if f.get("min") is not None else 0.0
                     value = str(lo)
+                    if f.get("density"):
+                        # a density is one of three bands, and 0 is in none
+                        value = "6.1700"
+                    elif f.get("nonzero") and not lo:
+                        value = "1.0"
                 elif kind == "profile":
                     value = "4 PTS"
                 elif kind == "digits":
@@ -2453,7 +2476,10 @@ class ADisplayInquireAnswersLikeTheManual(unittest.TestCase):
         _c, h = self.a_console()
         body = send(h, "I62F01").replace(chr(1), "").replace(chr(3), "")
         self.assertIn("MAG PROBE FLOAT SIZE", body)
-        self.assertRegex(body.splitlines()[-1], r"[0-9]\.[0-9] IN")
+        # the last line of TEXT: the reply ends with the blank lines the
+        # console's own tail puts before ETX (FIDELITY S6)
+        text = [line for line in body.splitlines() if line.strip()]
+        self.assertRegex(text[-1], r"[0-9]\.[0-9] IN")
 
     def test_every_title_is_the_manuals_own(self):
         from tls350sim.wire import WIRE_TITLES
@@ -2778,10 +2804,14 @@ class Wire(unittest.TestCase):
         return self.h.handle(command).decode("ascii")
 
     def test_a_command_it_cannot_read_gets_the_documented_answer(self):
-        """"it will respond with a <SOH>9999FF1B<ETX>", which is what a
-        hand-typed telnet session gets when it types half a command."""
+        """"it will respond with a <SOH>9999FF1B<ETX>" -- to a function code
+        it does not know. Half a command gets nothing at all: the bench
+        TLS-350 answered `I999<CR>` and `<SOH><CR>` with silence
+        (2026-09-23), where this used to send 9999FF."""
         expected = chr(1) + "9999FF1B" + chr(3)
-        self.assertEqual(self.ask(chr(1) + "299" + chr(13)), expected)
+        self.assertEqual(self.ask(chr(1) + "299" + chr(13)), "")
+        self.assertEqual(self.ask(chr(1) + "I999" + chr(13)), "")
+        self.assertEqual(self.ask(chr(1) + chr(13)), "")
         self.assertEqual(self.ask(chr(1) + "X10100" + chr(13)), expected)
         self.assertEqual(self.ask(chr(1) + "I99900" + chr(13)), expected)
 
@@ -2822,14 +2852,21 @@ class Wire(unittest.TestCase):
         self.assertIn("SYSTEM BEEPER\r\n\r\nENABLED",
                       self.ask(SOH + "I53000" + CR))
 
-    def test_a_missing_module_answers_9999(self):
+    def test_a_missing_module_answers_a_bare_frame(self):
         self.c.modules["plld"] = False
-        # "it will respond with a <SOH>9999FF1B<ETX>"
-        self.assertEqual(self.ask("\x01I78101\r"), "\x019999FF1B\x03")
+        # The manual's "it will respond with a <SOH>9999FF1B<ETX>" is for a
+        # code the console does not know; one it knows, for a card it has
+        # not got, is a bare frame on the bench TLS-350 (2026-09-18)
+        self.assertTrue(is_bare(self.ask("\x01I78101\r")))
 
-    def test_a_set_for_a_missing_module_is_rejected(self):
+    def test_a_set_for_a_missing_module_is_not_kept(self):
+        """The bench TLS-350 answers a Set for a card it has not got with the
+        bare echo and keeps nothing: `S7A1011` on a console with no WPLLD
+        card, 2026-09-18. The INQUIRE is the 9999 above."""
         self.c.modules["plld"] = False
-        self.assertEqual(self.ask("\x01S781011\r"), "\x019999FF1B\x03")
+        said = self.ask("\x01S781011\r")
+        self.assertTrue(said.startswith("\x01\r\nS78101\r\n"), said)
+        self.assertTrue(said.endswith("\r\n\r\n\x03"), said)
         self.assertNotIn("S78101", self.c.values)
 
     def test_the_status_report_carries_the_alarms(self):
@@ -2867,7 +2904,8 @@ class Wire(unittest.TestCase):
         # console's I10100 carries six blank lines before SYSTEM STATUS
         # REPORT where this sent five. FIDELITY S6.
         self.assertEqual(lines[2], "")
-        self.assertEqual(lines[3], "GREENFIELD SERVICE")
+        # padded to its twenty, as the bench sends a set header line
+        self.assertEqual(lines[3], "GREENFIELD SERVICE  ")
         # All four header lines, programmed or not: 576013-635 draws its
         # samples with STATION HEADER 1 through 4 standing in, and the real
         # tape from a site that has set only the first feeds three blanks
@@ -2920,8 +2958,10 @@ class Wire(unittest.TestCase):
         console in front of them may not have."""
         self.assertEqual(parse_command(SOH.encode() + b"200" + CR.encode()),
                          ("", "I", "201", "00", ""))
+        # and anything else that short is half a command, which gets
+        # nothing back at all -- the bench TLS-350's answer (2026-09-23)
         for other in ("201", "101", "202"):
-            self.assertEqual(self.ask(SOH + other + CR), NOT_UNDERSTOOD_TEXT)
+            self.assertEqual(self.ask(SOH + other + CR), "")
 
     def test_an_inquiry_needs_no_carriage_return(self):
         """The command format has no terminator: six characters IS the code."""
@@ -2934,8 +2974,15 @@ class Wire(unittest.TestCase):
         does, which is why the two are not the same string."""
         report = self.ask(b"\x01I90200\r")
         self.assertIn("VERSION", report)
-        self.assertIn("\r\nPLLD\r\n  0.10 REPETITIV\r\n", report)
+        # `PLLD ` with its space, as the bench's 902 and 905 print it
+        self.assertIn("\r\nPLLD \r\n  0.10 REPETITIV\r\n", report)
+        # The line leak sections are the KEYS', not the cards': the bench
+        # TLS-350 prints its WPLLD section with no WPLLD card in the cage
+        # (2026-09-18). Taking the card out leaves them; taking the keys
+        # out does not.
         self.c.modules["plld"] = False
+        self.assertIn("\r\nPLLD \r\n", self.ask(b"\x01I90200\r"))
+        self.c.software["plld010"] = self.c.software["plld020"] = False
         self.assertNotIn("\r\nPLLD\r\n", self.ask(b"\x01I90200\r"))
 
     def test_a_feature_is_not_listed_under_two_names(self):
@@ -2964,7 +3011,7 @@ class Wire(unittest.TestCase):
         self.assertIn("DELIVERY VALUE", text)
         self.assertIn("TOTALS", text)
         self.c.software.pop("bir")
-        self.assertEqual(self.ask(SOH + "I20400" + CR), NOT_UNDERSTOOD_TEXT)
+        self.assertTrue(is_bare(self.ask(SOH + "I20400" + CR)))
 
     def test_the_leak_history_report_answers_i207(self):
         a_tank(self.c, volume=5000.0)
@@ -3003,9 +3050,11 @@ class Wire(unittest.TestCase):
         self.assertIn("ADJUSTMENT", text)
 
     def test_stick_height_answers_only_when_it_is_enabled(self):
-        """"This command will respond only if stick height is enabled."""
+        """"This command will respond only if stick height is enabled." --
+        and not responding is a bare frame: the bench TLS-350 answers I20D00
+        with the echo and the stamp and nothing after (2026-09-18)."""
         a_tank(self.c, volume=5000.0)
-        self.assertEqual(self.ask(SOH + "I20D00" + CR), NOT_UNDERSTOOD_TEXT)
+        self.assertTrue(is_bare(self.ask(SOH + "I20D00" + CR)))
         self.c.values["S60B00"] = "1"
         self.assertIn("TANK STICK HEIGHT", self.ask(SOH + "I20D00" + CR))
 
@@ -5261,7 +5310,9 @@ class TheDeliveryDensity(unittest.TestCase):
         self.assertIn("NEXT DELIVERY DENSITY", said)
         self.assertIn("REGULAR UNLEADED", said)
         self.assertIn("5.9987", said)
-        self.assertIn("I61F010", said)       # the type is echoed
+        # The type is NOT echoed. p.273 draws "<SOH> I61FTT0", and the bench
+        # TLS-350 answered `I61F010` under a bare `I61F01` (2026-09-18).
+        self.assertIn(chr(13) + chr(10) + "I61F01" + chr(13) + chr(10), said)
         self.assertIn("LAST DELIVERY DENSITY", self.wire(c, "I61F011"))
 
     def test_and_the_computer_format_carries_the_type_in_the_data(self):
@@ -5274,7 +5325,9 @@ class TheDeliveryDensity(unittest.TestCase):
     def test_a_delivery_type_that_is_not_0_or_1_is_refused(self):
         c = self.a_tank()
         self.assertIn("9999", self.wire(c, "S61F01205.9987"))
-        self.assertIn("9999", self.wire(c, "I61F012"))
+        # the inquiry with a `?` a tank, as the bench answered `I61F01X`
+        # (2026-09-25, FIDELITY S38)
+        self.assertIn("\r\n?\r\n", self.wire(c, "I61F012"))
 
 
 class TheCommBayCardsThatWereMissing(unittest.TestCase):

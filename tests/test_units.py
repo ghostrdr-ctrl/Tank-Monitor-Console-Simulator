@@ -23,6 +23,8 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 from tests.test_controls import a_site, send                 # noqa: E402
 from tls350sim.console import FIELDS                         # noqa: E402
 
@@ -79,7 +81,7 @@ class TheInventoryAlarmUnits(unittest.TestCase):
     def test_max_product_cannot_be_per_cent_max(self):
         """Note 3 on p.222, and it is the only rule the pair carries."""
         _c, h = a_site()
-        self.assertTrue(body(h, "S5510011").endswith("9999FF1B"))
+        self.assertTrue(is_refused(send(h, "S5510011")))
         self.assertFalse(body(h, "S5510013").endswith("9999FF1B"))
 
     def test_a_panel_set_moves_what_the_wire_answers(self):
@@ -135,7 +137,7 @@ class TheReidVaporPressureChart(unittest.TestCase):
         """"The command will be rejected if any value is outside the range
         0.0 to 15.0"."""
         _c, h = a_site()
-        self.assertTrue(body(h, "S54C00" + "16.0" * 12).endswith("9999FF1B"))
+        self.assertTrue(is_refused(send(h, "S54C00" + "16.0" * 12)))
         self.assertFalse(body(h, "S54C00" + "15.0" * 12).endswith("9999FF1B"))
 
     def test_an_all_zero_table_is_no_table(self):
@@ -168,17 +170,23 @@ class ADefaultIsNotSilence(unittest.TestCase):
                      "wplld", "probe", "mt", "vmc"):
             c.modules.setdefault(card, 4)
         silent = []
+        from tls350sim.wiretables import ROW_FILTER
         for key, field in sorted(FIELDS.items()):
             if not (key.startswith("S") and len(key) >= 6
                     and isinstance(field, dict)):
                 continue
             if field.get("default") is None:
                 continue
-            reply = body(h, f"I{key[1:4]}{key[4:6]}")
-            if reply.endswith("9999FF1B"):
+            if key[1:4] in ROW_FILTER:
+                # a setting only a USER DEFINED pressure line has, which the
+                # bench console lists only for one
+                send(h, "S78801" + "18")
+            if not h._module_present(key[1:4]):
                 # a card this console has not got, which is a different
-                # answer and the right one -- see S7a
+                # answer and the right one -- see S7a; a bare frame on the
+                # bench TLS-350, where it was 9999FF here
                 continue
+            reply = body(h, f"I{key[1:4]}{key[4:6]}")
             if not [l for l in reply.splitlines()[2:] if l.strip()]:
                 silent.append(f"{key} (default {field['default']!r})")
         self.assertEqual(silent, [], "; ".join(silent))
@@ -191,11 +199,12 @@ class ADefaultIsNotSilence(unittest.TestCase):
 
     def test_a_part_field_carries_its_default_too(self):
         """881 holds a port's four UART settings as parts of one record, and
-        a port nobody has been near still runs at 1200, none, one and eight."""
+        a port nobody has been near still runs at 1200, none, one and eight.
+        In the bench TLS-350's own layout (`I88101`, 2026-09-22)."""
         _c, h = a_site()
         shown = body(h, "I88101")
-        for want in ("BAUD RATE: 1200", "PARITY: NONE", "STOP BITS: 1 STOP",
-                     "DATA LENGTH: 7 DATA"):
+        for want in (" BAUD RATE  : 1200", " PARITY     : NONE",
+                     " STOP BIT   : 1 STOP", " DATA LENGTH: 7 DATA"):
             self.assertIn(want, shown)
 
 from tls350sim import screens                                # noqa: E402

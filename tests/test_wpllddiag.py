@@ -30,6 +30,7 @@ def a_wplld_line():
     c = Console()
     c.modules["rs232"] = 1
     c.set_module("wplld", 1)
+    c.values["S7A101"] = "011"                    # switched on at LINE CONFIG
     c.values["S7A201"] = "01UNLEADED".ljust(22)
     return c, c.lines.line("wplld", 1)
 
@@ -66,6 +67,7 @@ class TheTopLineIsTheCommModule(unittest.TestCase):
         """Figure 19 is PLLD's, and it puts the pressure there."""
         c = Console()
         c.set_module("plld", 1)
+        c.values["S78101"] = "011"
         c.values["S78201"] = "01UNLEADED".ljust(22)
         head = c.line_diag("line_pressure", 1, "plld").split(chr(10))[0]
         self.assertRegex(head, r"^Q 1: +[0-9.]+ PSI +PUMP O")

@@ -23,13 +23,17 @@ been built confidently and incorrectly.
 """
 import os
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 from tls350sim import presets, wirelater                   # noqa: E402
 from tls350sim.console import Console                      # noqa: E402
 from tls350sim.wire import Handler, DOCUMENTED, KNOWN      # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_site():
@@ -60,7 +64,7 @@ def body(h, cmd):
 
 
 def refused(h, cmd):
-    return body(h, cmd).startswith("9999")
+    return is_refused(send(h, cmd))
 
 
 class TheyAllAnswer(unittest.TestCase):
@@ -554,13 +558,121 @@ class WhatTheseNeedFitted(unittest.TestCase):
     def test_the_vmc_reports_need_the_vmc_card(self):
         c, h = a_site()
         c.modules["vmc"] = 0
-        self.assertTrue(refused(h, "I8C301"))
+        self.assertTrue(is_bare(send(h, "I8C301")))
 
     def test_the_inventory_reports_need_a_probe(self):
         c, h = a_site()
         c.modules["probe"] = 0
-        self.assertTrue(refused(h, "I23700"))
+        self.assertTrue(is_bare(send(h, "I23700")))
 
+
+
+class TheInputGeneratorTableIsThePagesOwn(unittest.TestCase):
+    """FIDELITY R25. 576013-635 Rev Y and Rev AA draw the same sample of
+    `I404`, and it is the only drawing of this report there is:
+
+          START             END         START     END    DURATION       CONSUMPTION
+        DATE / TIME     DATE / TIME     LITERS  LITERS    HHHH:MM     LITERS     L/HR
+       12-20-10 12:59  12-20-10 19:06   350000  349745    0006:06        200    33.33
+
+    This console drew one header line and four columns: the two volume
+    columns were missing although the figures were already in the record,
+    the rate column was missing entirely, and the duration was decimal
+    hours.
+
+    The page's own row does not add up -- 12:59 to 19:06 is six hours and
+    seven minutes, not `0006:06`, and `33.33` is 200 over exactly 6.0 --
+    so the headers are asserted against the page and the row against the
+    arithmetic the page's own stamps require.
+    """
+
+    def a_metric_console(self):
+        c, h = a_site()
+        c.values["S51700"] = "2"        # the sample is a metric console
+        return c, h
+
+    def a_run(self, c, day="12-20-10"):
+        start = time.mktime(time.strptime("%s 12:59" % day, "%m-%d-%y %H:%M"))
+        end = time.mktime(time.strptime("%s 19:06" % day, "%m-%d-%y %H:%M"))
+        run = c.record_generator_run(1, start, end, 200)
+        run["figures"][1] = 350000
+        run["figures"][6] = 349745
+        return run
+
+    def report(self, pair):
+        c, h = pair
+        lines = send(h, "I40400").splitlines()
+        at = next(i for i, l in enumerate(lines)
+                  if l.strip() == "INPUT GENERATOR REPORT")
+        # the frame puts a blank line under the title, so the table starts
+        # at the first line after it that has anything on it
+        rest = [l.rstrip() for l in lines[at + 1:]]
+        while rest and not rest[0]:
+            rest.pop(0)
+        return rest
+
+    def test_both_header_lines_are_the_pages(self):
+        pair = self.a_metric_console()
+        self.a_run(pair[0])
+        head = self.report(pair)[:2]
+        # Off the page's own grid, whose column 0 is where STATION HEADER 1
+        # starts. The text extraction indents these lines three further and
+        # these strings were first copied from it. See `wirelater.GEN_ENDS`.
+        self.assertEqual(
+            head[0],
+            "   START             END         START     END    "
+            "DURATION       CONSUMPTION")
+        self.assertEqual(
+            head[1],
+            " DATE / TIME     DATE / TIME     LITERS  LITERS    "
+            "HHHH:MM     LITERS     L/HR")
+
+    def test_the_row_carries_all_seven_columns(self):
+        pair = self.a_metric_console()
+        self.a_run(pair[0])
+        row = self.report(pair)[2]
+        for want in ("12-20-10 12:59", "12-20-10 19:06", "350000",
+                     "349745", "0006:07", "200", "32.70"):
+            self.assertIn(want, row, "%r missing from %r" % (want, row))
+
+    def test_every_value_finishes_under_its_own_header(self):
+        """The column rule: a figure right-aligns to the END of its
+        header, which is how the page lays this table out."""
+        pair = self.a_metric_console()
+        self.a_run(pair[0])
+        drawn = self.report(pair)
+        head2, row = drawn[1], drawn[2]
+        for end in (39, 47, 58, 69, 78):
+            # a token that FINISHES at this column leaves no trailing
+            # space in the slice that ends there
+            self.assertEqual(head2[:end].rstrip(), head2[:end],
+                             "header has no token ending at %d" % end)
+            self.assertEqual(row[:end].rstrip(), row[:end],
+                             "row has no value ending at %d" % end)
+
+    def test_the_duration_is_hours_and_minutes_not_decimal(self):
+        pair = self.a_metric_console()
+        self.a_run(pair[0])
+        row = self.report(pair)[2]
+        self.assertIn("0006:07", row)
+        self.assertNotIn("6.10", row)
+
+    def test_a_us_console_says_gals(self):
+        """Unattested and marked so in R25: the page only ever draws this
+        report from a metric console."""
+        pair = a_site()
+        pair[0].values["S51700"] = "1"
+        self.a_run(pair[0])
+        self.assertIn("GALS", self.report(pair)[1])
+        self.assertNotIn("LITERS", self.report(pair)[1])
+
+    def test_an_empty_report_is_its_headings_alone(self):
+        pair = self.a_metric_console()
+        body = self.report(pair)
+        self.assertIn("DATE / TIME", body[1])
+        # the frame's own ETX is not a row
+        rows = [l for l in body[2:] if l.strip() and l.strip() != chr(3)]
+        self.assertEqual(rows, [])
 
 if __name__ == "__main__":
     unittest.main()

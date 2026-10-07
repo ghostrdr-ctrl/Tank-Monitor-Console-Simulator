@@ -38,6 +38,7 @@ from tls350sim.clock import clock_date, clock_words          # noqa: E402
 from tls350sim.console import (Console, DIAG_MENU,           # noqa: E402
                                NORMAL_MENU)
 from tls350sim.wire import Handler                          # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def screens(function):
@@ -730,7 +731,9 @@ class ARealToolCanBackItUpAndPutItBack(unittest.TestCase):
 
     def test_a_display_format_set_refuses_a_value_out_of_range(self):
         c, h = self.a_site()
-        self.assertIn("9999", self.send(h, "S609019.9"))
+        # One `?` per character sent, under the echo and the stamp -- the
+        # bench TLS-350's refusal. 9999 is for a code it does not know.
+        self.assertIn("\r\n???\r\n", self.send(h, "S609019.9"))
 
     def test_an_unknown_function_code_is_9999_and_never_silence(self):
         """A tool sweeps whole ranges, gaps included, and reads silence as a
@@ -823,12 +826,12 @@ class InTankDiagnostics(unittest.TestCase):
         self.assertEqual(int(got[0][0:2]), 2)
         self.assertEqual(got[0][17:23], c.probe_serial(2))
 
-    def test_a_console_with_no_probe_card_answers_9999(self):
+    def test_a_console_with_no_probe_card_answers_a_bare_frame(self):
         """An in-tank diagnostic reads a probe, so it wants the card that
         drives one."""
         c, h = self.a_site()
         c.modules["probe"] = 0
-        self.assertIn("9999", self.send(h, "iA0100"))
+        self.assertTrue(is_bare(self.send(h, "iA0100")))
 
     def test_a_probe_keeps_its_identity_between_looks(self):
         """A serial number that changes when you glance away is not a serial
@@ -967,7 +970,7 @@ class TheProbeCalibrationReports(unittest.TestCase):
         """"Probe types 01=CAP0 and 02=CAP1 are not supported by this
         command"."""
         c, h = self.a_site()
-        self.assertIn("9999", self.send(h, "iA0703"))
+        self.assertTrue(is_bare(self.send(h, "iA0703")))
         self.assertNotIn("9999", self.send(h, "iA0701"))
 
     def test_a07_carries_two_dated_readings_of_the_same_distance(self):
@@ -992,7 +995,7 @@ class TheProbeCalibrationReports(unittest.TestCase):
         c, h = self.a_site()
         c.modules["probe"] = 0
         for code in ("A02", "A03", "A04", "A05", "A06", "A07"):
-            self.assertIn("9999", self.send(h, f"i{code}01"), code)
+            self.assertTrue(is_bare(self.send(h, f"i{code}01")), code)
 
 
 class ARestoreThatCarriesTheDevicePrefix(unittest.TestCase):
@@ -1169,7 +1172,7 @@ class TheProbeSampleBuffers(unittest.TestCase):
         c, h = self.a_site()
         c.modules["probe"] = 0
         for code in ("A10", "A11", "A12", "A13"):
-            self.assertIn("9999", self.send(h, f"i{code}01"), code)
+            self.assertTrue(is_bare(self.send(h, f"i{code}01")), code)
 
 
 class TheRestOfTheProbeBlock(unittest.TestCase):
@@ -1317,7 +1320,7 @@ class TheRestOfTheProbeBlock(unittest.TestCase):
         c, h = self.a_site()
         c.modules["probe"] = 0
         for code in ("A14", "A15", "A20", "A21", "A22", "A23"):
-            self.assertIn("9999", self.send(h, f"i{code}01"), code)
+            self.assertTrue(is_bare(self.send(h, f"i{code}01")), code)
 
 
 class TheDeliveryReportsOwnColumns(unittest.TestCase):
@@ -1460,9 +1463,13 @@ class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
 
     @staticmethod
     def head_gap(tok):
-        """What the manual's own sample leaves under the frame, or one."""
+        """What the manual's own sample leaves under the frame, or one --
+        or, for a code no manual draws, what the bench TLS-350 left under it
+        (2026-09-18): 904 and 5FA run straight on under the stamp."""
         from tls350sim.wire import WIRE_TITLES
         from tls350sim import wiretables
+        if tok in ("904", "5FA"):
+            return 0
         entry = WIRE_TITLES.get(wiretables.SHOWN_AS.get(tok, tok)) or {}
         return 1 if entry.get("head_gap") is None else int(entry["head_gap"])
 
@@ -1516,9 +1523,12 @@ class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
             if head is None:
                 continue
             block = head + 1
-            if lines[block:block + 5] == station:
+            # compared without the padding a set header line keeps
+            # (`Console.header_line`)
+            got_head = [l.rstrip() for l in lines[block:block + 5]]
+            if got_head == station:
                 block += 5
-            elif lines[block:block + 2] == station[:2]:
+            elif got_head[:2] == station[:2]:
                 # all four or none of them: a site with one programmed line
                 # still sends four blanks. See FIDELITY W5.
                 partial.append(tok)
@@ -1553,7 +1563,8 @@ class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
         c = self.a_console()
         h = Handler(c, verbose=False)
         self.assertNotIn("STATION HEADER 1", self.reply(h, "IB0100"))
-        self.assertIn("STATION HEADER 1", self.reply(h, "I10100"))
+        self.assertIn("STATION HEADER 1",
+                      [l.rstrip() for l in self.reply(h, "I10100")])
 
     def test_a_setup_value_leaves_it_too(self):
         """The rule is not about the station header block: a reply with no
@@ -1567,9 +1578,15 @@ class EveryDisplayReplyLeavesTheBlankLine(unittest.TestCase):
 
     def test_an_acknowledgement_with_no_body_leaves_nothing(self):
         """A Set that answers with the stamp and nothing else does not get a
-        blank line to be nothing under."""
+        blank line to be nothing under.
+
+        It used to test this with the clock, `S501000301291105`. The bench
+        TLS-350 answers that one with the ten digits it took under the stamp
+        it is leaving (FIDELITY S36), so ALARM/TEST stands in: it
+        acknowledges and has nothing to say.
+        """
         c = self.a_console()
-        lines = self.reply(Handler(c, verbose=False), "S50100" + "0301291105")
+        lines = self.reply(Handler(c, verbose=False), "S00300")
         self.assertEqual([l for l in lines if l.strip()][2:], [])
 
 

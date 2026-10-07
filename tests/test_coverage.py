@@ -216,7 +216,23 @@ class Coverage(unittest.TestCase):
     #
     # 121 answers `ACTIVE ALARMS REPORT` over 113's heading, character for
     # character, while 120 and 122 come back `9999FF1B`. See FIDELITY S17.
-    OFF_THE_HARDWARE = {"121"}
+    #
+    # And nine more off the bench TLS-350's hex census on 2026-09-18, the
+    # first sweep that asked a code with a letter in it -- every one in
+    # `tests/console_capture/bench-2026-09-18/cap_unprogrammed/raw/` and
+    # answered here with what the bench said: 5FA the display itself; 617
+    # CSLD's custom probability of detection; 7B0 and 7B3 two meter-map
+    # replies; 7C3 a tank maximum volume limit; 51F the Euro protocol
+    # prefix; 55D the precision line test printout switch; 535 the receiver
+    # computer-mode hangup; 904 the WPLLD diagnostic block. CLOSED S31.
+    OFF_THE_HARDWARE = {"121", "5FA", "617", "7B0", "7B3", "7C3", "51F",
+                        "55D", "535", "904",
+                        # the pressure line results report twice more, once
+                        # a line is on (`cap_site`, FIDELITY S34)
+                        "375", "385"} | wire.UNDOCUMENTED_BARE
+    # ...and `wire.UNDOCUMENTED_BARE`: forty-six more the bench answered
+    # with a bare frame in both formats, on a cage without the cards most of
+    # them belong to (`cap_swept`, FIDELITY S33).
 
     # Codes a DIFFERENT Veeder-Root manual documents. `wire.DOCUMENTED` is a
     # parse of section 7 of 576013-635 and of nothing else, so a code the

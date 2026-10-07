@@ -113,6 +113,23 @@ def _range(field, metric=False, code=None, console=None):
     return lo, hi, bool(rule.get("zero"))
 
 
+def _wire_range(field, lo, hi, panel):
+    """The range a Set over the port is held to, where the bench measured
+    one of its own -- `wire_min` / `wire_max`, null for no end at all.
+
+    The keypad keeps the manual's, except on a field whose keypad was
+    measured too (`bench_keypad`). At the bench keypad on 2026-09-19 TEMP
+    COMPENSATION (50E), whose page says 0 to 120, took -10 and refused -50
+    and 130: the port's -49 to 120, not the page's. That is one field, so
+    it is not made a rule -- the port's ranges include open ends (`null`)
+    that the keypad's cells, not a range, would have to stop. A field
+    whose range hangs off another setting (`range_by`) is left to it.
+    """
+    if field.get("range_by") or (panel and not field.get("bench_keypad")):
+        return lo, hi
+    return field.get("wire_min", lo), field.get("wire_max", hi)
+
+
 def _fit(field, value, width):
     """A part must be exactly its width, padded the way its kind is read."""
     if width is None or len(value) == width:
@@ -157,6 +174,24 @@ def _encode_value(field, text, width=None, metric=False, console=None,
 
     if kind == "text":
         n = int(field.get("maxlen") or width or 20)
+        if not panel:
+            # What the bench TLS-350 does with a label over the port, read on
+            # 2026-09-18 by setting a PLLD label to every byte from 20 to FF
+            # in turn: 20 to 7E are kept as sent, lower case included; 7F is
+            # refused, the whole Set; and every byte from 80 to FF is stored
+            # as `A` -- not with its high bit cleared, which would have made
+            # C9 an `I`. A label past its width is cut to it, not refused: 26
+            # letters came back as the first 20. UNKNOWNS A76.
+            #
+            # And below 20, on 2026-09-25 (`bench-2026-09-25/lfset.jsonl`):
+            # a NUL ends the label where it stands -- `SU<NUL>PER` stored
+            # `SU` -- and a line feed or a tab is refused like 7F, a `?` a
+            # character sent. Other control bytes are taken to be refused
+            # too, from those two; CR and ETX end the Set before it gets here.
+            text = text.split("\x00", 1)[0]
+            if "\x7f" in text or any(ch < " " for ch in text):
+                raise ValueError("NOT A LABEL CHARACTER")
+            text = "".join("A" if ord(ch) > 0x7F else ch for ch in text)[:n]
         if len(text) > n:
             raise ValueError(f"MAX {n} CHARS")
         return text.ljust(n)
@@ -167,6 +202,13 @@ def _encode_value(field, text, width=None, metric=False, console=None,
 
     if kind == "flag":
         t = text.upper()
+        if (field.get("any_digit") and not panel and len(t) == 1
+                and t.isdigit()):
+            # Over the port a few of them take any digit, and any but 0 is
+            # on: the bench TLS-350 answers `S560002` and `S560009` ENABLED,
+            # and `S5BD009` the same -- where `S506002` and fourteen other
+            # flags are refused (2026-09-18).
+            return "0" if t == "0" else "1"
         if t in ("1", "Y", "YES", "ON", "ENABLE", "ENABLED"):
             return "1"
         if t in ("0", "N", "NO", "OFF", "DISABLE", "DISABLED"):
@@ -178,6 +220,7 @@ def _encode_value(field, text, width=None, metric=False, console=None,
             raise ValueError("NUMBERS ONLY")
         v = int(text)
         lo, hi, zero = _range(field, metric, code, console)
+        lo, hi = _wire_range(field, lo, hi, panel)
         if not (zero and v == 0):
             if lo is not None and v < lo:
                 raise ValueError(f"MIN {lo}")
@@ -192,6 +235,45 @@ def _encode_value(field, text, width=None, metric=False, console=None,
         except ValueError:
             raise ValueError("NUMBERS ONLY")
         lo, hi, zero = _range(field, metric, code, console)
+        lo, hi = _wire_range(field, lo, hi, panel)
+        # A field's "not entered yet" value, which the console takes back
+        # whatever the range says. The bench TLS-350 holds 501 feet on every
+        # pressure line out of a cold start, accepts `S78901501` on a pipe
+        # whose range stops at 500, and raises its SETUP DATA WARNING again
+        # the moment it does -- 577013-344 Rev H p.21's "The line length
+        # default is 501 feet and will cause a SETUP DATA WARNING".
+        sentinel = field.get("sentinel")
+        if sentinel is not None and v == float(sentinel):
+            zero, lo, hi = True, None, None
+        if field.get("nonzero") and v == 0 and not (sentinel is not None
+                                                     and v == float(sentinel)):
+            # A dimension a tank cannot be without. The bench TLS-350 refuses
+            # `S607010` -- a tank diameter of 0 -- with a `?`; no page gives
+            # the diameter a range, so only the zero is known to be refused.
+            raise ValueError("MUST NOT BE ZERO")
+        if field.get("density"):
+            # An entered density is one of three forms told apart by
+            # magnitude, and a number in none of the bands is refused --
+            # the bench TLS-350's rule, `density.BANDS`. UNKNOWNS A23.
+            from . import density
+            if density.form(v) is None:
+                raise ValueError("NOT A DENSITY")
+            return packed.hexfloat(v)
+        if (field.get("tc_band") and not panel and console is not None
+                and (console.values.get("S56000") or "").strip().endswith("1")):
+            # With mass/density on, the bench TLS-350 holds a thermal
+            # coefficient to what its density band can give: `S609010.00030`
+            # and `0.00094` taken, `0.00029` and `0.00095` refused -- Table
+            # 6B's coefficient at the band's two ends, 1.2003 and 0.6002.
+            # With it off the same console took anything from 0 to 0.01
+            # (`wire_max`), and refused 0.01001. 2026-09-18.
+            from . import density
+            (light, heavy, _name) = density.BANDS[0]
+            lo = density.thermal_coefficient(heavy)
+            hi = density.thermal_coefficient(light)
+            if not lo <= v <= hi:
+                raise ValueError("NOT FOR THIS DENSITY")
+            return packed.hexfloat(v)
         if not (zero and v == 0):
             if lo is not None and v < lo:
                 raise ValueError(f"MIN {lo}")
@@ -206,6 +288,14 @@ def _encode_value(field, text, width=None, metric=False, console=None,
         # wire holds is twenty-four hour HHmm.
         half = ""
         upper = text.upper()
+        if upper.strip() == "EE00":
+            # "HHmm=Hour, Minute (EE00=Disabled)": the disabled marker is a
+            # legal value wherever a time is wanted, and the display side has
+            # always read it. The bench TLS-350 took `S50201EE00` and answered
+            # `SHIFT TIME 1 : DISABLED`, where this refused it with four `?`
+            # and so could not put a programmed shift back (2026-09-19,
+            # `transcripts/shifts4`).
+            return "EE00"
         for word in ("AM", "PM"):
             if word in upper:
                 half = word
@@ -301,7 +391,10 @@ def encode_value(field, text, metric=False, console=None, code=None):
     its own, and the console stores the same thing it would have stored from
     the keypad. Raises ValueError the same way `encode` does.
     """
-    return _encode_value(field, (text or "").strip(), metric=metric,
+    # a label keeps a control byte at its end for `_encode_value` to refuse,
+    # as the bench does (2026-09-25); spaces are trimmed as they always were
+    kept = " " if field.get("kind") == "text" else None
+    return _encode_value(field, (text or "").strip(kept), metric=metric,
                          console=console, code=code)
 
 

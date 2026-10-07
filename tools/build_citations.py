@@ -216,6 +216,35 @@ def alternatives(t):
     return [t[:m.start()] + side + t[m.end():] for side in m.groups()]
 
 
+def _option_page(lab, value_rows):
+    """(manual, page) where this value is written, or None."""
+    t = allscreens.template(str(lab))
+    if not t:
+        return None
+    for name, page, n in value_rows:
+        if (t in allscreens.template(n)
+                or t in allscreens.template(deglossed(n))):
+            return name, page
+    # a value whose name wraps across a line of prose, like "4.0 IN." and
+    # "PS" on two lines of 576013-623 p.104
+    if len(t) < 6:
+        return None
+    blob = {}
+    for name, page, n in value_rows:
+        blob.setdefault(name, []).append(
+            (page, allscreens.template(deglossed(n))))
+    for name, rowset in blob.items():
+        at = " ".join(x for _p, x in rowset).find(t)
+        if at < 0:
+            continue
+        run = 0
+        for page, x in rowset:
+            run += len(x) + 1
+            if run >= at:
+                return name, page
+    return None
+
+
 def build_index(rows):
     """Index the manuals by SCREEN rather than by line.
 
@@ -480,6 +509,7 @@ def main():
     # it offers the right answers: every label CHANGE can walk onto, looked
     # for in the manuals the same way.
     from tls350sim.console import FIELDS
+    from tls350sim.screens import screen_word
     opt_cited, opt_uncited = {}, []
     for key, f in sorted(FIELDS.items()):
         kind = f.get("kind")
@@ -493,31 +523,24 @@ def main():
         else:
             continue
         for lab in labels:
-            t = allscreens.template(str(lab))
-            where = None
-            for name, page, n in value_rows:
-                if t and (t in allscreens.template(n)
-                          or t in allscreens.template(deglossed(n))):
-                    where = (name, page)
-                    break
-            if where is None:
-                # a value whose name wraps across a line of prose, like
-                # "4.0 IN." and "PS" on two lines of 576013-623 p.104
-                blob = {}
-                for name, page, n in value_rows:
-                    blob.setdefault(name, []).append(
-                        (page, allscreens.template(deglossed(n))))
-                for name, rowset in blob.items():
-                    joined = " ".join(x for _p, x in rowset)
-                    at = joined.find(t)
-                    if at >= 0 and len(t) >= 6:
-                        run = 0
-                        for page, x in rowset:
-                            run += len(x) + 1
-                            if run >= at:
-                                where = (name, page)
-                                break
-                        break
+            # A choice can be rendered two ways by one console, and the
+            # panel's way is the one a manual's SCREEN draws: 788's choices
+            # carry the wire's spelling, `2.0 IN STEEL` off the bench
+            # console, and `screen_words` carries the setup screen's,
+            # `2.0 IN. STEEL`, which is the form 576013-623 Rev AN lists.
+            # Only the wire's word was ever looked up, so the five pipe
+            # types that have both went uncited the moment those spellings
+            # were taken off the bench -- and nothing said so, because the
+            # file this writes is the file `test_citations.py` reads. A
+            # ratchet whose input is a committed artefact goes stale in
+            # silence. The test has accepted either word all along; this is
+            # the half that produces them. See FIDELITY U51.
+            shown = screen_word(f, lab)
+            where = _option_page(lab, value_rows)
+            if where is None and shown != lab:
+                where = _option_page(shown, value_rows)
+                if where is not None:
+                    lab = shown
             if where:
                 opt_cited[f"{key}={lab}"] = {"manual": where[0],
                                              "page": where[1]}

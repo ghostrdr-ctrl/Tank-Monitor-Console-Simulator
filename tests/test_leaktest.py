@@ -28,6 +28,7 @@ from tls350sim import leaktest, packed, printer            # noqa: E402
 from tls350sim.clock import clock_date                    # noqa: E402
 from tls350sim.console import Console, describe_alarms      # noqa: E402
 from tls350sim.wire import Handler                          # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 SOH = bytes([1])
@@ -513,7 +514,7 @@ class OverTheWire(unittest.TestCase):
 
     def test_a_console_with_no_probe_refuses_to_start_one(self):
         self.c.modules["probe"] = False
-        self.assertEqual(self.ask(b"\x01S05201\r"), "\x019999FF1B\x03")
+        self.assertTrue(is_bare(self.ask(b"\x01S05201\r")))
 
 
 class OnABench(unittest.TestCase):

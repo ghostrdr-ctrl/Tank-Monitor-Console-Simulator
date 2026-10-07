@@ -113,7 +113,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 131,
-   "seen": "1.5 IN DIAM. LEN: 000"
+   "seen": "1.5 IN DIAM. LEN: 501"
   },
   "# INCH VOL : #": {
    "how": "exact",
@@ -227,7 +227,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 131,
-   "seen": "2ND LINE LENGTH: 000"
+   "seen": "2ND LINE LENGTH: 351"
   },
   "#ST BULK MODULUS: #": {
    "how": "exact",
@@ -245,7 +245,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 131,
-   "seen": "1ST LINE LENGTH: 000"
+   "seen": "1ST LINE LENGTH: 501"
   },
   "* * * * * * * *": {
    "how": "exact",
@@ -1609,11 +1609,11 @@
    "page": 48,
    "seen": "DISPENSE STATE: IDLE"
   },
-  "DISPENSING DISABLED": {
-   "how": "exact",
+  "DISPENSING ENABLED": {
+   "how": "state",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 26,
-   "seen": "DISPENSING DISABLED"
+   "seen": "DISPENSING ENABLED"
   },
   "DISPLAY AND PRINT": {
    "how": "exact",
@@ -2675,7 +2675,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 130,
-   "seen": "LINE LENGTH: 000"
+   "seen": "LINE LENGTH: 501"
   },
   "LINE PER TST NEEDED ALM": {
    "how": "exact",
@@ -2723,7 +2723,7 @@
    "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 26,
-   "seen": "LO 32768.00 HI  8192.00"
+   "seen": "LO  2902.30 HI   444.80"
   },
   "LOAD: #%": {
    "how": "exact",
@@ -3737,7 +3737,7 @@
    "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 26,
-   "seen": "Q 1: SNS CNTS  25119.7"
+   "seen": "Q 1: SNS CNTS    891.0"
   },
   "Q #:PRESS OFFSET TEST": {
    "how": "exact",
@@ -3875,13 +3875,13 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 116,
-   "seen": "RECON ALM LIMIT:000004"
+   "seen": "RECON ALM LIMIT:000001"
   },
   "RECON WARN LIMIT:#": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 116,
-   "seen": "RECON WARN LIMIT:000003"
+   "seen": "RECON WARN LIMIT:000000"
   },
   "RECONCILIATION ALM: NO": {
    "how": "exact",
@@ -4193,7 +4193,7 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "S-MODULE: 330160-115-A"
+   "seen": "S-MODULE: 330160-119-A"
   },
   "S/N :": {
    "how": "label",
@@ -4229,7 +4229,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 73,
-   "seen": "SELECT MODEM: 1"
+   "seen": "SELECT MODEM: 02"
   },
   "SELECT PERIOD: CURRENT": {
    "how": "exact",
@@ -4931,7 +4931,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 109,
-   "seen": "SUDDEN LOSS LIMIT: 00009"
+   "seen": "SUDDEN LOSS LIMIT: 00100"
   },
   "SYSTEM ALARM HISTORY": {
    "how": "exact",
@@ -5603,7 +5603,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 47,
-   "seen": "VALUE (DEG F): +060.0"
+   "seen": "VALUE (DEG F ): +060.0"
   },
   "VAPOR COLLECTION TEST": {
    "how": "exact",
@@ -6189,7 +6189,7 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 18
   },
-  "S51700.units=IMPERIAL GALLONS": {
+  "S51700.units=IMPERIAL GALLON": {
    "manual": "576013-623_AN_SystemSetup",
    "page": 21
   },
@@ -6465,9 +6465,9 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 4
   },
-  "S55300=ACKNOWLEDGE ALARM": {
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 44
+  "S55300=ALARM ACKNOWLEDGE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 15
   },
   "S55300=PASS LINE TEST": {
    "manual": "576013-623_AN_SystemSetup",
@@ -7201,11 +7201,11 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 24
   },
-  "S78401=0.1 GPH": {
+  "S78401=0.10 GPH": {
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 5
   },
-  "S78401=0.2 GPH": {
+  "S78401=0.20 GPH": {
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 5
   },

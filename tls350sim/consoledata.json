@@ -436,6 +436,7 @@
   1593,
   1594,
   1595,
+  1596,
   1602,
   1608,
   1611,
@@ -856,14 +857,17 @@
   "S60701": {
    "label": "Tank diameter",
    "kind": "float",
+   "wire_cut": 6,
    "min": 0.0,
    "max": 999.99,
    "code": "S60701",
-   "mask": "000.00"
+   "mask": "000.00",
+   "nonzero": true
   },
   "S60F01": {
    "label": "Probe offset, inches",
    "kind": "float",
+   "wire_cut": 6,
    "min": -144.0,
    "max": 144.0,
    "code": "S60F01",
@@ -872,6 +876,9 @@
   "S60801": {
    "label": "Tank tilt",
    "kind": "float",
+   "wire_cut": 6,
+   "wire_max": 144.0,
+   "wire_min": -144.0,
    "min": -999.0,
    "max": 999.0,
    "code": "S60801",
@@ -880,6 +887,7 @@
   "S60C01": {
    "label": "Stick height offset, inches",
    "kind": "float",
+   "wire_cut": 6,
    "min": -144.0,
    "max": 144.0,
    "code": "S60C01",
@@ -888,6 +896,8 @@
   "S60901": {
    "label": "Thermal expansion coefficient",
    "kind": "float",
+   "tc_band": true,
+   "wire_max": 0.01,
    "min": 0.0,
    "max": 0.0016,
    "code": "S60901",
@@ -899,11 +909,15 @@
    "min": 0.0,
    "max": 99.9999,
    "code": "S61E01",
-   "mask": "0.0000"
+   "mask": "0.0000",
+   "density": true
   },
   "S62101": {
    "label": "Low product limit",
    "kind": "float",
+   "packed_clamp": 999999,
+   "wire_cut": 6,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 999999.0,
    "code": "S62101",
@@ -912,6 +926,8 @@
   "S62201": {
    "label": "High product limit",
    "kind": "float",
+   "wire_max": 999999.0,
+   "wire_min": 1.0,
    "min": 0.0,
    "max": 100.0,
    "code": "S62201",
@@ -920,6 +936,8 @@
   "S62301": {
    "label": "Overfill limit",
    "kind": "float",
+   "wire_max": 999999.0,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 100.0,
    "code": "S62301",
@@ -937,15 +955,19 @@
   "S62501": {
    "label": "Sudden loss limit",
    "kind": "float",
+   "packed_clamp": 999999,
+   "wire_cut": 6,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 999999.0,
    "code": "S62501",
    "mask": "000000",
-   "default": "000099"
+   "default": "99.9"
   },
   "S61001": {
    "code": "S61001",
    "kind": "int",
+   "wire_cut": 2,
    "min": 1,
    "max": 99,
    "width": 2,
@@ -1018,17 +1040,21 @@
     ],
     [
      "03",
-     "0.2 GPH"
+     "0.20 GPH"
     ],
     [
      "01",
-     "0.1 GPH"
+     "0.10 GPH"
     ],
     [
      "04",
      "NONE"
     ]
    ],
+   "screen_words": {
+    "0.20 GPH": "0.2 GPH",
+    "0.10 GPH": "0.1 GPH"
+   },
    "code": "S78401"
   },
   "S78601": {
@@ -1167,6 +1193,8 @@
   "S56000": {
    "label": "Mass/density",
    "kind": "flag",
+   "any_digit": true,
+   "default": "DISABLED",
    "code": "S56000"
   },
   "S56400": {
@@ -1197,6 +1225,7 @@
   "S5BD00": {
    "label": "Custom alarms",
    "kind": "flag",
+   "any_digit": true,
    "code": "S5BD00"
   },
   "S52C01": {
@@ -1266,6 +1295,8 @@
   "S62901": {
    "label": "Delivery required limit",
    "kind": "float",
+   "wire_max": 999999.0,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 100.0,
    "code": "S62901",
@@ -1286,6 +1317,8 @@
   "S63601": {
    "label": "Periodic test minimum volume",
    "kind": "float",
+   "wire_max": 999999.0,
+   "wire_min": 0.0,
    "min": 0.0,
    "max": 100.0,
    "code": "S63601",
@@ -1294,6 +1327,8 @@
   "S62A01": {
    "label": "Annual test minimum volume",
    "kind": "float",
+   "wire_max": 999999.0,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 100.0,
    "code": "S62A01",
@@ -1792,9 +1827,12 @@
     ],
     [
      "3",
-     "IMPERIAL GALLONS"
+     "IMPERIAL GALLON"
     ]
    ],
+   "screen_words": {
+    "IMPERIAL GALLON": "IMPERIAL GALLONS"
+   },
    "code": "S51700"
   },
   "S50F00": {
@@ -1844,7 +1882,8 @@
     6,
     4
    ],
-   "code": "S50100"
+   "code": "S50100",
+   "pad_hour": true
   },
   "S51D00": {
    "label": "Ticketed delivery temperature compensation",
@@ -2028,6 +2067,7 @@
   "S50A00": {
    "label": "Days before annual test warning",
    "kind": "int",
+   "default": "355",
    "min": 0,
    "max": 365,
    "width": 3,
@@ -2038,6 +2078,8 @@
   "S54A00": {
    "label": "Days before tank annual test warning",
    "kind": "int",
+   "packed_digits": 2,
+   "default": "355",
    "min": 0,
    "max": 365,
    "width": 3,
@@ -2055,18 +2097,19 @@
    "code": "S50B00",
    "wire_line": "ANNUAL TEST ALARM: DAYS =",
    "wire_format": "%3d",
-   "default": "355"
+   "default": "365"
   },
   "S54B00": {
    "label": "Days before tank annual test alarm",
    "kind": "int",
+   "packed_digits": 2,
    "min": 0,
    "max": 365,
    "width": 3,
    "code": "S54B00",
    "wire_line": "TANK ANN TST NEEDED ALM: DAYS =",
    "wire_format": "%3d",
-   "default": "355",
+   "default": "365",
    "mask": "000"
   },
   "S55300": {
@@ -2079,9 +2122,12 @@
     ],
     [
      "1",
-     "ACKNOWLEDGE ALARM"
+     "ALARM ACKNOWLEDGE"
     ]
    ],
+   "screen_words": {
+    "ALARM ACKNOWLEDGE": "ACKNOWLEDGE ALARM"
+   },
    "code": "S55300"
   },
   "S55600": {
@@ -2123,6 +2169,8 @@
   "S55A00": {
    "label": "Days before line annual test warning",
    "kind": "int",
+   "packed_digits": 2,
+   "default": "355",
    "min": 0,
    "max": 365,
    "width": 3,
@@ -2134,30 +2182,35 @@
   "S55B00": {
    "label": "Days before line annual test alarm",
    "kind": "int",
+   "packed_digits": 2,
    "min": 0,
    "max": 365,
    "width": 3,
    "code": "S55B00",
    "wire_line": "LINE ANN TST NEEDED ALM: DAYS =",
    "wire_format": "%3d",
-   "default": "355",
+   "default": "365",
    "mask": "000"
   },
   "S50D00": {
    "label": "Print temperature compensated volume",
    "kind": "flag",
+   "default": "ENABLED",
    "code": "S50D00"
   },
   "S50E00": {
    "label": "Temperature compensation value",
    "kind": "float",
+   "wire_cut": 5,
+   "wire_min": -49.0,
    "min": 0.0,
    "max": 120.0,
    "code": "S50E00",
    "default": "60",
    "mask": "+000.0",
    "min_metric": -17.0,
-   "max_metric": 49.0
+   "max_metric": 49.0,
+   "bench_keypad": true
   },
   "S60B00": {
    "label": "Stick height function",
@@ -2367,6 +2420,8 @@
   "S60401": {
    "code": "S60401",
    "kind": "float",
+   "packed_floor": -99999.0,
+   "packed_clamp": 999999,
    "min": 0.0,
    "max": 999999.0,
    "label": "Tank full volume, gallons",
@@ -2485,6 +2540,9 @@
   "S62801": {
    "label": "Maximum or label volume",
    "kind": "float",
+   "packed_clamp": 999999,
+   "wire_cut": 6,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 999999.0,
    "code": "S62801",
@@ -2493,6 +2551,8 @@
   "S62601": {
    "label": "Leak alarm limit",
    "kind": "float",
+   "whole": true,
+   "wire_min": 1.0,
    "min": 0.0,
    "max": 99.0,
    "code": "S62601",
@@ -2559,7 +2619,8 @@
    "max": 50.0,
    "code": "S63A01",
    "mask": "00.00",
-   "default": "10.00"
+   "default": "10.00",
+   "wire_format": "%.2f%%"
   },
   "S68100": {
    "label": "Delivery needed warning, days",
@@ -2711,14 +2772,15 @@
   "S78801": {
    "label": "PLLD piping material",
    "kind": "enum",
+   "screen_words": {"2.0/3.0IN FIBERGLASS": "2.0/3.0 IN. FIBERGLASS", "2.0 IN STEEL": "2.0 IN. STEEL", "1.5IN ENVIRN GFLEXII": "1.5 IN. ENVIRN GFLEXII", "1.5/2IN ENVIRN GFLXD": "1.5/2 IN. ENVIRON GFLXD", "PETRO UPP EXTRA": "PETROTECHNIK UPP EXTRA 63 MM"},
    "choices": [
     [
      "01",
-     "2.0/3.0 IN. FIBERGLASS"
+     "2.0/3.0IN FIBERGLASS"
     ],
     [
      "02",
-     "2.0 IN. STEEL"
+     "2.0 IN STEEL"
     ],
     [
      "03",
@@ -2726,7 +2788,7 @@
     ],
     [
      "04",
-     "1.5 IN. ENVIRN GFLEXII"
+     "1.5IN ENVIRN GFLEXII"
     ],
     [
      "05",
@@ -2762,7 +2824,7 @@
     ],
     [
      "13",
-     "1.5/2 IN. ENVIRON GFLXD"
+     "1.5/2IN ENVIRN GFLXD"
     ],
     [
      "14",
@@ -2786,7 +2848,7 @@
     ],
     [
      "19",
-     "PETROTECHNIK UPP EXTRA 63 MM"
+     "PETRO UPP EXTRA"
     ]
    ],
    "code": "S78801",
@@ -2795,15 +2857,44 @@
   "S78901": {
    "label": "PLLD primary pipe length, feet",
    "kind": "float",
+   "default": "501",
    "min": 0.0,
    "max": 999.0,
    "code": "S78901",
    "wire_format": "%d FEET",
-   "mask": "000"
+   "mask": "000",
+   "sentinel": 501,
+   "range_by": {
+    "code": "788",
+    "ranges": {
+     "01": {"min": 0, "max": 500},
+     "02": {"min": 30, "max": 500},
+     "03": {"min": 10, "max": 500},
+     "04": {"min": 10, "max": 500},
+     "05": {"min": 30, "max": 500},
+     "06": {"min": 10, "max": 500},
+     "07": {"min": 0, "max": 500},
+     "08": {"min": 10, "max": 500},
+     "09": {"min": 10, "max": 500},
+     "10": {"min": 10, "max": 500},
+     "11": {"min": 0, "max": 500},
+     "12": {"min": 30, "max": 500},
+     "13": {"min": 0, "max": 500},
+     "14": {"min": 20, "max": 1101},
+     "15": {"min": 30, "max": 500},
+     "16": {"min": 30, "max": 500},
+     "17": {"min": 20, "max": 1101},
+     "18": {"min": 0, "max": 1101},
+     "19": {"min": 20, "max": 1101}
+    },
+    "default": {"min": 10, "max": 500}
+   }
   },
   "S77F01": {
    "label": "PLLD secondary pipe length, feet",
    "kind": "float",
+   "wire_cut": 4,
+   "default": "351",
    "min": 0.0,
    "max": 999.0,
    "code": "S77F01",
@@ -2845,6 +2936,11 @@
   "S77501": {
    "label": "PLLD profile line test leak rate, GPH",
    "kind": "float",
+   "wire_cut": 5,
+   "ignores_text": true,
+   "wire_max": 10.0,
+   "wire_min": 0.05,
+   "default": "3.00",
    "min": 0.0,
    "max": 99.99,
    "code": "S77501",
@@ -2853,6 +2949,11 @@
   "S77601": {
    "label": "PLLD profile line test reference pressure, PSI",
    "kind": "float",
+   "wire_cut": 6,
+   "ignores_text": true,
+   "wire_max": 70.0,
+   "wire_min": 5.0,
+   "default": "10.00",
    "min": 0.0,
    "max": 999.99,
    "code": "S77601",
@@ -2861,6 +2962,8 @@
   "S77701": {
    "label": "PLLD primary pipe diameter, inches",
    "kind": "float",
+   "wire_cut": 4,
+   "default": "0.00",
    "min": 0.0,
    "max": 9.99,
    "code": "S77701",
@@ -2870,6 +2973,8 @@
   "S77801": {
    "label": "PLLD secondary pipe diameter, inches",
    "kind": "float",
+   "wire_cut": 4,
+   "default": "0.00",
    "min": 0.0,
    "max": 9.99,
    "code": "S77801",
@@ -2879,6 +2984,7 @@
   "S77901": {
    "label": "PLLD primary pipe bulk modulus, PSI",
    "kind": "float",
+   "default": "0",
    "min": 0.0,
    "max": 99999.0,
    "code": "S77901",
@@ -2887,6 +2993,7 @@
   "S77A01": {
    "label": "PLLD secondary pipe bulk modulus, PSI",
    "kind": "float",
+   "default": "0",
    "min": 0.0,
    "max": 99999.0,
    "code": "S77A01",
@@ -2895,6 +3002,9 @@
   "S77B01": {
    "label": "PLLD thermal expansion coefficient",
    "kind": "float",
+   "ignores_text": true,
+   "wire_max": 0.01,
+   "default": "0.000700",
    "min": 0.0,
    "max": 1.0,
    "code": "S77B01"
@@ -2957,6 +3067,7 @@
   "S77C01": {
    "label": "PLLD low pressure shutoff",
    "kind": "enum",
+   "default": "0",
    "choices": [
     [
      "0",
@@ -2972,17 +3083,23 @@
   "S78501": {
    "label": "PLLD tank number",
    "kind": "int",
+   "ignores_text": true,
    "min": 0,
    "max": 16,
    "width": 2,
    "code": "S78501",
+   "wire_format": "%3d",
    "screen_words": {
+    "0": "NONE"
+   },
+   "wire_words": {
     "0": "NONE"
    }
   },
   "S78A01": {
    "label": "PLLD sensor type",
    "kind": "enum",
+   "packed_width": 2,
    "choices": [
     [
      "1",
@@ -3002,6 +3119,8 @@
   "S77D01": {
    "label": "PLLD altitude pressure offset, PSI",
    "kind": "float",
+   "wire_cut": 4,
+   "default": "+00.0",
    "min": -5.0,
    "max": 5.0,
    "code": "S77D01",
@@ -3726,6 +3845,7 @@
   "S52601": {
    "label": "Dial retry number",
    "kind": "int",
+   "wire_cut": 2,
    "min": 3,
    "max": 99,
    "width": 2,
@@ -3770,24 +3890,32 @@
   "S63401": {
    "label": "HRM reconciliation warning limit",
    "kind": "float",
+   "default_litres": 3,
+   "wire_max": 105.0,
+   "wire_min": 1.0,
    "min": 1.0,
    "max": 400.0,
    "code": "S63401",
    "mask": "000000",
-   "default": "000003"
+   "default": "000000"
   },
   "S63501": {
    "label": "HRM reconciliation alarm limit",
    "kind": "float",
+   "default_litres": 4,
+   "wire_max": 105.0,
+   "wire_min": 1.0,
    "min": 1.0,
    "max": 400.0,
    "code": "S63501",
    "mask": "000000",
-   "default": "000004"
+   "default": "000001"
   },
   "S60A01": {
    "code": "S60A01",
    "kind": "float",
+   "packed_floor": -99999.0,
+   "packed_clamp": 999999,
    "min": 0.0,
    "max": 999999.0,
    "label": "Linear calculated full volume, gallons",
@@ -3796,6 +3924,10 @@
   "S63C01": {
    "code": "S63C01",
    "kind": "float",
+   "packed_clamp": 999999,
+   "nonzero": true,
+   "wire_cut": 6,
+   "wire_min": -99999.0,
    "min": 0.0,
    "max": 999999.0,
    "label": "50 point full volume, gallons",
@@ -4379,18 +4511,21 @@
   "S85100": {
    "label": "Restore all setup data from EEPROM",
    "kind": "flag",
+   "packed_width": 2,
    "code": "S85100",
    "wire_line": "RESTORE SETUP DATA:"
   },
   "S85200": {
    "label": "Save all setup data to EEPROM",
    "kind": "flag",
+   "packed_width": 2,
    "code": "S85200",
    "wire_line": "SAVE SETUP DATA:"
   },
   "S85300": {
    "label": "Clear all setup data from EEPROM",
    "kind": "flag",
+   "packed_width": 2,
    "code": "S85300",
    "wire_line": "CLEAR SETUP DATA:"
   },
@@ -5319,16 +5454,30 @@
   "S52501": {
    "code": "S52501",
    "kind": "int",
+   "packed_width": 2,
+   "wire_cut": 2,
    "min": 1,
    "max": 3,
-   "width": 1,
+   "width": 2,
    "label": "Receiver port number to dial",
-   "mask": "0",
-   "default": "1"
+   "mask": "00",
+   "default": "2"
+  },
+  "S52E01": {
+   "code": "S52E01",
+   "kind": "int",
+   "wire_cut": 2,
+   "min": 1,
+   "max": 99,
+   "width": 2,
+   "mask": "00",
+   "default": "48",
+   "label": "Receiver delay before autodial on alarm clear, hours"
   },
   "S78F01": {
    "label": "PLLD low pressure shutoff, PSI",
    "kind": "int",
+   "packed_float": true,
    "min": 0,
    "max": 25,
    "width": 2,
@@ -6875,7 +7024,7 @@
       "module": "probe"
      },
      "scope": "console",
-     "l2": "VALUE (DEG F):",
+     "l2": "VALUE (DEG F ):",
      "print": {
       "head": "TEMP COMPENSATION",
       "line": "VALUE (DEG F ):{:>7}",

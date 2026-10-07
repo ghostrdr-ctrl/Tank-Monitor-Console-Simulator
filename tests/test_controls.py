@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tls350sim import controls, presets                    # noqa: E402
 from tls350sim.console import Console                      # noqa: E402
 from tls350sim.wire import Handler                         # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 
 def a_site():
@@ -223,9 +224,9 @@ class TheDeviceActions(unittest.TestCase):
     def test_they_want_the_module_that_carries_the_device(self):
         c, h = a_site()
         c.modules["smart"] = 0
-        self.assertIn("9999", send(h, "S09901149"))
+        self.assertTrue(is_bare(send(h, "S09901149")))
         c.modules["plld"] = 0
-        self.assertIn("9999", send(h, "S09201149"))
+        self.assertTrue(is_bare(send(h, "S09201149")))
 
 
 if __name__ == "__main__":

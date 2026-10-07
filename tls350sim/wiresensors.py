@@ -1077,7 +1077,7 @@ def handle(handler, tok, dev, code, data):
         module = DIAGNOSTIC[tok][0]
     if module is not None:
         if not c.has(module):
-            return handler._nine(code), f"no {module} sensor module fitted"
+            return handler._absent(code), f"no {module} sensor module fitted"
         if tok in DIAGNOSTIC:
             return (_diagnostic_report(handler, code, tok, dev),
                     "sensor diagnostic")
@@ -1103,19 +1103,19 @@ def handle(handler, tok, dev, code, data):
     if tok in ("315", "316", "333", "B33", "B34", "B35", "B36", "B37",
                "B38", "B39"):
         if not c.has("smart"):
-            return handler._nine(code), "no smart sensor module fitted"
+            return handler._absent(code), "no smart sensor module fitted"
         return _smart(handler, tok, dev, code, display)
 
     # ---- the pump relay monitor --------------------------------------------
     if tok in ("322", "323", "B72"):
         if not c.has("pumpmon"):
-            return handler._nine(code), "no pump relay monitor fitted"
+            return handler._absent(code), "no pump relay monitor fitted"
         return _pumpmon(handler, tok, dev, code, display)
 
     # ---- the vapor concentration, which is the vapor module's own ----------
     if tok == "B07":
         if not c.has("vapor"):
-            return handler._nine(code), "no vapor sensor module fitted"
+            return handler._absent(code), "no vapor sensor module fitted"
         devices = _devices(c, "vapor", "706", dev)
         # p.525: SENSOR at 0, PPM at 13, and the reading right aligned
         # to column 15
@@ -1148,7 +1148,7 @@ def handle(handler, tok, dev, code, data):
         # console p.60 is describing, the panel offered the diagnostic and
         # IB2100 answered 9999. FIDELITY M4 and L10.
         if not c.has("vlld"):
-            return handler._nine(code), "no VLLD module fitted"
+            return handler._absent(code), "no VLLD module fitted"
         # One thermistor per site, on position 1. The card that carries it is
         # 635's function 102 `0A=Four Probe w/ Ground Temp Module`, which this
         # console does not model as its own type -- see FIDELITY M4, still
@@ -1192,11 +1192,11 @@ def handle(handler, tok, dev, code, data):
     # ---- the external inputs and the output relays -------------------------
     if tok in ("401", "402", "403"):
         if not c.has("io"):
-            return handler._nine(code), "no input module fitted"
+            return handler._absent(code), "no input module fitted"
         return _inputs(handler, tok, dev, code)
     if tok == "406":
         if not (c.has("relay") or c.has("io")):
-            return handler._nine(code), "no relay module fitted"
+            return handler._absent(code), "no relay module fitted"
         devices = _devices(c, "relay", "806", dev)
         if not devices and dev == "00":
             devices = list(range(1, _relay_count(c) + 1))

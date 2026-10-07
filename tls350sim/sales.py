@@ -64,6 +64,12 @@ class Sale:
         self.gallons = float(gallons)
         self.rate = float(rate)             # gallons an HOUR, like meter_flow
         self.sold = 0.0
+        # Consecutive intervals this sale asked for fuel and was given
+        # none. A pump that will not pump is a customer who hangs up, and
+        # without this a sale against a dry tank or a shut line would stay
+        # open for ever now that it only advances on what was delivered.
+        # See `Sales._credit` and `Sales.settle`. FIDELITY R31.
+        self.starved = 0
         self.started = started
         # (kind, number) of every line this sale put a handle up on, and
         # which of those it was the one to raise
@@ -113,6 +119,12 @@ class Sales:
 
     def __init__(self, console):
         self.c = console
+        # What `tick` wants to pass this interval and what `draw` was asked
+        # for, both cleared by `_credit` as soon as it has used them. They
+        # exist because progress must follow DELIVERY, and delivery is not
+        # known until the fuel has been taken out of the tanks. FIDELITY R31.
+        self._pending = {}
+        self._asked = {}
         # keyed by the meter's whole identity, and a bare number still
         # reaches the default board's meter, like every other meter store
         self.running = MeterDict()     # meter -> Sale
@@ -348,6 +360,17 @@ class Sales:
         for meter, gallons in self.served.items():
             passed[meter] = passed.get(meter, 0.0) + gallons
         self.served = MeterDict()
+        # What each open nozzle WANTS to pass this interval. It is not
+        # credited to the sale here: `draw` decides how much of it actually
+        # leaves the tank, and `_credit` -- which `draw` calls when it
+        # knows -- is what advances `sale.sold`.
+        #
+        # This used to do `sale.sold += take` on this line, before anything
+        # had asked whether the fuel was there, so a twenty gallon sale
+        # completed against a tank holding one and a sale during an ISD
+        # shutdown completed having moved nothing at all. The console then
+        # booked a transaction for fuel that never left. FIDELITY R31.
+        self._pending = {}
         for meter, sale in list(self.running.items()):
             # a nozzle lifted PART of the way through this interval passes
             # what it could pass since it was lifted, not a whole interval's
@@ -355,9 +378,9 @@ class Sales:
             # the tick would otherwise fill from the start of it
             since = min(hours, max(0.0, (now - max(sale.started, opened))
                                    / 3600.0))
-            take = min(sale.gallons - sale.sold, sale.rate * since)
-            sale.sold += max(0.0, take)
-            passed[meter] = passed.get(meter, 0.0) + max(0.0, take)
+            take = max(0.0, min(sale.gallons - sale.sold, sale.rate * since))
+            self._pending.setdefault(meter, []).append((sale, take))
+            passed[meter] = passed.get(meter, 0.0) + take
         # a meter this engine served last interval and is not serving now
         # goes back to nothing; BIR ends its event on the zero
         for meter in list(self._serving):
@@ -366,6 +389,9 @@ class Sales:
                 self._serving.discard(meter)
         for meter, gallons in passed.items():
             self.c.meter_flow[meter] = gallons / hours if gallons > 0 else 0.0
+        # What `draw` was asked for, kept so `_credit` knows the
+        # denominator when the tank could only give part of it.
+        self._asked = dict(passed)
 
     # ---- the fuel itself -------------------------------------------------------
     def draw(self, hours):
@@ -407,20 +433,72 @@ class Sales:
                 continue
             st["volume"] = max(0.0, st["volume"] - gallons)
             self.drawn[meter] = gallons
+        self._credit(hours)
+
+    def _credit(self, hours):
+        """Advance each open sale by what actually came out of the tank.
+
+        The meter measures fuel PASSING THROUGH it. If the STP is
+        de-energized, the line is shut down or the tank is dry, no fuel
+        passes, the meter does not turn, and the sale does not progress --
+        so this corrects `meter_flow` as well as `sale.sold`, because
+        `meter_flow` is what BIR and AccuChart book the transaction from
+        and booking one for fuel that never left is the same defect one
+        step downstream. FIDELITY R31.
+
+        A meter's shortfall is shared out in proportion. What `draw` was
+        asked for is `_asked`, which covers the sales that began and ended
+        inside this interval as well as the ones still running, and there
+        is no honest way to decide that a dry tank served one of them in
+        full and the other not at all.
+        """
+        for meter, parts in self._pending.items():
+            asked = self._asked.get(meter, 0.0)
+            got = self.drawn.get(meter, 0.0)
+            share = min(1.0, got / asked) if asked > 1e-12 else 0.0
+            for sale, take in parts:
+                moved = take * share
+                sale.sold += moved
+                # A nozzle that asked for fuel and was given none is a
+                # customer standing at a pump that is not pumping. See
+                # `settle`.
+                sale.starved = (sale.starved + 1) if (take > 1e-12
+                                                      and moved <= 1e-12) \
+                    else 0
+        for meter in self._asked:
+            got = self.drawn.get(meter, 0.0)
+            self.c.meter_flow[meter] = got / hours if (hours > 0
+                                                       and got > 0) else 0.0
+        self._pending = {}
+        self._asked = {}
+
+    # How many intervals a nozzle stays up getting nothing. One is the
+    # honest number -- a handle that delivers nothing goes back on the
+    # cradle -- but a shutdown that clears inside a tick would then hang up
+    # a sale that was about to be served, so it takes two. FIDELITY R31.
+    STARVED_LIMIT = 2
 
     def settle(self):
-        """Hang up every nozzle whose gallons are through.
+        """Hang up every nozzle whose gallons are through, or that is
+        getting none.
 
         A blended nozzle goes up as one: its components finish together,
         because each was given its own share of the gallons AND its own
         share of the rate, but a component whose tank ran dry mid-fill
         would otherwise leave the group half hung up.
+
+        The starved half is R31's other end. Now that a sale only advances
+        on fuel that actually left the tank, one against a dry tank or a
+        shut-down line never reaches `done` and would hold its nozzle for
+        ever -- which is a leak, and is not what a forecourt does. The
+        customer gets what there was and hangs up.
         """
         for meter, blend in list(self.blends.items()):
-            if blend.done:
+            if blend.done or any(s.starved >= self.STARVED_LIMIT
+                                 for s in blend.parts):
                 self.stop(meter)
         for meter, sale in list(self.running.items()):
-            if sale.done:
+            if sale.done or sale.starved >= self.STARVED_LIMIT:
                 self.stop(meter)
 
     def describe(self, meter):

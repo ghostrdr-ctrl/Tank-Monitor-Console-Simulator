@@ -57,7 +57,14 @@ import json
 import os
 import re
 
+from . import units
+
 SEP = chr(13) + chr(10)
+
+#: the system units of the console being answered, set by `Handler.inquire`
+#: around each reply: the tables here are module functions and a converted
+#: value must not be reformatted to the page's U.S. places
+UNITS = ["1"]
 
 
 def _titles():
@@ -168,7 +175,7 @@ def device_letter(tok):
     return letter
 
 
-def to_places(shown, column):
+def to_places(shown, column, tok=None):
     """The value at the precision the manual's own sample prints it to.
 
     A float decodes with "%g", which drops a trailing zero -- so a tank
@@ -185,20 +192,149 @@ def to_places(shown, column):
     places = column.get("places")
     if places is None:
         return shown
+    if tok is not None and UNITS[0] != "1" and tok in units.QUANTITY:
+        # to the system's own places: a height in millimetres has one where
+        # the page's inches have two
+        places = units.PLACES.get((units.QUANTITY[tok], UNITS[0]), places)
     try:
-        return "%.*f" % (places, float(str(shown).strip()))
+        value = float(str(shown).strip())
     except (TypeError, ValueError):
         return shown
+    if column.get("round_from"):
+        return round_from(str(shown).strip(), places, column["round_from"])
+    return "%.*f" % (places, value)
+
+
+def round_from(text, places, digit):
+    """`text`, a decimal, at `places`, rounded UP as soon as the next digit
+    reaches `digit`.
+
+    In `Decimal` and not in float, because the boundary is exactly where the
+    question is: `0.0009144 * 1e6` is 914.39999999999998 in binary, so a
+    float comparison against 914.4 rounds the console's own value the wrong
+    way -- which is what this did first.
+
+    The bench TLS-350 rounds the thermal coefficient's display up from a
+    FOUR. Measured on 2026-09-19 by setting 46 densities and reading both
+    forms of 609: with the packed value at 0.00093840144 the display reads
+    `0.000939`, and the threshold is exactly four tenths -- twenty densities
+    chosen to walk the seventh decimal from 0.30 to 0.49 round down through
+    0.3860 and up from 0.4014 without exception (`transcripts/dendisp.log`,
+    `dendisp2.log`, `dendisp3.log`). Whether the rest of the console's
+    printing shares the habit is not known: the coefficient is the only
+    COMPUTED decimal we can set an input for and read the output of, and
+    every other place a decimal is printed either echoes what was typed or
+    has never been seen with a value. FIDELITY S36.
+    """
+    from decimal import Decimal, InvalidOperation
+    try:
+        value = Decimal(text)
+    except InvalidOperation:
+        return text
+    scaled = abs(value) * (Decimal(10) ** places)
+    whole = int(scaled)
+    if scaled - whole >= Decimal(digit) / 10:
+        whole += 1
+    out = "%.*f" % (places, whole / (10.0 ** places))
+    return ("-" + out) if value < 0 else out
 
 
 def _place(line, text, column):
-    """Put a cell where the manual puts it, without running into its neighbour."""
+    """Put a cell where the manual puts it, without running into its neighbour.
+
+    Three shapes the bench TLS-350 draws that a page's one sample cannot
+    show (2026-09-18, the Set sweep):
+      `number_end`  the number ends there and its unit follows it: 775
+                    prints `3.00 GPH` and `10.00 GPH` with both numbers
+                    ending at 35, and 784 `NONE` where `0.20` stands;
+      `minus_out`   a negative number's sign is drawn one column past a
+                    right-aligned edge: `-144.00` ends at 39 where `144.00`
+                    and `0.00` end at 38;
+      `cut`         the cell is cut to that many characters: `REPETITIV`.
+    """
+    if column.get("cut"):
+        text = text[:column["cut"]]
     start = column["start"]
-    if column.get("align") == "right":
-        start = column["end"] - len(text) + 1
+    if column.get("number_end") is not None:
+        start = column["number_end"] - len(text.split(" ", 1)[0]) + 1
+    elif column.get("align") == "right":
+        end = column["end"]
+        if column.get("minus_out") and text.startswith("-"):
+            end += 1
+        start = end - len(text) + 1
+        if column.get("floor") is not None and start < column["floor"]:
+            # a number wider than its field runs on to the right of it, the
+            # way printf's minimum width does: the bench's 3784996 litres
+            # starts at 33 where 999999 gallons did (`cap_metric`)
+            start = column["floor"]
     if len(line) >= start:
         return (line + " " if line else line) + text
     return line.ljust(start) + text
+
+
+# The trailing spaces the bench TLS-350 keeps on a display line, where this
+# console's lines ended at their last character: a heading padded out to
+# where its value column starts, a word to its field, a label to its twenty.
+# Every comparison before 2026-09-23 stripped each line, so none of them saw
+# it; a byte-for-byte pass over `cap_swept`, `cap_now` and the two device
+# sweeps found these 27 reports, each the same in every capture it is in.
+# {code: [(pattern, width or "+n")]}: a whole-line match is padded to width,
+# or given n more spaces. Three codes are keyed by their number in decimal --
+# 1300, 1551 and 1594 are the two words' and one heading's reports -- because
+# `test_fidelity` reads a quoted code in the package as that setting having a
+# reader, and padding a report's words reads nothing (FIDELITY F12).
+_PAD = {
+    1300: [(r"VOLUME", 9)],
+    "5BD": [(r"CUSTOM ALARM LABELS", 24)],
+    "602": [(r"TANK   PRODUCT LABEL", 30), (r" ?\d+ {5}.*", 33)],
+    "603": [(r"TANK   PRODUCT LABEL", 30)],
+    "609": [(r"TANK   PRODUCT LABEL", 30)],
+    "610": [(r"TANK   PRODUCT LABEL", 30)],
+    1551: [(r"PROBE OFFSET", 15)],
+    # the heading eighty wide, and every tank row seventy-nine
+    "612": [(r"TANK   PRODUCT LABEL {10}SIPHON MANIFOLDED TANKS {3}"
+             r"LINE MANIFOLDED TANKS", 80), (r" ?\d+ .*", 79)],
+    "61D": [(r"TANK   PRODUCT LABEL {10}SIPHON MANIFOLDED TANKS {3}"
+             r"LINE MANIFOLDED TANKS", 80), (r" ?\d+ .*", 79)],
+    "615": [(r"TANK   PRODUCT LABEL {10}METER DATA", 46),
+            (r" ?\d+ .* NO", "+1")],
+    "62B": [(r"TANK   PRODUCT LABEL {13}DATE", "+1")],
+    "630": [(r"TANK   PRODUCT LABEL {10}TANK TEST NOTIFY:", "+1")],
+    1594: [(r"TANK   PRODUCT LABEL {10}PUMP THRESHOLD", "+2")],
+    "77C": [(r"Q \d+:.* NO", "+1")],
+    # a pipe type's name as the firmware spells it: ENVIROFLEX PP1501 carries
+    # three spaces after it and PETRO UPP EXTRA none, so the padding is the
+    # name's own and not a field's
+    "788": [(r"Q \d+:.*ENVIROFLEX PP1501", "+3")],
+    "789": [(r"Q \d+:.* FEET", "+2")],
+    # a line's label, twenty wide from column 8, and three after it
+    "782": [(r" +\d+  .*", 31)],
+    # a receiver row with no label: the number, and the label's width
+    "522": [(r" +\d+", 31)],
+    "523": [(r" ?\d+", 28)],
+    # the part number in fourteen, and the feature names
+    "902": [(r"SOFTWARE# .*", 24), (r"PLLD", 5), (r"WPLLD", 6)],
+    "905": [(r"SOFTWARE# .*", 24), (r"PLLD", 5), (r"WPLLD", 6)],
+}
+_PAD_RE = {(f"{tok:03X}" if isinstance(tok, int) else tok):
+           [(re.compile(pat + r"\Z"), width) for pat, width in rules]
+           for tok, rules in _PAD.items()}
+
+
+def pad_line(tok, line):
+    """One display line as the bench sends it, trailing spaces and all.
+
+    60A is the odd one: its heading and every tank row end in a CR of their
+    own, before the CR LF, on the bench in every capture (`GALLONS\\r\\r\\n`)."""
+    if tok == "60A" and line.strip() and (
+            line.startswith("TANK   PRODUCT") or line[:2].strip().isdigit()):
+        return line.rstrip("\r") + "\r"
+    for pattern, width in _PAD_RE.get(tok, ()):
+        if pattern.match(line):
+            if isinstance(width, str):
+                return line + " " * int(width[1:])
+            return f"{line:<{width}s}"
+    return line
 
 
 def lead(tok, body):
@@ -271,7 +407,11 @@ def row(tok, cells):
     """
     line = ""
     for value, column in zip(cells, columns(tok)):
-        line = _place(line, str(to_places(value, column)), column)
+        if (column.get("align") == "right" and column.get("end") == 38
+                and column.get("start", 0) > 7 and device_letter(tok) == "T"):
+            # a tank row's value field is columns 33 to 38 (`blankrows`)
+            column = dict(column, floor=33)
+        line = _place(line, str(to_places(value, column, tok)), column)
     return line.rstrip()
 
 
@@ -338,7 +478,7 @@ def _part_rows(handler, tok, device, layout, label):
             if labelled:
                 line = _place(line, label, layout[1])
         for text, column in zip(shown[at:at + wide], values):
-            line = _place(line, str(to_places(text, column)), column)
+            line = _place(line, str(to_places(text, column, tok)), column)
         out.append(line.rstrip())
     return out
 
@@ -477,7 +617,44 @@ FAMILY_OF = {"T": ("probe", "601"), "L": ("liquid", "701"),
 #: point has no four point chart, so it is not a row of zeros on `I605` -- it
 #: is absent, the way the manual's own sample shows only the tank it profiles.
 #: `Console.PROFILE_CODE`'s values plus 63B's pairs.
-PROFILE_TABLES = frozenset({"605", "606", "63B", "63C"})
+#:
+#: **The bench TLS-350 says otherwise for three of the four** (2026-09-18):
+#: out of a cold start every tank reads `1 PT` on I60A00, and I60500, I60600
+#: and I63C00 still print a row of zeros for every position. Only 63B's
+#: height/volume pairs stay away -- it answers its title and nothing under it
+#: -- so it is the one left here.
+PROFILE_TABLES = frozenset({"63B"})
+
+
+def _plld_pipe(console, line):
+    """The pipe type a pressure line is set to, as its two-digit code."""
+    pipe = (console.values.get(f"S788{line:02d}") or "").strip()[-2:]
+    if pipe:
+        return pipe
+    from .console import FIELDS
+    field = FIELDS.get("S78801") or {}
+    return next((c for c, name in field.get("choices", [])
+                 if name == field.get("default")), "03")
+
+
+# Pressure line settings that only exist for some pipe types, and which the
+# bench TLS-350 (2026-09-18) lists only for a line of that type. The
+# diameters, bulk moduli, thermal coefficient and passive 0.10 test print a
+# row only for a USER DEFINED line and nothing at all otherwise; the second
+# length prints a row only for the five two-length types, and its title and
+# heading on their own otherwise. Found by setting Q1 to type 18, then 07,
+# then 01, then back to 03, and reading every report at each step.
+_USER = lambda c, n: _plld_pipe(c, n) == "18"
+_TWO = lambda c, n: _plld_pipe(c, n) in ("01", "07", "11", "13", "18")
+# The thermal coefficient and the passive 0.10 test are Petrotechnik's too:
+# with Q1 on type 19 and Q2 and Q3 on 03, the bench listed Q1 alone on I77B
+# and I77E, in both formats, and nothing for the other two (2026-09-19,
+# `transcripts/pipe77.log`); I780 already prints type 19's THERMAL COEFF.
+_THERMAL = lambda c, n: _plld_pipe(c, n) in ("18", "19")
+ROW_FILTER = {"777": _USER, "778": _USER, "779": _USER, "77A": _USER,
+              "77B": _THERMAL, "77E": _THERMAL, "77F": _TWO}
+#: of those, the codes that keep their title and heading with no rows
+TITLED_WHEN_EMPTY = {"77F"}
 
 
 def _connected(handler, tok):
@@ -498,8 +675,12 @@ def _connected(handler, tok):
     # configured devices left every one of those reports empty on a console
     # nobody had programmed. `_row` still drops a device with nothing to
     # say, so a code carrying no default stays silent as before.
-    configured = console.configured_devices(config, console.capacity(module))
-    return configured or list(range(1, console.capacity(module) + 1))
+    #
+    # And EVERY position when some are switched on, too: this took the
+    # configured ones when there were any, and the bench TLS-350 (2026-09-18)
+    # answers I60200 with all four tanks with tank 1 alone ON, and I78500
+    # with all three lines with Q1 alone ON.
+    return list(range(1, console.capacity(module) + 1))
 
 
 def _is_config(tok):
@@ -555,7 +736,13 @@ SHOWN_AS = {"504": "536", "121": "113"}
 # The WPLLD side does NOT do this: 7AD gives the larger diameter a report of
 # its own, `WPLLD LINE LEAK LINE LENGTH   LARGE`, rather than a second column
 # on 7A9's. Two families, one setting, two shapes. See FIDELITY S15 and S18.
-TAG_COLUMN_CODES = {"77F": ("789", "77F")}
+#
+# **And the PLLD side does not do it either, on a real console.** The bench
+# TLS-350 (2026-09-18) answers I77F00 with `PRESSURE LINE LEAK LINE LENGTH
+# LARGE` and ONE column, 351 FEET on a line whose first length is 200 --
+# 7AD's shape, not p.370's. One family, one shape after all; the page's
+# two-column table is not what the console prints.
+TAG_COLUMN_CODES = {}
 
 # How many RS-232 ports the security report lists. "PP - Port number
 # (Decimal, 01..03 [..06]; 99=this port)" is the range 536 takes, and the
@@ -596,6 +783,18 @@ def display_answer(handler, tok, dev, code):
     # 01..03 [..06]; 99=this port)". A real console answers `I53600` with a
     # bare stamp and `I50400` with all six rows, which is exactly that rule
     # seen from both ends.
+    from . import blankrows
+    if tok in blankrows.TABLES:
+        # A code with no field here: the bench TLS-350's own table, one
+        # block per tank position, drawn from what is stored. It was drawn
+        # only while nothing was, and a value set fell through to another
+        # layout (the bench's snapshot and `I62D01`, 2026-09-22).
+        tanks = ([int(dev)] if dev.isdigit() and int(dev)
+                 else list(range(1, handler.c.capacity("probe") + 1)))
+        body = blankrows.table(handler.c, tok, tanks)
+        if body is not None:
+            return (handler._frame(code, SEP.join(body)),
+                    "the bench console's blank table")
     alias = SHOWN_AS.get(tok)
     devices = (list(range(1, SECURITY_PORTS + 1)) if alias
                else _devices(handler, tok, dev))
@@ -612,11 +811,26 @@ def display_answer(handler, tok, dev, code):
                          or len(TAG_COLUMN_CODES.get(tok) or ())
                          == len(layout) - 1))):
             return None
+        keep = ROW_FILTER.get(tok)
+        if keep:
+            devices = [n for n in devices if keep(handler.c, n)]
         rows = []
+        connected = set(_connected(handler, tok)) if tok in blankrows.ROWS \
+            else set()
         for n in devices:
             got = _row(handler, tok, n, layout, kind)
+            if not got and n in connected:
+                # a position nobody has set still has its row -- a blank
+                # label, a zero, a default -- on the bench console
+                got = blankrows.ROWS[tok](handler.c, n)
             if got:
                 rows += got
+        if not rows and keep:
+            if tok not in TITLED_WHEN_EMPTY:
+                return handler._frame(code), "no line of that pipe type"
+            body = [spec["title"]] + [""] * spec.get("gap", 1)
+            return (handler._frame(code, SEP.join(body + [spec["heading"]])),
+                    "no line of that pipe type")
         if not rows:
             return None
         # 201, 205, 21A, 2E2, 353, 615, 616 and 761 print no title at all:
@@ -637,7 +851,7 @@ def display_answer(handler, tok, dev, code):
         return None
     body = [spec["title"]] + [""] * spec.get("gap", 0)
     body.append(_place(_line_label(handler, tok, dev, line["label"]),
-                       str(to_places(shown, line)), line).rstrip())
+                       str(to_places(shown, line, tok)), line).rstrip())
     return handler._frame(code, SEP.join(body)), "the manual's own columns"
 
 

@@ -166,6 +166,11 @@ def _pattern(template):
             runs.append(("." + "{0,%d}" % n) if n > 1 else ".")
         elif ch in "hF":
             runs.append("[0-9A-Fa-f]{%d}" % n)
+        elif template[i:i + 1] == ".":
+            # The whole part of a number may arrive short: the bench TLS-350
+            # takes `S775015.00` against `rr.rr` and `S7760150.00` against
+            # `ppp.pp` (2026-09-18). The places after the point stay exact.
+            runs.append("[0-9]{1,%d}" % n)
         else:
             runs.append("[0-9]{%d}" % n)
     # Relax only the final run, and only its lower bound -- but NOT when the

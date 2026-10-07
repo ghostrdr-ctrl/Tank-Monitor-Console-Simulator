@@ -35,6 +35,7 @@ Method says brings it back.
 import time
 
 from .clock import clock_date
+from . import relays as _relays
 
 # The three rates a TLS-350 tests at, in gallons per hour.
 RATES = {"gross": 3.0, "periodic": 0.2, "annual": 0.1}
@@ -206,6 +207,56 @@ PUMP_FAIL_ALARM = {"gross": ("06", "09"),      # Gross Pump Test Fail
                    "periodic": ("06", "17"),   # Periodic Pump Test Fail
                    "annual": ("06", "21")}     # Annual Pump Test Fail
 
+# ---------------------------------------------------------------------------
+# the Leak Verification Procedure
+#
+# 576013-610 Rev AC chapter 29 gives the VLLD 3.0 gph failure its own
+# operator procedure, and the word appeared NOWHERE in this repository:
+# `grep -rni "\blvp\b"` over the package, the tests and the tools returned
+# zero. The alarms existed and the shutdown existed; what was missing was
+# the operator's answer to them, which is the half a technician is trained
+# on. FIDELITY H18.
+#
+# The chapter is one flow:
+#
+#   p.29-20  a failed 3.0 gph test prints its report and ends it PERFORM
+#            LVP TEST; the console alarms and shows LINE LEAK TEST FAIL and
+#            LINE LEAK SHUTDOWN in Operating Mode.
+#            "Press ALARM/TEST to silence the alarm. The system displays
+#            the message: P #: START LVP TEST / PRESS <ENTER>"
+#            "Press ENTER to start the Line Verification Procedure. The
+#            system prints a message to confirm that it has started the
+#            test."
+#   p.29-21  the same steps again as a numbered procedure, and the three
+#            outcomes: interrupted, passed, failed.
+#
+# The 3.0 gph test is the GROSS test -- `RATES["gross"]` is 3.0 -- and the
+# shutdown is what arms the procedure, not the failure on its own: a 0.2
+# gph failure on a line whose shutdown rate is 3.0 alarms and does not
+# disable the pump, so there is nothing to verify and nothing to re-enable.
+LVP_KIND = "vlld"
+LVP_RATE_KEY = "gross"
+
+# **The manual draws the screen two ways, one page apart**, and this is a
+# decision rather than a reason not to build it. p.29-20 has `P #: START
+# LVP TEST` over `PRESS <ENTER>`; p.29-21 has `START LEAK VERIFICATION`
+# over `PRESS ENTER`. The first is preferred and is what the panel draws:
+# it carries the device prefix and the angle brackets this console uses on
+# every other screen, where the second is the procedure section's prose
+# voice. The Spanish manual (576013-954 Rev D) draws `P#: INICIO PRU LVP`,
+# which is the first form again and settles it.
+LVP_SCREEN = "P %d: START LVP TEST"
+LVP_PROMPT = "PRESS <ENTER>"
+
+# Why the procedure would not run, in the manual's own three words: "if the
+# LVP test is interrupted by the dispenser being on, a lockout time, or an
+# in-tank leak test, the pump is disabled and the system prints out a
+# message that the dispenser is on". The page draws only the DISPENSER ON
+# slip, so the other two carry their own second line in the same shape.
+LVP_INTERRUPTED = {"dispenser": "DISPENSER ON",
+                   "lockout": "LINE LOCKOUT",
+                   "tanktest": "IN-TANK TEST ACTIVE"}
+
 # The results live under a kind of their own so that a pumpside pass is never
 # counted as a line pass. 351 prints them in separate columns and they are
 # separate measurements.
@@ -361,6 +412,13 @@ class Engine:
         # an inspector reads is two slips for every report. See FIDELITY
         # W10. Each entry is ("start", Running) or ("stop", device, when).
         self.printed_slips = []
+        # Lines whose pump the console shut down on a 3.0 gph failure and
+        # which are waiting for the operator to run the Leak Verification
+        # Procedure, and the one running now. See `LVP_KIND` above and
+        # FIDELITY H18.
+        self.lvp_due = set()        # (kind, device)
+        self.lvp_running = None     # (kind, device) while it runs
+        self.lvp_slips = []         # ("perform"|"start"|"interrupted"|..., ...)
         self._checked = None   # console time as of the last look, for schedules
 
     # ---- starting and stopping ---------------------------------------------
@@ -403,7 +461,15 @@ class Engine:
                                   and len(self.c.manifolded(device)) > 1),
                       origin=origin)
         self.running[(kind, device)] = run
-        self.printed_slips.append(("start", run))
+        # Tank tests only. `_auto_leak_slips` renders these as START
+        # and STOP IN-TANK LEAK TEST over a `T n:` label, and every
+        # kind that is not a line-pressure kind came through here --
+        # so a VLLD test started at the panel printed an IN-TANK slip
+        # naming a TANK, for a test of a pipe. Found while building
+        # the Leak Verification Procedure, which runs a VLLD test and
+        # would have printed one every time. FIDELITY H18.
+        if kind == "tank":
+            self.printed_slips.append(("start", run))
         return "TEST STARTED"
 
     def stop(self, kind, device):
@@ -414,7 +480,8 @@ class Engine:
         if run is None:
             return "NO TEST RUNNING"
         now = time.mktime(self.c.now())
-        self.printed_slips.append(("stop", device, now))
+        if kind == "tank":                      # see `start`
+            self.printed_slips.append(("stop", device, now))
         if run.manual_stop and run.elapsed(now) > 0:
             self._finish(run, now)
             return "TEST COMPLETE"
@@ -451,12 +518,15 @@ class Engine:
                 # FIDELITY H5.
                 if run.elapsed(now) >= MANUAL_STOP_HOURS:
                     self.running.pop(key, None)
-                    self.printed_slips.append(("stop", run.device, now))
+                    if run.kind == "tank":      # see `start`
+                        self.printed_slips.append(
+                            ("stop", run.device, now))
                     self._finish(run, now)
                 continue
             if run.elapsed(now) >= run.hours or self._passed_early(run, now):
                 self.running.pop(key, None)
-                self.printed_slips.append(("stop", run.device, now))
+                if run.kind == "tank":          # see `start`
+                    self.printed_slips.append(("stop", run.device, now))
                 self._finish(run, now)
         # the lines move on pressure rather than on a stopwatch, but they move
         # on the same console time as everything else
@@ -503,8 +573,18 @@ class Engine:
             self.pumpside_test(device, rate_key, started)
         if passed:
             self.c.clear_posted(*FAIL_ALARM[kind][rate_key], device)
+            # and a line's OPEN alarm carried in standing from a backup,
+            # which no acknowledgement takes down (`Console.acknowledge`): a
+            # test that passed read the transducer, so it is not open
+            from .pressure import LINE_ALARMS
+            if "open" in LINE_ALARMS.get(kind, {}):
+                self.c.clear_posted(*LINE_ALARMS[kind]["open"], device)
             self.disabled.discard((kind, device))
+            if self.lvp_running == (kind, device):
+                self.lvp_finished(kind, device, True)
             return
+        if self.lvp_running == (kind, device):
+            self.lvp_finished(kind, device, False)
         self.c.post(*FAIL_ALARM[kind][rate_key], device)
         shutdown = self._shutdown_rate(kind, device)
         if shutdown is not None and RATES[rate_key] >= shutdown:
@@ -692,12 +772,25 @@ class Engine:
             self.pumpside_test(run.device, run.rate_key, run.started)
         if result == FAILED:
             self._fail(run, rate)
+            if self.lvp_running == (run.kind, run.device):
+                self.lvp_finished(run.kind, run.device, False)
         elif result == PASSED:
             # a passing test is the other way a fail alarm goes away, and the
             # way a shut-down line comes back when the method is Pass Line Test
             self.c.clear_posted(*FAIL_ALARM[run.kind][run.rate_key],
                                 run.device)
             self.disabled.discard((run.kind, run.device))
+            # "If the LVP test is successful, the pump is enabled." The
+            # discard above is what enables it; this is what stops the
+            # console asking for the procedure again and prints the slips.
+            if self.lvp_running == (run.kind, run.device):
+                self.lvp_finished(run.kind, run.device, True)
+        elif self.lvp_running == (run.kind, run.device):
+            # INVALID: neither a pass nor a fail, so the pump stays down and
+            # the procedure is still owed. The manual's own interrupted
+            # case ends the same way -- "you will have to begin the
+            # procedure again".
+            self.lvp_running = None
 
     def invalidations(self, run, hours):
         """Which of Table 29-4's criteria this test tripped, in its words.
@@ -931,6 +1024,125 @@ class Engine:
             # the shutdown alarm stands as long as the line is down, so the
             # disabled set is the condition; nothing to post separately
             self.disabled.add((run.kind, run.device))
+            self._lvp_due(run.kind, run.device, run.rate_key)
+
+    # ---- the Leak Verification Procedure -----------------------------------
+    def _lvp_due(self, kind, device, rate_key):
+        """A shut-down VLLD line asks the operator to verify it.
+
+        Only VLLD, and only the 3.0 gph test: chapter 29 gives this
+        procedure to the VLLD family alone, and the PLLD and WPLLD chapters
+        have nothing like it. Only a SHUTDOWN arms it, not a bare failure --
+        a 0.2 gph fail on a line whose shutdown rate is 3.0 alarms and
+        leaves the pump running, so there is nothing to verify and nothing
+        to re-enable. FIDELITY H18.
+        """
+        if kind != LVP_KIND or rate_key != LVP_RATE_KEY:
+            return
+        if (kind, device) in self.lvp_due:
+            return
+        self.lvp_due.add((kind, device))
+        # "it prints a report of the results and instructs you to perform
+        # the Line Verification Procedure" -- the last line of that report.
+        self.lvp_slips.append(("perform", kind, device,
+                               time.mktime(self.c.now())))
+
+    def lvp_pending(self):
+        """The line waiting for a Leak Verification Procedure, or None.
+
+        The lowest-numbered one, because the screen names a single device
+        and the console has no way to ask which. A site with two shut-down
+        VLLD lines verifies them one at a time, which is what a technician
+        walking the forecourt does anyway.
+        """
+        due = sorted(k for k in self.lvp_due if k in self.disabled)
+        return due[0] if due else None
+
+    def lvp_blocked(self, kind, device):
+        """Why the procedure cannot run now, or None.
+
+        The manual's own three: "if the LVP test is interrupted by the
+        dispenser being on, a lockout time, or an in-tank leak test".
+        """
+        for sale in self.c.sales.running.values():
+            if (kind, device) in (sale.lines or ()):
+                return "dispenser"
+        if self.c.lines.line(kind, device).handle:
+            # A handle up with no sale behind it is the bench's own HANDLE
+            # pill, which is a technician standing at the nozzle. Step 2 of
+            # the procedure is "prevent the dispenser handles from being
+            # lifted", so this is the case it is written about.
+            return "dispenser"
+        if self.locked_out(kind, device):
+            return "lockout"
+        tank = self._line_tank(kind, device)
+        if tank is not None and ("tank", tank) in self.running:
+            return "tanktest"
+        return None
+
+    def _line_tank(self, kind, device):
+        code = _relays.LINE_TANK_CODE.get(kind)
+        raw = (self.c.text(code, device) or "").strip() if code else ""
+        return int(raw) if raw.isdigit() and int(raw) else None
+
+    def locked_out(self, kind, device):
+        """Is this line inside a programmed line-leak lockout window?
+
+        `LINE LEAK LOCKOUT SETUP` is a function this console carries and
+        nothing runtime reads, so there is no lockout to be inside. Kept as
+        its own method with its own name rather than folded away, because
+        the manual names it as one of the three interrupts and a reader of
+        `lvp_blocked` should be able to see which of the three is
+        unmodelled. UNKNOWNS-shaped, and recorded in H18's own entry.
+        """
+        return False
+
+    def lvp_start(self, kind=None, device=None):
+        """ENTER on START LVP TEST. Returns a line for the display.
+
+        "Press ENTER to start the Line Verification Procedure. The system
+        prints a message to confirm that it has started the test."
+        """
+        if kind is None:
+            due = self.lvp_pending()
+            if due is None:
+                return "NO LVP TEST DUE"
+            kind, device = due
+        why = self.lvp_blocked(kind, device)
+        if why:
+            # "the pump is disabled and the system prints out a message
+            # that the dispenser is on" -- it stays disabled, and the
+            # procedure has to be begun again.
+            self.disabled.add((kind, device))
+            self.lvp_running = None
+            self.lvp_slips.append(("interrupted", kind, device, why,
+                                   time.mktime(self.c.now())))
+            return "LVP TEST INTERRUPTED"
+        if (kind, device) in self.running:
+            return "TEST ALREADY RUNNING"
+        self.lvp_running = (kind, device)
+        self.lvp_slips.append(("start", kind, device,
+                               time.mktime(self.c.now())))
+        self.start(kind, device, LVP_RATE_KEY, origin="panel")
+        return "LVP TEST STARTED"
+
+    def lvp_finished(self, kind, device, passed):
+        """Called from the verdict when the test under way was an LVP.
+
+        "If the LVP test is successful, the pump is enabled and the system
+        prints a message that the test was successful." And if it is not:
+        "the pump remains disabled until you reenable it by running a
+        successful Self test."
+        """
+        self.lvp_running = None
+        when = time.mktime(self.c.now())
+        if passed:
+            self.lvp_due.discard((kind, device))
+            self.disabled.discard((kind, device))
+            self.lvp_slips.append(("passed", kind, device, when))
+        else:
+            self.disabled.add((kind, device))
+            self.lvp_slips.append(("failed", kind, device, when))
 
     def auto_confirm(self, tank):
         """`S61B`, Gross Test Auto-Confirm: is it on for this tank?

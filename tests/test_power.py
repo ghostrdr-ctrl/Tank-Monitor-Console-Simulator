@@ -21,6 +21,7 @@ software chips, and the archive in E2.
 """
 import os
 import sys
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -222,17 +223,20 @@ class SystemAlarms(unittest.TestCase):
     """The system alarms the extraction pinned triggers for, each posting
     from the state that causes it on the hardware."""
 
-    def test_clock_incorrect_after_cold_boot_until_set(self):
+    def test_a_cold_boot_comes_up_at_the_firmware_date(self):
+        """The bench TLS-350's cold starts both read JAN 16, 2006 8:00 AM,
+        326.01's CREATED date, and neither posted 01/17 CLOCK IS INCORRECT
+        (2026-09-18). The clock alarm is not a cold start's."""
         c = a_programmed_console()
+        c.version = 26
         c.breaker_off()
         c.battery_switch = False
         c.battery_changed()
         c.battery_switch = True
         c.breaker_on()                              # cold
-        self.assertIn("011700", c.conditions())
-        c.values["S50100"] = "2601011230"
-        c.set_clock()
         self.assertNotIn("011700", c.conditions())
+        self.assertEqual(time.strftime("%b %d, %Y %H:%M", c.now()).upper()[:18],
+                         "JAN 16, 2006 08:00")
 
     def test_protective_cover(self):
         c = a_programmed_console()

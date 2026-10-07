@@ -42,9 +42,12 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from tests.refusals import is_refused                 # noqa: E402
+
 from tls350sim import presets, wire, wiretables              # noqa: E402
 from tls350sim.console import Console, DEVICE_PREFIXED       # noqa: E402
 from tls350sim.wire import Handler                           # noqa: E402
+from tests.refusals import is_bare                    # noqa: E402
 
 REF = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "reference")
@@ -197,7 +200,10 @@ class TheLineLabelsWereNotInTheLabelSweep(unittest.TestCase):
             c, h = a_programmed_site()
             reply = send(h, "S" + code + "01" + label)
             self.assertNotIn("9999", reply)
-            self.assertEqual(c.values.get("S" + code + "01"), "01" + label)
+            # held at the field's full width, as the bench console's own
+            # computer-format reply shows it (2026-09-18)
+            self.assertEqual(c.values.get("S" + code + "01"),
+                             "01" + label.ljust(20))
             self.assertEqual(c.text(code, 1), label)
             # "<SOH>i7A2WWYYMMDDHHmmWWaaaa...": the record repeats the line
             # number, which is the whole of what DEVICE_PREFIXED records
@@ -590,25 +596,36 @@ class AConnectedDeviceIsOnTheReportBeforeAnybodyChangesIt(unittest.TestCase):
                 if ln.startswith("T ")]
         self.assertEqual(len(rows), len(tanks))
 
-    def test_a_profile_table_is_not_a_setting_every_tank_has(self):
-        """The half that must not change, and the trap in this one.
+    def test_a_profile_table_lists_every_tank_even_on_one_point(self):
+        """The reverse of what this test used to hold, on hardware.
 
-        605 is the FOUR POINT chart. A tank on one point has no four point
-        chart, so it is not a row of zeros on I605 -- it is absent, the way
-        p.248's own sample shows only the tank it profiles. Reading 605's
-        zero default as "every tank, defaulted" would have printed a chart
-        for four tanks that have none.
+        It said a tank on one point has no four point chart and so no row on
+        I605, the way p.248's sample shows only the tank it profiles. The
+        bench TLS-350 (2026-09-18), every tank on `1 PT`, answers I60500 with
+        a row of zeros for all four positions -- a chart nobody entered is
+        zeros, not absent. A tank that HAS one prints its own four figures.
         """
         c, h = a_programmed_site()
         for tank in list(c.programmed_tanks()):
             c.values.pop(f"S605{tank:02d}", None)
-        self.assertNotIn("GALLONS", body(h, "I60500"))
+        rows = [ln for ln in body(h, "I60500").splitlines()
+                if ln[:3].strip().isdigit()]
+        self.assertEqual(len(rows), c.capacity("probe"))
+        # ...zeros, but for its first figure, which is the tank's own full
+        # volume: the bench's I60500 prints 200000 for its tank 1
+        # (`cap_swept`, 2026-09-18)
+        self.assertTrue(all(ln.split()[-3:] == ["0"] * 3 for ln in rows), rows)
+        for ln in rows:
+            tank = int(ln.split()[0])
+            self.assertEqual(int(ln.split()[-4]),
+                             round(c.limit("604", tank)
+                                   or c.limit("60A", tank) or 0), ln)
         c.values["S60501"] = "01" + "".join(
             struct.pack(">f", v).hex().upper()
             for v in (9728.0, 7296.0, 4864.0, 2432.0))
         rows = [ln for ln in body(h, "I60500").splitlines()
                 if ln[:3].strip().isdigit()]
-        self.assertEqual(len(rows), 1)
+        self.assertIn("9728", rows[0])
 
     def test_an_unfitted_family_reports_nothing(self):
         """`_connected` asks the cage first, so a console with no liquid
@@ -882,8 +899,13 @@ class TheDevicePrefixedSetIsTheManualsOwn(unittest.TestCase):
     # `<SOH>s8C400hh` -- device 00, one value for the console -- and the
     # repeat comes from Rev Y, whose 8C4 section carries the FUELING
     # POSITION samples that belong to the code before it.
+    #
+    # `5E2` is the hardware against the page. p.300 draws `...SSHHmm` and the
+    # bench TLS-350 packs `i5E201` as `EE00` with no repeat, and a restore of
+    # its own dump came back here as `01EE00` (2026-09-22).
     NOT_PREFIXED = {"502": "Rev AA draws no repeat; Rev Y does",
-                    "8C4": "Rev Y's section carries 8C3's samples"}
+                    "8C4": "Rev Y's section carries 8C3's samples",
+                    "5E2": "the bench packs no repeat"}
 
     def manual_paths(self):
         return [os.path.join(REF, name) for name in os.listdir(REF)
@@ -947,7 +969,7 @@ class TheManifoldReportAgreesWithTheSamples(unittest.TestCase):
         """All three of chapter 12's samples print the word. The console
         printed a dash, which is on none of them."""
         rows = self.rows(self.a_console(), "I61200")
-        self.assertTrue(rows[-1].endswith("NONE"), rows[-1])
+        self.assertTrue(rows[-1].rstrip().endswith("NONE"), rows[-1])
         self.assertNotIn("-", rows[-1])
 
     def test_an_unlabelled_tank_prints_a_blank_label_column(self):
@@ -974,7 +996,9 @@ class TheManifoldReportAgreesWithTheSamples(unittest.TestCase):
         rows = self.rows(self.a_console(), "I61200")
         line = next(r for r in rows if r.startswith(" 1 "))
         self.assertEqual(line.index("2", 7), sample.index("1", 7))
-        self.assertEqual(len(line), len(sample))
+        # the page's text lost the row's padding, which the bench keeps
+        # to seventy-nine (`wiretables.pad_line`)
+        self.assertEqual(len(line.rstrip()), len(sample))
 
     def test_both_codes_answer_with_the_whole_table(self):
         """635 Rev AA draws the identical table on p.265 and p.275, so 61D
@@ -1147,7 +1171,13 @@ class TheLineGeneralSetup(unittest.TestCase):
         c.values["S7A901"] = "01" + self.feet(120.0)
         self.assertIn("LINE LENGTH: 120 FEET", self.rows(h, "I7A001"))
 
-    def test_the_pressure_report_is_p384_s(self):
+    def test_the_pressure_report_is_the_bench_consoles(self):
+        """Not p.384's. The bench TLS-350 (2026-09-18) prints a longer block
+        than the page draws: `TYP:` and the pipe's own name where the page
+        has `PIPE TYPE:   FIBERGLASS`, the fiberglass line's two lengths by
+        diameter at their defaults of 501 and 351, both schedules read off
+        the line rather than the key, the low pressure shutoff, and the
+        sensor and pressure offset after the tank."""
         c, h = self.a_site("plld")
         c.values["S78101"] = "011"
         c.values["S78201"] = "01" + "UNLEADED REGULAR".ljust(20)
@@ -1155,9 +1185,12 @@ class TheLineGeneralSetup(unittest.TestCase):
         c.values["S78501"] = "0101"
         self.assertEqual(self.rows(h, "I78001"), [
             "PRESSURE LINE LEAK SETUP", "Q 1:UNLEADED REGULAR",
-            "PIPE TYPE:   FIBERGLASS", "0.10 GPH TEST: ENABLED",
-            "SHUTDOWN RATE:  3.0 GPH", "T 1:REGULAR UNLEADED",
-            "DISPENSE MODE:", "  STANDARD"])
+            "TYP:2.0/3.0IN FIBERGLASS", "2.0IN DIA LEN: 501 FEET",
+            "3.0IN DIA LEN: 351 FEET", "0.20 GPH TEST: DISABLED",
+            "0.10 GPH TEST: DISABLED", "SHUTDOWN RATE:  3.0 GPH",
+            "LOW PRESSURE SHUTOFF:NO", "LOW PRESSURE :   0 PSI",
+            "T 1:REGULAR UNLEADED", "DISPENSE MODE:", "  STANDARD",
+            "SENSOR: NON-VENTED", "PRESSURE OFFSET: 0.0PSI"])
 
 
 class TheLineDisableAlarmAssignments(unittest.TestCase):
@@ -1233,12 +1266,12 @@ class TheLineDisableAlarmAssignments(unittest.TestCase):
 
     def test_a_payload_that_is_not_eight_characters_is_refused(self):
         _c, h = self.a_line_site()
-        self.assertIn("9999", send(h, "S78701" + "2105"))
-        self.assertIn("9999", send(h, "S78701" + "21050002"))
+        self.assertTrue(is_refused(send(h, "S78701" + "2105")))
+        self.assertTrue(is_refused(send(h, "S78701" + "21050002")))
 
     def test_the_card_has_to_be_there(self):
         c = Console(None)
-        self.assertIn("9999", send(Handler(c, verbose=False), "I78700"))
+        self.assertTrue(is_bare(send(Handler(c, verbose=False), "I78700")))
 
     def test_the_computer_form_carries_the_count_and_the_assignments(self):
         _c, h = self.a_line_site()
@@ -1311,7 +1344,7 @@ class ASetItsOwnInquiryCannotReadIsRefused(unittest.TestCase):
 
     def test_the_thirtieth_of_february_is_not_a_dial_date(self):
         _c, h = _full_site()
-        self.assertIn("9999FF1B", send(h, "S52B0112402301200"))
+        self.assertTrue(is_refused(send(h, "S52B0112402301200")))
         self.assertNotIn("9999FF", send(h, "S52B0112402291200"))
         self.assertNotIn("9999FF", send(h, "I52000"))
 
@@ -1319,13 +1352,15 @@ class ASetItsOwnInquiryCannotReadIsRefused(unittest.TestCase):
         _c, h = _full_site()
         for cmd in ("S52C010101ab01", "S78701aabbcc01", "S7A701aabbcc01",
                     "S75B01aabbcc01", "S80801aabbcc01"):
-            self.assertIn("9999FF1B", send(h, cmd), cmd)
+            self.assertTrue(is_refused(send(h, cmd)), cmd)
         for cmd in ("I52C00", "I78700", "I80801"):
             self.assertNotIn("9999FF", send(h, cmd), cmd)
 
     def test_a_computer_format_date_is_digits_too(self):
         _c, h = _full_site()
-        self.assertIn("9999FF1B", send(h, "s75C01AB0101"))
+        # refused the bench console's way: a `?` for each character of the
+        # six-digit field, under the echo and the stamp
+        self.assertIn("??????&&", send(h, "s75C01AB0101"))
         self.assertNotIn("9999FF", send(h, "s75C01240101"))
         self.assertNotIn("9999FF", send(h, "I75C01"))
 
@@ -1482,6 +1517,9 @@ class TheSiteLinkModemIsWhateverWasProgrammed(unittest.TestCase):
     def a_console(self, kind=None):
         c = Console()
         c.modules["rs232"] = 1
+        # a SiteLink diagnostic wants a modem to be about: the bench TLS-350
+        # with none answers I88D00 with a bare frame (2026-09-18)
+        c.modules["modem"] = 1
         if kind is not None:
             c.values["S88501"] = kind
         return c, Handler(c, verbose=False)

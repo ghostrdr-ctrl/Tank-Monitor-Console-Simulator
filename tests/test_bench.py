@@ -121,6 +121,21 @@ class WhichDevicesExist(PanelWindow):
         self.assertEqual(self.app._devices(), [1, 2])
 
 
+class NoTankNoReport(unittest.TestCase):
+    """2E2, 213 and 221 with no tank reporting are the frame and the stamp
+    alone: the bench TLS-350, every tank off, in its site snapshot
+    (2026-09-22), the rule I201 and I202 already follow."""
+
+    def test_each(self):
+        from tls350sim import wire
+        c = a_site()
+        c.tank_level.clear()
+        h = wire.Handler(c, verbose=False)
+        for code in ("2E2", "213", "221"):
+            reply = h.handle(f"\x01I{code}00\r".encode()).decode("latin-1")
+            self.assertEqual(reply.split("\r\n")[3:], ["", "\x03"], code)
+
+
 class WhichLinesExist(unittest.TestCase):
     def test_only_the_lines_the_console_has_been_told_about(self):
         """A PLLD controller carries six transducers; the preset programmes
@@ -130,10 +145,29 @@ class WhichLinesExist(unittest.TestCase):
         self.assertEqual([(k, n) for k, n, _ in c.programmed_lines()],
                          [("plld", 1), ("plld", 2)])
 
-    def test_a_labelled_line_counts_even_without_its_config_flag(self):
+    def test_a_label_alone_does_not_make_a_line(self):
+        """The bench TLS-350 with Q1 switched off and still labelled REG
+        TURBINE answered every pressure line report with the frame and the
+        stamp alone (site snapshot, 2026-09-22). A backup carries 781 with
+        782, so the label is not needed to find a seeded site's lines."""
         c = a_site()
         c.values["S78203"] = "03LINE 3              "
+        self.assertNotIn(("plld", 3),
+                         [(k, n) for k, n, _ in c.programmed_lines()])
+        c.values["S78103"] = "031"
         self.assertIn(("plld", 3), [(k, n) for k, n, _ in c.programmed_lines()])
+
+    def test_an_off_line_is_not_reported_however_it_is_labelled(self):
+        """All six pressure line reports, frame and stamp alone, the way
+        the bench answered them in its site snapshot (2026-09-22)."""
+        from tls350sim import wire
+        c = a_site()
+        for n in (1, 2):
+            c.values[f"S781{n:02d}"] = f"{n:02d}0"
+        h = wire.Handler(c, verbose=False)
+        for code in ("373", "374", "381", "382", "383", "384"):
+            reply = h.handle(f"\x01I{code}00\r".encode()).decode("latin-1")
+            self.assertEqual(reply.split("\r\n")[3:], ["", "\x03"], code)
 
     def test_no_card_means_no_lines(self):
         c = a_site()

@@ -2402,8 +2402,8 @@
     "start": 7
    },
    {
-    "align": "right",
-    "end": 32,
+    "align": "left",
+    "end": 33,
     "head": "RETRY NUMBER",
     "start": 32
    }
@@ -2438,8 +2438,8 @@
     "start": 7
    },
    {
-    "align": "right",
-    "end": 32,
+    "align": "left",
+    "end": 33,
     "head": "RETRY DELAY",
     "start": 32
    }
@@ -2606,14 +2606,14 @@
     "start": 7
    },
    {
-    "align": "right",
-    "end": 32,
+    "align": "left",
+    "end": 33,
     "head": "DELAY PERIOD",
     "start": 32
    }
   ],
   "gap": 1,
-  "head_gap": 1,
+  "head_gap": 2,
   "heading": "RCVR   LOCATION LABEL       DELAY PERIOD",
   "kind": "number",
   "leads": {
@@ -3042,7 +3042,7 @@
   "title": "RECEIVER SETUP REPORT"
  },
  "5BD": {
-  "gap": 0,
+  "gap": 1,
   "head_gap": 1,
   "line": {
    "align": "left",
@@ -3388,6 +3388,7 @@
     "align": "right",
     "end": 38,
     "head": "INCHES",
+    "minus_out": true,
     "places": 2,
     "start": 35
    }
@@ -3426,6 +3427,7 @@
     "end": 40,
     "head": "",
     "places": 6,
+    "round_from": 4,
     "start": 33
    }
   ],
@@ -3476,7 +3478,6 @@
   "heading": "TANK   PRODUCT LABEL          TANK PROFILE   GALLONS",
   "kind": "number",
   "leads": {
-   "1 REGULAR UNLEADED 1 PT 10000": 1,
    "TANK PRODUCT LABEL TANK PROFILE GALLONS": 1
   },
   "page": 257,
@@ -3521,6 +3522,7 @@
     "align": "right",
     "end": 38,
     "head": "INCHES",
+    "minus_out": true,
     "places": 2,
     "start": 35
    }
@@ -3607,6 +3609,7 @@
     "align": "right",
     "end": 38,
     "head": "INCHES",
+    "minus_out": true,
     "places": 2,
     "start": 35
    }
@@ -3641,8 +3644,8 @@
     "start": 7
    },
    {
-    "align": "right",
-    "end": 33,
+    "align": "left",
+    "end": 34,
     "head": "",
     "start": 33
    }
@@ -3957,7 +3960,7 @@
    " 1     REGULAR UNLEADED         DISABLED"
   ],
   "station": false,
-  "title": "IN-TANK STATIC GROSS TEST AUTO-CONFIRM:"
+  "title": "IN-TANK LEAK GROSS TEST AUTO-CONFIRM"
  },
  "61C": {
   "columns": [
@@ -4053,15 +4056,15 @@
    },
    {
     "align": "right",
-    "end": 41,
+    "end": 37,
     "head": "DENSITY",
     "places": 4,
-    "start": 36
+    "start": 32
    }
   ],
   "gap": 1,
-  "head_gap": 1,
-  "heading": "TANK   PRODUCT LABEL               DENSITY",
+  "head_gap": 0,
+  "heading": "TANK   PRODUCT LABEL           DENSITY",
   "kind": "number",
   "leads": {
    "TANK PRODUCT LABEL DENSITY": 1
@@ -4686,7 +4689,7 @@
     "start": 7
    },
    {
-    "align": "left",
+    "align": "right",
     "end": 37,
     "head": "SIPHON BREAK",
     "start": 35
@@ -4822,19 +4825,19 @@
   "title": "PERIODIC LEAK TEST MIN VOLUME"
  },
  "639": {
-  "gap": 0,
-  "head_gap": 0,
+  "gap": 1,
+  "head_gap": 1,
   "page": 300,
   "station": false,
-  "title": " 1     REGULAR UNLEADED"
+  "title": "ACCU CHART END SHAPE FACTOR"
  },
  "63A": {
   "columns": [
    {
     "align": "right",
-    "end": 2,
+    "end": 1,
     "head": "TANK",
-    "start": 2
+    "start": 1
    },
    {
     "align": "left",
@@ -4843,7 +4846,7 @@
     "start": 7
    },
    {
-    "align": "left",
+    "align": "right",
     "end": 38,
     "head": "PUMP THRESHOLD",
     "start": 33
@@ -4866,7 +4869,7 @@
  },
  "63B": {
   "gap": 1,
-  "head_gap": 1,
+  "head_gap": 0,
   "leads": {
    "DIAMETER FULL VOLUME": 1,
    "PAIR HEIGHT VOLUME": 1,
@@ -4887,20 +4890,20 @@
    },
    {
     "align": "left",
-    "end": 23,
+    "end": 26,
     "head": "PRODUCT LABEL",
-    "start": 8
+    "start": 7
    },
    {
     "align": "right",
-    "end": 47,
-    "head": "VOLUME",
-    "start": 42
+    "end": 38,
+    "head": "GALLONS",
+    "start": 33
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "TANK    PRODUCT LABEL                     VOLUME",
+  "heading": "TANK   PRODUCT LABEL             GALLONS",
   "kind": "number",
   "leads": {
    "TANK PRODUCT LABEL VOLUME": 1
@@ -6784,6 +6787,7 @@
     "align": "left",
     "end": 39,
     "head": "TEST LEAK RATE",
+    "number_end": 35,
     "places": 2,
     "start": 32
    }
@@ -6815,6 +6819,7 @@
     "align": "left",
     "end": 39,
     "head": "TEST REF PRESSURE",
+    "number_end": 35,
     "places": 2,
     "start": 31
    }
@@ -6832,7 +6837,7 @@
    "Q 1:UNLEADED REGULAR           10.00 PSI"
   ],
   "station": false,
-  "title": "PROFILE LINE TEST REFERENCE PRESSURE"
+  "title": "PRESSURE LINE LEAK PROFILE LINE TEST REFERENCE PRESSURE"
  },
  "777": {
   "columns": [
@@ -6905,10 +6910,10 @@
     "start": 0
    },
    {
-    "align": "left",
+    "align": "right",
     "end": 39,
     "head": "1ST BULK MODULUS",
-    "start": 31
+    "start": 30
    }
   ],
   "gap": 1,
@@ -6935,10 +6940,10 @@
     "start": 0
    },
    {
-    "align": "left",
+    "align": "right",
     "end": 39,
     "head": "2ND BULK MODULUS",
-    "start": 31
+    "start": 30
    }
   ],
   "gap": 1,
@@ -6967,14 +6972,14 @@
    {
     "align": "right",
     "end": 37,
-    "head": "THERMAL COEFFICIENT",
+    "head": "THERMAL COEFF",
     "places": 6,
     "start": 30
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "LINE                        THERMAL COEFFICIENT",
+  "heading": "LINE                        THERMAL COEFF",
   "kind": "tag",
   "leads": {
    "LINE THERMAL COEFFICIENT": 1
@@ -7029,6 +7034,7 @@
     "align": "left",
     "end": 37,
     "head": "PRESSURE OFFSET",
+    "number_end": 33,
     "places": 1,
     "start": 31
    }
@@ -7087,21 +7093,16 @@
     "start": 0
    },
    {
-    "align": "left",
-    "end": 35,
-    "head": "1.5 IN DIAM",
-    "start": 29
-   },
-   {
-    "align": "left",
-    "end": 52,
-    "head": "LEN 2.5 IN DIAM LEN",
-    "start": 45
+    "align": "right",
+    "end": 38,
+    "head": "LINE LENGTH",
+    "number_end": 33,
+    "start": 31
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "LINE                        1.5 IN DIAM LEN  2.5 IN DIAM LEN",
+  "heading": "LINE                        LINE LENGTH",
   "kind": "tag",
   "leads": {
    "LINE 1.5 IN DIAM LEN 2.5 IN DIAM LEN": 1
@@ -7112,7 +7113,7 @@
    "Q 1:UNLEADED REGULAR         50 FEET         250 FEET"
   ],
   "station": false,
-  "title": "PRESSURE LINE LEAK PIPE LENGTH"
+  "title": "PRESSURE LINE LEAK LINE LENGTH LARGE"
  },
  "780": {
   "gap": 1,
@@ -7201,6 +7202,7 @@
    },
    {
     "align": "left",
+    "cut": 9,
     "end": 38,
     "head": "0.10 GPH TEST",
     "start": 31
@@ -7233,7 +7235,7 @@
     "align": "left",
     "end": 37,
     "head": "SHUTDOWN RATE",
-    "places": 1,
+    "number_end": 33,
     "start": 31
    }
   ],
@@ -7261,10 +7263,10 @@
     "start": 0
    },
    {
-    "align": "right",
-    "end": 33,
+    "align": "left",
+    "end": 34,
     "head": "TANK NUMBER",
-    "start": 33
+    "start": 31
    }
   ],
   "gap": 1,
@@ -7332,14 +7334,14 @@
    },
    {
     "align": "left",
-    "end": 39,
-    "head": "PIPE TYPE:",
-    "start": 28
+    "end": 49,
+    "head": "TYP:",
+    "start": 30
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "LINE                        PIPE TYPE:",
+  "heading": "LINE                          TYP:",
   "kind": "tag",
   "leads": {
    "LINE PIPE TYPE:": 1
@@ -7361,10 +7363,11 @@
     "start": 0
    },
    {
-    "align": "left",
-    "end": 35,
+    "align": "right",
+    "end": 38,
     "head": "LINE LENGTH",
-    "start": 28
+    "number_end": 33,
+    "start": 31
    }
   ],
   "gap": 1,
@@ -7380,7 +7383,7 @@
    "Q 1:UNLEADED REGULAR        250 FEET"
   ],
   "station": false,
-  "title": "PRESSURE LINE LEAK PIPE LENGTH"
+  "title": "PRESSURE LINE LEAK LINE LENGTH"
  },
  "78A": {
   "columns": [
@@ -7392,14 +7395,14 @@
    },
    {
     "align": "left",
-    "end": 37,
+    "end": 39,
     "head": "PUMP",
-    "start": 28
+    "start": 30
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "LINE                        PUMP",
+  "heading": "LINE                          PUMP",
   "kind": "tag",
   "leads": {
    "LINE PUMP": 1
@@ -7452,6 +7455,7 @@
    },
    {
     "align": "left",
+    "cut": 9,
     "end": 37,
     "head": "0.20 GPH TEST",
     "start": 31
@@ -7512,9 +7516,10 @@
    },
    {
     "align": "left",
-    "end": 33,
+    "end": 37,
     "head": "LOW PRESSURE",
-    "start": 28
+    "number_end": 31,
+    "start": 31
    }
   ],
   "gap": 1,
@@ -7625,6 +7630,7 @@
    "align": "left",
    "end": 14,
    "label": "LENGTH:",
+   "number_end": 9,
    "start": 8
   },
   "page": 413,
@@ -10390,10 +10396,10 @@
  },
  "BA0": {
   "gap": 0,
-  "head_gap": 1,
+  "head_gap": 0,
   "page": 571,
   "station": false,
-  "title": "MDIM  TOTALIZER"
+  "title": "MDIM TOTALIZER"
  },
  "BB1": {
   "columns": [

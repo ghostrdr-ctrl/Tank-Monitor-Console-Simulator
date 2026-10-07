@@ -158,8 +158,22 @@ class EveryOptionIsAccountedFor(unittest.TestCase):
         for key, f in sorted(FIELDS.items()):
             kind = f.get("kind")
             if kind == "enum":
-                labels = [c[1] if isinstance(c, (list, tuple)) else c
-                          for c in f.get("choices") or []]
+                # What the PANEL walks onto, which is the screen's word where
+                # the field has one: 788's choices carry the wire's own
+                # spelling (`2.0 IN STEEL`, off the bench console) and its
+                # `screen_words` the setup screen's (`2.0 IN. STEEL`).
+                # `screen_word` is keyed by the word, as the panel calls it.
+                # A choice is accounted for under either of its two words:
+                # the paper's (ullage's `90%`) or the screen's.
+                from tls350sim.screens import screen_word
+                labels = []
+                for c in f.get("choices") or []:
+                    word = c[1] if isinstance(c, (list, tuple)) else c
+                    shown = screen_word(f, word)
+                    if (f"{key}={word}" in cited or f"{key}={word}" in uncited):
+                        labels.append(word)
+                    else:
+                        labels.append(shown)
             elif kind == "flag":
                 labels = list(f.get("words") or ("DISABLED", "ENABLED"))
             elif kind == "setting" and f.get("choices"):

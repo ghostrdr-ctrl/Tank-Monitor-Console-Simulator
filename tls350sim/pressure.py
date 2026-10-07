@@ -313,6 +313,11 @@ PIPE = {
 }
 DEFAULT_PIPE = "03"             # "The default is Enviroflex PP1501."
 
+# How long a test runs on an open transducer before the console gives up:
+# PLLD OPEN about fifteen seconds after the pump came on, on the bench
+# TLS-350 (`transcripts/plldtest.log`, 2026-09-18). See `Engine._run`.
+OPEN_ABORT_SECONDS = 15.0
+
 # The SECOND diameter of the five pipe types that have one, out of the same
 # 577013-465 Rev AD table as PIPE. Four of the console's nineteen choices name
 # two sizes in the option text itself -- "2.0/3.0 IN. FIBERGLASS",
@@ -372,6 +377,12 @@ WPLLD_PIPE = {"01": "01", "02": "02", "03": "03", "04": "13", "05": "05",
 # are shortest; every other pipe's waits are scaled off it.
 REFERENCE_K = 50000.0
 REFERENCE_GALLONS = 95.0        # 500 feet of it, the guide's maximum length
+
+# The PLLD sensor board's A/D, as the bench TLS-350 read it (`sensor_counts`):
+# the count at 0 psi, the count at 50 psi, and the reciprocal scale between.
+COUNTS_LO = 2902.3
+COUNTS_HI = 444.8
+COUNTS_PER_PSI = 50.0 / (1.0 / COUNTS_HI - 1.0 / COUNTS_LO)
 
 
 class Reading:
@@ -440,6 +451,9 @@ class Line:
         # clock, so neither of the two names it carries could ever be posted.
         self.handle_since = None
         self.state = "TEST COMPLETE"
+        # whether a test has ever run on this line, which is what notices an
+        # open transducer (`Engine._line_faults`)
+        self.tried = False
         self.rate_key = None        # what this run is working towards
         self.leg = None             # which of the three tests is running now
         self.stage = None           # the measurement it is part way through
@@ -469,6 +483,7 @@ class Line:
         # is recomputed on every read cannot be reset, and the panel has had a
         # "P OFFSET RESET <ENTER>" screen doing nothing for want of one.
         self.offset = None
+        self.offset_at = None       # when the offset test last ran
         # Pd, the dispense pressure, and the reference it is judged against.
         # 577013-344 Rev H p.17: "At system startup the Pd_ref value is
         # unknown. When the dispense pressure, Pd, is calculated for the
@@ -772,6 +787,7 @@ class Line:
         if self.offset is None:
             self.offset = readings.fixed(-1.8, 1.8, "offset",
                                          self.kind, self.number)
+            self.offset_at = time.mktime(self.engine.c.now())
         return self.offset
 
     def reset_offset(self):
@@ -822,6 +838,7 @@ class Line:
 
     # ---- bookkeeping ---------------------------------------------------------
     def begin(self, rate_key, now, stage):
+        self.tried = True
         self.rate_key = rate_key
         self.leg = "gross"
         self.stage, self.waited, self.started_at = stage, 0.0, now
@@ -921,6 +938,10 @@ class Line:
     def status(self):
         """Line two of the first PLLD diag screen, in the manual's words.
 
+        A line whose pressure cannot be read is TEST ABORTED, whatever it
+        last did: that is what every bench capture shows, on a cage with no
+        transducer wired to anything (`Engine.unreadable`).
+
         A test that is running outranks the shutdown that is standing.
 
         This asked `disabled` first and returned unconditionally, so
@@ -946,7 +967,11 @@ class Line:
         """
         if self.running():
             return self.state
-        if self.engine.disabled(self.kind, self.number):
+        if self.engine.unreadable(self.kind, self.number):
+            return "TEST ABORTED"
+        if (self.engine.disabled(self.kind, self.number)
+                and not self.engine.open_shutdown(self.kind, self.number)
+                and not self.engine.unreadable(self.kind, self.number)):
             return "DISABLE ALARM"
         return self.state
 
@@ -1030,11 +1055,27 @@ class Line:
         Also the HI counts should always be less than the LO counts." So the
         scale runs downwards: LO is the count at no pressure, HI the count at
         the top of the transducer's range, and the reading sits between them.
+
+        The figures are the bench TLS-350's PLLD sensor board, 2026-09-19
+        (`transcripts/plld*.log`), with resistors from 470 to 10k on its
+        transducer inputs: LO 2902.3 and HI 444.8 whatever is wired, and
+        the pressure it printed was, to 0.006 psi at all seven points,
+
+            psi = 50 * (1/SNS - 1/LO) / (1/HI - 1/LO) - PRESSURE OFFSET (77D)
+
+        held at zero below. So HI is 50 psi and the counts run as the
+        reciprocal of the pressure, not along it. This drew them linear
+        between Figure 6-12's 32768 and 8192, which are a typeset sample, on
+        a span of twice the pump's pressure. With no transducer the bench
+        reads -1.
         """
-        lo, hi = 32768.0, 8192.0
-        span = self.engine.pump_psi(self.kind, self.number) * 2.0
-        frac = max(0.0, min(1.0, self.pressure / span)) if span else 0.0
-        return lo, hi, lo - (lo - hi) * frac
+        lo, hi = COUNTS_LO, COUNTS_HI
+        if self.transducer == "open":
+            return lo, hi, -1.0
+        offset = (self.engine.c.limit("77D", self.number)
+                  if self.kind == "plld" else None) or 0.0
+        raw = max(0.0, self.pressure) + float(offset)
+        return lo, hi, 1.0 / (raw / COUNTS_PER_PSI + 1.0 / lo)
 
     def pressures(self, which=None):
         """"P1: X.XXX  P2: X.XXX PSI", the pair the current leg has measured."""
@@ -1202,8 +1243,68 @@ class Lines:
             return True
         if self.shutdown_alarms(kind, number):
             return True
+        if self.open_shutdown(kind, number):
+            return True
+        if self.unreadable(kind, number):
+            return True
         tank = self.tank_of(kind, number)
         return bool(tank and self.c.outputs.pump_cut(tank))
+
+    def dispensing_enabled(self, kind, number):
+        """The console's own DISPENSING flag for this line.
+
+        Two places read it and they are the same quantity: the DISPENSING
+        column of 381, 386, B81 and B82, and the second line of the first
+        line leak diagnostic screen, which 577013-344 Rev H Figure 19
+        annotates "Dispensing is ENABLED or DISABLED". They read this so
+        they cannot drift apart.
+
+        It is NOT `disabled()`, which is every route a pump can be dead by.
+        The two extra routes there are an alarm the site assigned to disable
+        the line and a relay wired to the tank, and what this flag follows
+        was grown a route at a time against the bench console -- see
+        `unreadable` and `open_shutdown`, whose evidence is what put each of
+        them in. Whether the assigned alarm and the contactor belong in the
+        column too is UNKNOWNS A40's second question and not this fix's.
+        """
+        return not ((kind, number) in self.c.leaks.disabled
+                    or self.open_shutdown(kind, number)
+                    or self.unreadable(kind, number))
+
+    def unreadable(self, kind, number):
+        """Is this line one the console cannot read at all?
+
+        Every line on the bench TLS-350 read `DISABLED    TEST ABORTED`
+        from the moment it was switched on -- Q2 with a real length, no
+        alarm standing and a tank assigned, and Q1 in every capture back to
+        the console as found -- and none of them ever ran a test of its own
+        (2026-09-19, `transcripts/idleline.log`, `idle2`). Nothing was
+        wired to any transducer input on that cage, so what the bench
+        cannot separate is a line never tested from a line whose pressure
+        cannot be read. This takes the second reading, because it leaves a
+        line with a transducer on it alone: a console that cannot see the
+        pressure will not let fuel move.
+
+        A transducer put back makes the line dispensable again, where the
+        first reading would hold it down until a test passed. Which it is
+        wants a resistor on a transducer input -- see FIDELITY S34.
+        """
+        ln = self.lines.get((kind, number))
+        return bool(ln is not None and ln.reading < SENSOR_OPEN_PSI)
+
+    def open_shutdown(self, kind, number):
+        """Is this line held down by its OPEN alarm?
+
+        The bench TLS-350 read Q1 DISPENSING DISABLED for as long as its
+        PLLD OPEN ALARM stood on the display, latched, through the line
+        being switched off and on again (2026-09-18/19). Only the open
+        alarm was seen doing it.
+        """
+        names = LINE_ALARMS.get(kind) or {}
+        if "open" not in names:
+            return False
+        aa, nn = names["open"]
+        return (aa + nn + f"{number:02d}") in self.c.compute_alarms()
 
     def programmed_psi(self, kind, number):
         """776, the Profile Line Test Reference Pressure, or None.
@@ -1360,6 +1461,28 @@ class Lines:
             ln.state = "DISPENSING"
             ln.run_pump()
         elif was and not up:
+            if not ln.pump:
+                # A handle that came up on a shut-down line and went down
+                # again: no pump ran, no fuel moved, and there is nothing
+                # to measure. Pd is "the dispense pressure", read while the
+                # line was flowing, and this took it off a line standing at
+                # its rest pressure -- which is below LOW_OFFSET_PSI, so it
+                # also moved Pd_ref down to that figure and left the next
+                # REAL dispense reading five psi high against a reference
+                # that came from a dispense which never happened. The
+                # trailing gross test goes with it: "a gross test always
+                # follows the completion of a dispense", and this dispense
+                # did not complete because it never started. See FIDELITY
+                # U51.
+                #
+                # The idle word goes back on, because DISPENSING DISABLED
+                # is the word for a handle that is UP against a shut-down
+                # pump and this one has just gone down. While the line is
+                # still shut down `status()` answers DISABLE ALARM over the
+                # top of it either way; it matters for the case where the
+                # shutdown cleared during the dispense.
+                ln.state = "TEST COMPLETE"
+                return
             # the dispense pressure, measured while the line was flowing
             ln.pd = ln.pressure
             if ln.pd_ref is None or ln.pressure < LOW_OFFSET_PSI:
@@ -1468,8 +1591,14 @@ class Lines:
     def _line_faults(self, ln, names, now):
         """Which of them this one line is showing."""
         out = []
-        # "the pressure reading is negative"
-        if ln.reading < SENSOR_OPEN_PSI:
+        # "the pressure reading is negative" -- and it takes a TEST to
+        # notice. On the bench TLS-350 Q2 sat switched on for four minutes
+        # with nothing on its transducer input and posted only its SETUP
+        # DATA WARNING; Q1's PLLD OPEN ALARM came fifteen seconds into the
+        # test that was started on it, and then latched (2026-09-18/19,
+        # `transcripts/plldtest.log`, `idleline.log`). This posted it off
+        # the reading alone, so a line nobody had tested alarmed.
+        if ln.reading < SENSOR_OPEN_PSI and ln.tried:
             out.append(names["open"])
         if ln.noise and "comm" in names:
             out.append(names["comm"])
@@ -1571,10 +1700,43 @@ class Lines:
             return LOW_PRESSURE_DISABLED
 
     def _run(self, ln, seconds, now):
+        if (ln.transducer == "open" and ln.running()
+                and ln.started_at is not None
+                and now - ln.started_at >= OPEN_ABORT_SECONDS):
+            # With nothing on the transducer input the bench TLS-350 ran
+            # the pump, posted PLLD OPEN about fifteen seconds in, aborted
+            # the test and shut the line down: DISABLED, TEST ABORTED, pump
+            # OFF, and it stayed disabled through the line being switched
+            # off and on until a test passed (`transcripts/plldtest.log`,
+            # `cap_q1on`, 2026-09-18/19). This went on testing a line it
+            # could not read. What disables it is the OPEN alarm standing
+            # (`open_shutdown`) -- not a failed test's shutdown, which would
+            # post PLLD SHUTDOWN and read DISABLE ALARM, where the bench read
+            # TEST ABORTED under PLLD OPEN alone.
+            self._abort(ln)
+            ln.stop_pump()
+            return
         left = seconds
         for _ in range(500):            # every stage either consumes time or ends
             if ln.handle and not self.disabled(ln.kind, ln.number):
                 # "the pump is turned On to commence dispensing"
+                if not ln.pump:
+                    # The handle came up while the line was shut down and
+                    # the shutdown has since cleared -- a passed test, or an
+                    # acknowledgement on a site whose LINE RE-ENABLE METHOD
+                    # is ACKNOWLEDGE ALARM. A handle is a standing REQUEST
+                    # to the pump, so the console answers it the moment the
+                    # line is back, which is the other half of U4's own
+                    # sentence.
+                    #
+                    # Without this the line re-pressurised here with its
+                    # PUMP bit still OFF and its state word still
+                    # DISPENSING DISABLED: 381 read DISPENSING ENABLED,
+                    # PUMP OFF, HANDLE ON, and the diagnostic read thirty
+                    # psi over PUMP OFF, for a nozzle that was pouring.
+                    # See FIDELITY U51.
+                    ln.state = "DISPENSING"
+                    ln.run_pump()
                 ln.pressure = self.pump_psi(ln.kind, ln.number)
                 return
             if ln.handle:

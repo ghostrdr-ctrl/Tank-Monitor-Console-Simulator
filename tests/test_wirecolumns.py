@@ -637,7 +637,11 @@ class TheGroundTemperatureThermistorBelongsToVLLD(unittest.TestCase):
     def test_a_groundwater_console_does_not(self):
         """It used to be the only one that did."""
         _c, h = self.fitted(gw=1)
-        self.assertIn("9999", body(h, "IB2100"))
+        # nothing under the stamp: a card not fitted is a bare frame
+        text = body(h, "IB2100")
+        self.assertNotIn("9999", text)
+        self.assertEqual([r for r in text.split(chr(13) + chr(10))[2:]
+                          if r.strip()], [])
 
     def test_the_panel_and_the_wire_agree_now(self):
         """Which is the whole point of the entry: the panel offered the
@@ -760,7 +764,12 @@ class EverySensorReportDrawsABody(unittest.TestCase):
         best = ""
         for _console, handler in self.sites:
             text = body(handler, code)
-            if REFUSED not in text:
+            # a console without the card answers a bare frame, not 9999FF
+            # (the bench TLS-350, 2026-09-18), and has nothing to say either
+            said = (text.split("&&")[0][len(code) + 10:].strip()
+                    if code[0] == "i" else
+                    [r for r in text.split(chr(13) + chr(10))[2:] if r.strip()])
+            if REFUSED not in text and said:
                 return text
             best = text
         return best

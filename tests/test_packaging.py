@@ -280,20 +280,29 @@ class TheInternalDocsStayOutOfTheSnapshot(unittest.TestCase):
         self.assertFalse(snap.ships("tests/test_fidelity.py"))
         self.assertTrue(snap.ships("tests/test_console.py"))
 
-    def test_the_readme_is_the_one_that_ships(self):
+    def test_the_public_documents_are_the_two_named(self):
         """The check on the check: a rule that held everything back would
         pass the test above and ship nothing."""
         snap = self.snapshot()
         self.assertTrue(snap.ships("README.md"))
-        self.assertEqual(snap.SHIPPING_DOCS, {"README.md"})
+        self.assertTrue(snap.ships("CHANGES.md"))
+        self.assertEqual(snap.SHIPPING_DOCS, {"README.md", "CHANGES.md"})
 
-    def test_no_tracked_markdown_but_the_readme_would_ship(self):
+    def test_no_tracked_markdown_but_those_two_would_ship(self):
         """The general form, over the files git actually tracks, so a
         document added later is covered without naming it here."""
         snap = self.snapshot()
-        shipped = [rel for rel in snap.tracked_files()
-                   if rel.lower().endswith(".md") and snap.ships(rel)]
-        self.assertEqual(shipped, ["README.md"])
+        shipped = sorted(rel for rel in snap.tracked_files()
+                         if rel.lower().endswith(".md") and snap.ships(rel))
+        self.assertEqual(shipped, ["CHANGES.md", "README.md"])
+
+    def test_the_long_changelog_stays_private(self):
+        """The two are easy to confuse, and only one is sanitised.
+        CHANGELOG.md carries register ids, manual part numbers and the
+        reasoning behind each fix; CHANGES.md is the short public record."""
+        snap = self.snapshot()
+        self.assertFalse(snap.ships("CHANGELOG.md"))
+        self.assertTrue(snap.ships("CHANGES.md"))
 
 
 class EveryRegisterIdTheSourceCitesResolves(unittest.TestCase):
