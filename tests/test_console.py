@@ -3745,7 +3745,7 @@ class AlarmReduction(unittest.TestCase):
         c.modules["probe"] = 1
         c.tank_level[1] = {"volume": 9500.0, "water": 0.0}
         c.values["S62801"] = "01" + float_value(10000.0)
-        c.values["S62201"] = "01" + float_value(90.0)
+        c.values["S62201"] = "01" + float_value(9000.0)
         self.assertIn("020701", c.compute_alarms())
 
     def test_switching_it_off_makes_every_alarm_instant_again(self):
@@ -6033,8 +6033,9 @@ class OverfillWantsTheDelivery(unittest.TestCase):
         a_tank(c, 1, volume=20000.0 * share, full=20000.0)
         c.values["S60701"] = "01" + float_value(96.0)
         c.values["S62801"] = "01" + float_value(20000.0)
-        c.values["S62301"] = "01" + float_value(90.0)     # per cent
-        c.values["S62201"] = "01" + float_value(95.0)     # per cent
+        # gallons, which the field holds on every version: 90% and 95%
+        c.values["S62301"] = "01" + float_value(18000.0)
+        c.values["S62201"] = "01" + float_value(19000.0)
         c.values["S61001"] = "0101"
         return c
 

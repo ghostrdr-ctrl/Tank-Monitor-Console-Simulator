@@ -63,10 +63,12 @@ def _tank(values, tank, label, code, full, diameter, limits):
 
 def _limits(full):
     """The alarm limits a site would actually programme, from the tank size."""
+    # The overfill, high product, delivery and leak test minimum fields hold
+    # GALLONS; a version 33 panel draws them as these percents of `full`.
     return {"628": full,               # max or label volume
-            "623": 90.0,               # overfill, a PERCENT of the label volume
-            "622": 95.0,               # high product, ABOVE overfill: see below
-            "629": 25.0,               # delivery needed, a percent
+            "623": full * 0.90,        # overfill, 90%
+            "622": full * 0.95,        # high product, 95%, ABOVE overfill
+            "629": full * 0.25,        # delivery needed, 25%
             "621": full * 0.10,        # low product
             # "Typically, you should set this limit at 25 gallons or 100
             # litres, or higher", and the Leak Alarm Limit takes 1 to 99
@@ -76,8 +78,8 @@ def _limits(full):
             "626": 8.0,                # leak alarm
             "624": 2.0,                # high water
             "627": 1.0,                # water warning
-            "636": 20.0,               # periodic test minimum, a percent
-            "62A": 50.0}               # annual test minimum, a percent
+            "636": full * 0.20,        # periodic test minimum, 20%
+            "62A": full * 0.50}        # annual test minimum, 50%
     # High Product sits ABOVE Overfill, which is the way round a real tape
     # has them and the way 576013-623 Rev AN describes them: "Set this limit
     # at a percentage that is between the Overfill Limit percentage and

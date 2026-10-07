@@ -824,7 +824,7 @@ class Engine:
         if self.c.deliveries.during(run.device, run.started, now):
             out.append("RECENT DELIVERY")
         code = MINIMUM_CODE.get(run.rate_key)
-        # a percent of the label volume, not gallons; see limit_volume
+        # gallons, whatever the panel draws it as; see limit_volume
         minimum = self.c.limit_volume(code, run.device) if code else None
         if minimum and run.volume < minimum:
             # "Set Tank Periodic/Annual Leak Test Minimum Volume", which is

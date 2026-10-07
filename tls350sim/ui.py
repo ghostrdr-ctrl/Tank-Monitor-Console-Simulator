@@ -5177,8 +5177,8 @@ class SimApp(tk.Tk):
         from .console import FIELDS
         if not e or not e.get("code"):
             return None
-        return FIELDS.get(self._profile_code(e) or e.get("field")
-                          or e["code"])
+        return screens.panel_field(self.console, FIELDS.get(
+            self._profile_code(e) or e.get("field") or e["code"]))
 
     # =====================================================================
     # display

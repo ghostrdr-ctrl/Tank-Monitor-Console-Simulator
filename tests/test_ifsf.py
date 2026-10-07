@@ -253,11 +253,11 @@ class TheQuantities(unittest.TestCase):
 
     def test_max_safe_fill_is_the_overfill_limit_and_not_the_shell(self):
         """"Set this percentage no greater than 90% of the tank's capacity"
-        -- 576013-623 Rev AN, Overfill Limit, 623, which is a percent of the
-        max or label volume. Shell_Capacity (11) is the full tank and
-        Max_Safe_Fill_Capacity (12) is not the same number."""
+        -- 576013-623 Rev AN, Overfill Limit, 623, which the field holds in
+        gallons (576013-635 Rev AA). Shell_Capacity (11) is the full tank
+        and Max_Safe_Fill_Capacity (12) is not the same number."""
         self.c.values["S62801"] = "01" + float_value(10000.0)
-        self.c.values["S62301"] = "01" + float_value(90.0)
+        self.c.values["S62301"] = "01" + float_value(9000.0)
         self.assertAlmostEqual(ifsf.read(self.c, 0x21, 11), 10000.0)
         self.assertAlmostEqual(ifsf.read(self.c, 0x21, 12), 9000.0)
 
@@ -275,7 +275,7 @@ class TheSupportedElementsThatWereSilent(unittest.TestCase):
         self.c.values["S60301"] = "011"
         self.c.values["S62101"] = "01" + float_value(1000.0)
         self.c.values["S62801"] = "01" + float_value(10000.0)
-        self.c.values["S62901"] = "01" + float_value(20.0)
+        self.c.values["S62901"] = "01" + float_value(2000.0)
         self.c.values["S64801"] = "01" + float_value(0.8)
         self.c.values["S60801"] = "01" + float_value(-1.25)
 
@@ -294,8 +294,8 @@ class TheSupportedElementsThatWereSilent(unittest.TestCase):
         """629: "Delivery Limit warns when the level of fluid in the tank
         drops to a level at which the operator calls for a delivery. Set
         this percentage at a volume higher than that of the Low Product
-        alarm" -- 576013-623 Rev AN, Delivery Limit. A percent of the max or
-        label volume, so 20% of 10,000 gallons."""
+        alarm" -- 576013-623 Rev AN, Delivery Limit. Held in gallons,
+        which a version 33 panel draws as 20% of 10,000."""
         self.assertAlmostEqual(ifsf.read(self.c, 0x21, 14), 2000.0)
 
     def test_the_two_low_limits_are_not_the_same_number(self):
@@ -337,7 +337,7 @@ class TheSupportedElementsThatWereSilent(unittest.TestCase):
         `Supported = No`, and does not list 17 at all. Four of them were
         answering, two of them out of the density setting."""
         self.c.set_setting("density", 0.7400, 1)
-        self.c.values["S62201"] = "01" + float_value(90.0)
+        self.c.values["S62201"] = "01" + float_value(9000.0)
         for did in (9, 15, 16, 17, 18, 69):
             self.assertIsNone(ifsf.read(self.c, 0x21, did), did)
             self.assertNotIn(did, ifsf.PROBE_ELEMENTS)

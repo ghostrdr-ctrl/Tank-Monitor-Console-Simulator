@@ -788,17 +788,19 @@ class TheGrossTest(unittest.TestCase):
         for psi in seen:
             self.assertTrue(24.0 <= psi <= 38.0, psi)
 
-    def test_a_programmed_pump_pressure_is_taken_exactly(self):
-        """FIDELITY R17. The code read here was `7B7`, which is not a
-        function code -- no field, no census entry, nowhere in 576013-635 --
-        so nothing could ever store it and this branch was unreachable on
-        every console. The test passed anyway by writing `S7B701` into
-        `values` itself, which is the shape worth remembering: a test that
-        pokes the store proves the READER and says nothing about whether
-        anything can ever fill it."""
+    def test_the_reference_pressure_default_does_not_fail_a_line(self):
+        """776 is the profile line test's reference pressure, not the
+        pump's, and its factory default is 10.00 PSI (the bench TLS-350
+        after a cold start). Taken as the pump's figure it put every line
+        on a real site backup below the 12 psi floor and into the sensor
+        short band, and a site with no alarms loaded with all four lines
+        shut down."""
         c = a_line(leak=0.0)
-        c.values["S77601"] = "01" + struct.pack(">f", 41.0).hex().upper()
-        self.assertAlmostEqual(c.lines.pump_psi("plld", 1), 41.0, places=3)
+        c.values["S77601"] = "01" + struct.pack(">f", 10.0).hex().upper()
+        self.assertAlmostEqual(c.lines.programmed_psi("plld", 1), 10.0,
+                               places=3)
+        self.assertTrue(24.0 <= c.lines.pump_psi("plld", 1) <= 38.0)
+        self.assertTrue(24.0 <= c.lines.nominal_psi("plld", 1) <= 38.0)
 
     def test_the_reference_pressure_arrives_over_the_wire(self):
         """The half the entry above could not reach. 576013-635 Rev AA
@@ -810,10 +812,8 @@ class TheGrossTest(unittest.TestCase):
         reply = h.handle(b"\x01S77601041.00\r")
         self.assertNotIn(b"9999", reply)
         self.assertAlmostEqual(c.limit("776", 1), 41.0, places=3)
-        self.assertAlmostEqual(c.lines.pump_psi("plld", 1), 41.0, places=3)
-        # and the offset monitor's Pd Ref is the same quantity, so it reads
-        # the same programmed number rather than generating its own
-        self.assertAlmostEqual(c.lines.nominal_psi("plld", 1), 41.0, places=3)
+        self.assertAlmostEqual(c.lines.programmed_psi("plld", 1), 41.0,
+                               places=3)
         # WPLLD has no profile line test and no code for one
         self.assertIsNone(c.lines.programmed_psi("wplld", 1))
 

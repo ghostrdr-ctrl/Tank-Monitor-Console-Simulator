@@ -430,10 +430,10 @@ def _probe(console, tank, data_id):
         # percentage no greater than 90% of the tank's capacity (in
         # international installations set this percentage no greater than
         # 99% of label volume)" -- 576013-623 Rev AN, Overfill Limit. It is
-        # one of the percent limits, so it comes through `limit_volume` as
-        # gallons. This read 60A, the tank's full volume, which is exactly
-        # what Shell_Capacity (11) above already answers, so the two came
-        # back identical. See FIDELITY J4.
+        # held in gallons whatever the panel draws it as. This read 60A,
+        # the tank's full volume, which is exactly what Shell_Capacity (11)
+        # above already answers, so the two came back identical. See
+        # FIDELITY J4.
         return _f(console.limit_volume("623", tank) or 0.0)
     if data_id == 13:
         # Low_Capacity: 621, Set Tank Low Level Limit -- "Low Product warns
@@ -447,8 +447,8 @@ def _probe(console, tank, data_id):
         # a level at which the operator calls for a delivery. Set this
         # percentage at a volume higher than that of the Low Product alarm"
         # (576013-623 Rev AN, Delivery Limit). It is the volume the site
-        # works down to before it must reorder, and it is a percent limit,
-        # so it comes through `limit_volume` as gallons. FIDELITY J5 offered
+        # works down to before it must reorder, held in gallons like the
+        # other four limits the panel draws as a percent. FIDELITY J5 offered
         # 628 as the other candidate and 628 rules itself out: Set Tank
         # MAXIMUM Volume Limit is not a minimum of anything.
         return _f(console.limit_volume("629", tank) or 0.0)

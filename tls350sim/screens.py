@@ -275,8 +275,28 @@ def field_of(console, step, device):
     """
     if not step or not step.get("code"):
         return None
-    return FIELDS.get(profile_code(console, step, device)
-                      or step.get("field") or step["code"])
+    return panel_field(console, FIELDS.get(profile_code(console, step, device)
+                                           or step.get("field")
+                                           or step["code"]))
+
+
+def panel_field(console, field):
+    """The field as the PANEL edits it, which for five limits is not the
+    field the wire reads.
+
+    High Product, Overfill, Delivery and the two leak test minimums are
+    gallons in the field on every version (`Console.PERCENT_LIMITS`). From
+    version 33 the panel enters and draws them as a percent of the label
+    volume, and the field comes back marked `percent_of_max` for
+    `fieldio` to convert both ways; before 33 the panel enters the
+    gallons, in the six-digit mask every other volume limit has.
+    """
+    tok = ((field or {}).get("code") or "")[1:4]
+    if tok not in console.PERCENT_LIMITS:
+        return field
+    if console.panel_percent(tok):
+        return dict(field, percent_of_max=True)
+    return dict(field, mask="000000", max=999999.0)
 
 
 def stored(console, step, device, field=None):
@@ -895,6 +915,15 @@ def print_lines(console, function, step, device=1):
         code = (step.get("code") or "")[1:4]
         worked = console.limit_volume(code, device) if code else None
         gallons = f"{worked:.0f}" if worked is not None else ""
+        if code in console.PERCENT_LIMITS and not console.panel_percent(code):
+            # Before version 33 the limit is entered in gallons and there
+            # is no percent to print: the gallons row alone, under the
+            # head, or carrying the label where the row is its own head.
+            g = [l for l in lines if "{gallons" in l][0]
+            if not head:
+                label = lines[0].split(":")[0]
+                g = f"{label}:{{gallons:>{COLS - len(label) - 1}}}"
+            lines = [g]
     other = ""
     if spec.get("other"):
         # A row that carries two of the console's values. The panel draws

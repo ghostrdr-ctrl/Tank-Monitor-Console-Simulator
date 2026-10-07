@@ -1319,18 +1319,30 @@ class Lines:
         no field, in no census entry and nowhere in 576013-635, so nothing
         could ever store it and the branch below was unreachable on every
         console. See FIDELITY R17.
+
+        It is a profile line test setting and NOT the pump's pressure, and
+        nothing about the pump reads it. It used to be taken as the pump's
+        figure exactly, and its factory default is 10.00 PSI -- the bench
+        TLS-350 read Q 1 and Q 2 at 10.00 straight after a cold start
+        (`cap_coldstart`, 2026-09-18) -- so every line on a site backup came
+        up pumping 10 psi: below the 12 psi floor that fails a gross test
+        (577013-344 Rev H), and inside the 5 to 15 psi band where a held
+        Pon and P2 read as a shorted transducer. A real site with no alarms
+        at all loaded with GROSS LINE FAIL, Sensor Short and a PLLD shutdown
+        on all four of its lines inside two hours.
         """
         psi = self.c.limit("776", number) if kind == "plld" else None
         return float(psi) if psi else None
 
     def nominal_psi(self, kind, number):
-        """Where this line's reference pressure sits, before it moves.
+        """Where this line's pump pressure sits, before it moves.
 
         The one place the generated band is spelled, because the offset
         monitor report reads the same quantity and the two must not drift.
+        Not `programmed_psi`: see there.
         """
-        return self.programmed_psi(kind, number) or readings.fixed(
-            PUMP_PSI - 4.0, PUMP_PSI + 6.5, "pump", kind, number)
+        return readings.fixed(PUMP_PSI - 4.0, PUMP_PSI + 6.5, "pump", kind,
+                              number)
 
     def pump_psi(self, kind, number):
         """What the pump pushes the line to.
@@ -1343,11 +1355,9 @@ class Lines:
         with the temperature and with what else is running on the manifold,
         which is why a technician reads Pon rather than assuming it. So each
         line has its OWN nominal pressure, and it moves a little run to run.
-        A programmed value is taken exactly, because somebody measured it.
+        There is no setting for it: 776 is the profile line test's, not the
+        pump's (see `programmed_psi`).
         """
-        psi = self.programmed_psi(kind, number)
-        if psi:
-            return psi
         nominal = self.nominal_psi(kind, number)
         # A submersible pushing fuel into a line does not sit on one figure:
         # the head moves with what the impeller is doing and with what else is

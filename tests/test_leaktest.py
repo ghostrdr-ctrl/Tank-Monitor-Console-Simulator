@@ -223,11 +223,11 @@ class Measuring(unittest.TestCase):
 
     def test_a_tank_below_its_minimum_volume_is_invalid(self):
         c = a_console(leak=0.5, volume=500.0)
-        # 20 PERCENT of the label volume, which 576013-623 Rev AN says this
-        # field holds -- "enter the percent limit" -- and not 2000 gallons.
-        # A 10,000 gallon tank holding 500 is well under it.
+        # 2000 gallons, which the field holds whatever the panel draws
+        # (576013-635 Rev AA) -- 20% of the label volume on a version 33
+        # panel. A 10,000 gallon tank holding 500 is well under it.
         c.values["S60401"] = "01" + struct.pack(">f", 10000.0).hex().upper()
-        c.values["S63601"] = "01" + struct.pack(">f", 20.0).hex().upper()
+        c.values["S63601"] = "01" + struct.pack(">f", 2000.0).hex().upper()
         c.leaks.start("tank", 1, "periodic", hours=2.0)
         run_out(c, 3)
         self.assertEqual(c.leaks.result("tank", 1, "periodic").result,

@@ -531,6 +531,16 @@ def encode(field, code, text, current=None, metric=False, console=None):
         # the console is not holding this field on this schedule
         return None
 
+    if not part and field.get("percent_of_max"):
+        # typed as a percent, checked as one, and stored as the gallons it
+        # works out to -- see `screens.panel_field`
+        typed = _encode_value(field, text, metric=metric, console=console,
+                              panel=True, code=code)
+        gallons = _from_percent(console, code, packed.unhexfloat(typed[-8:]))
+        whole = dict(field, max=field.get("wire_max", 999999.0))
+        whole.pop("percent_of_max")
+        return pfx + _encode_value(whole, f"{gallons:.1f}", metric=metric,
+                                   console=console, panel=True, code=code)
     if not part:
         return pfx + _encode_value(field, text, metric=metric,
                                    console=console, panel=True, code=code)
@@ -543,6 +553,35 @@ def encode(field, code, text, current=None, metric=False, console=None):
     if len(body) < off + ln:
         body = body.ljust(off + ln, fill)
     return pfx + body[:off] + value + body[off + ln:]
+
+
+def _percent_base(console, code):
+    """The gallons a percent limit is a percent of, or None."""
+    try:
+        return console.limit_base(int(_dev(code))) if console else None
+    except ValueError:
+        return None
+
+
+def _as_percent(console, code, gallons):
+    """A limit held in gallons, as the percent the panel draws it in.
+
+    One decimal place, which is what the tape prints (`% MAX :   95.0`);
+    a tank with no volume to be a percent of draws nothing.
+    """
+    base = _percent_base(console, code)
+    if not base:
+        return ""
+    return f"{round(gallons * 100.0 / base, 1):g}"
+
+
+def _from_percent(console, code, percent):
+    """What a percent typed on the panel stores: the gallons it is of the
+    label volume. With no volume to be a percent of it cannot be one."""
+    base = _percent_base(console, code)
+    if not base:
+        raise ValueError("NO MAX OR LABEL VOLUME")
+    return base * percent / 100.0
 
 
 def decode(field, code, raw, console=None):
@@ -576,6 +615,8 @@ def decode(field, code, raw, console=None):
     if kind == "float":
         try:
             v = packed.unhexfloat(body[-8:])
+            if field.get("percent_of_max"):
+                return _as_percent(console, code, v)
             # a thermal coefficient is 0.00070 and a full volume is 10000, so
             # two decimal places will not do for both
             return f"{v:g}"

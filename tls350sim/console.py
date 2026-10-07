@@ -1920,8 +1920,31 @@ class Console:
             self.settings = self._settings_from(blob.get("settings"))
             self._stores_load(blob)
             self.site_backup = blob.get("site_backup") or {}
+            if not blob.get("limits_in_gallons"):
+                self._percent_limits_to_gallons()
         except Exception as e:
             print(f"[sim] could not load state: {e}")
+
+    def _percent_limits_to_gallons(self):
+        """Convert a state file written while the percent limits were stored
+        as percents.
+
+        From 2026-09-01 until this file learned otherwise the five fields in
+        `PERCENT_LIMITS` held the panel's percent, and they hold gallons
+        now. A saved console from then would come back with a 95 gallon
+        High Product limit, so one written without the `limits_in_gallons`
+        mark has every value of 100 or less read as the percent it was.
+        Above 100 it cannot have been one, and is left alone.
+        """
+        for tok in self.PERCENT_LIMITS:
+            for tank in range(1, 17):
+                code = f"S{tok}{tank:02d}"
+                value = self.limit(tok, tank)
+                base = self.limit_base(tank)
+                if value is None or not base or not 0 < value <= 100:
+                    continue
+                self.values[code] = (f"{tank:02d}"
+                                     + packed.hexfloat(base * value / 100.0))
 
     def save(self):
         if not self.state_path:
@@ -1965,6 +1988,7 @@ class Console:
                            "software": self.software,
                            "e2_accuchart": self.e2_accuchart,
                            "version": self.version,
+                           "limits_in_gallons": True,
                            "board": self.board,
                            "meters": self.meters.as_json(),
                            "blends": self.blends.as_json(),
@@ -9787,29 +9811,37 @@ class Console:
         except ValueError:
             return None
 
-    # The five in-tank limits 576013-623 Rev AN says to enter as a
-    # PERCENT: "Press CHANGE. Enter the percent limit." Their panel screens
-    # mask them "000%", three digits and a sign, and this console was
-    # storing gallons in them -- so a 20,000 gallon tank drew
-    # "HIGH PRODUCT: 18000%" and compared 18000 against a volume as though
-    # the number meant gallons. It reads right only because both sides were
-    # wrong together. The tape prints the percent AND the gallons it works
-    # out to, which is what a percent field looks like on paper.
+    # Five in-tank limits that 576013-623 Rev AN's panel enters as a
+    # PERCENT -- "Press CHANGE. Enter the percent limit.", masked "000%" --
+    # and that the FIELD holds in GALLONS on every software version.
+    # 576013-635 Rev AA gives all five as "Gallons (ASCII Hex IEEE float)"
+    # and "Gallons (Decimal)" from Version 1, and the percent thresholds
+    # are separate functions, 652 to 654, from Version 33. The bench
+    # console (version 26) heads I622 GALLONS and takes S62201101, and a
+    # site backup off a version 23 console holds 2483 in 629 against a
+    # 9932 gallon tank, with its DELIVERY NEEDED history coming and going
+    # at that volume. This set once made the field itself a percent, and
+    # every tank on that site raised DELIVERY NEEDED on load: 2483% of the
+    # label volume. Rev AN describes version 33's threshold configuration,
+    # so the percent is the panel's view from 33 on and nothing more.
     PERCENT_LIMITS = {"622", "623", "629", "62A", "636"}
+    PERCENT_PANEL_SINCE = 33
 
     def limit_volume(self, tok, dev):
-        """A limit in gallons, whatever unit the field holds it in.
+        """A limit in gallons, which is what every one of them is stored in."""
+        return self.limit(tok, dev)
 
-        The percent ones are a percent of MAX OR LABEL VOLUME -- the tape
-        heads the row "% MAX" and prints 9495 gallons against 95.0% of a
-        9995 gallon label -- falling back to the tank's full volume where
-        no label volume is programmed.
-        """
-        value = self.limit(tok, dev)
-        if value is None or tok not in self.PERCENT_LIMITS:
-            return value
-        base = self.limit("628", dev) or self.limit("604", dev) or 0.0
-        return base * value / 100.0
+    def limit_base(self, dev):
+        """What a percent limit is a percent of: MAX OR LABEL VOLUME -- the
+        tape heads the row "% MAX" and prints 9495 gallons against 95.0% of
+        a 9995 gallon label -- or the tank's full volume where no label
+        volume is programmed. None where there is neither."""
+        return self.limit("628", dev) or self.limit("604", dev) or None
+
+    def panel_percent(self, tok):
+        """Does the panel enter and show this limit as a percent?"""
+        return (tok in self.PERCENT_LIMITS
+                and self.version >= self.PERCENT_PANEL_SINCE)
 
     def delivery_delay(self, tank):
         """S610's "delay time between the completion of a bulk delivery and

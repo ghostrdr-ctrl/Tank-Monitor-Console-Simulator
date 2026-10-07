@@ -5,6 +5,16 @@ per change, written for somebody using the simulator rather than building it.
 
 ## Unreleased
 
+## 0.5.2 - 2026-10-07
+
+- A site backup no longer comes up full of alarms that were never on the
+  site. The high product, overfill, delivery and leak test minimum limits
+  are held in gallons, as a real console holds them; the panel shows
+  them as a percent only from software version 33. A saved console from
+  an earlier release is converted when it loads.
+- A pressure line's pump pressure no longer comes from the profile line
+  test reference pressure. Its factory default of 10 psi made every line
+  from a real backup fail its gross test and shut down.
 ## 0.5.1 - 2026-10-07
 
 - The daily ISD assessment runs once on the days the clocks change, as on
