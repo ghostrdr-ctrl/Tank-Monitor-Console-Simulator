@@ -41,6 +41,7 @@ from . import listen
 from . import units
 from . import blankrows
 from . import replytails
+from . import customalarms
 from . import alarmreports
 from . import controls
 from . import delivery
@@ -703,7 +704,7 @@ class Handler:
         """
         from .screens import shown
         key = f"S881{port:02d}"
-        stored = self.c.values.get(key)
+        stored = self.c.stored(key)
         out = {}
         for part in self.UART_PARTS:
             field = self._uart_field(port, part)
@@ -2175,6 +2176,77 @@ class Handler:
             return True
         return tok in REPORTS if drawn is None else drawn
 
+    def _chart_packed(self, tank):
+        """One tank's i63B: its number, `0`, diameter, full volume, the count
+        and the pairs, highest first, without their flags."""
+        points = self.c.chart_points(tank)
+        return (f"{tank:02d}0" + packed.hexfloat(self.c.limit("607", tank)
+                                                 or 0.0)
+                + packed.hexfloat(self.c.full_volume(tank, default=0.0))
+                + f"{len(points):02d}"
+                + "".join(packed.hexfloat(h) + packed.hexfloat(v)
+                          for h, v in points))
+
+    def _set_chart(self, code, dev, data):
+        """`s63BTT`: pairs added to the tank's 50 point chart or taken off.
+
+        The bench TLS-350, 2026-10-09 (`bench-2026-10-09/offtank.jsonl`):
+        an added pair has to be inside the tank -- with a diameter of 50
+        and a full volume of 10000, 50 inches or 10000 gallons was refused
+        and 40 and 5000 taken -- and has to rise with the pairs already
+        there, height and volume together; 35 inches at 6000 gallons was
+        refused under 40 at 5000, and taken with that pair gone. A pair
+        already there is taken again and changes nothing; a pair taken off
+        has to be on the chart. Any pair refused refuses the
+        whole Set, one `?` a character sent. A switched-off tank takes
+        them the same. What is kept is the chart highest first, and the
+        reply is i63B's."""
+        if self.c.chart_secured():
+            # "Set command is only valid if Tank Chart Security is disabled"
+            return self._nine(code), "REJECTED: tank chart security enabled"
+        tank = int(dev)
+        refused = self._refused(code, data, "63B", dev)
+        if not formats.chart_ok(data, True):
+            return refused, "REJECTED: does not fit 63B's data format"
+        diameter = self.c.limit("607", tank) or 0.0
+        # the volume held, not the 10000 a tank with none is drawn with
+        full = self.c.full_volume(tank, default=0.0)
+        points = list(self.c.chart_points(tank))
+        for i in range(int(data[:2])):
+            pair = data[2 + 18 * i:2 + 18 * (i + 1)]
+            try:
+                height = packed.unhexfloat(pair[2:10])
+                volume = packed.unhexfloat(pair[10:18])
+            except ValueError:
+                return refused, "REJECTED: not a float"
+            if pair[:2] == "02":
+                if (height, volume) not in points:
+                    return refused, "REJECTED: no such pair to take off"
+                points.remove((height, volume))
+                continue
+            if (height, volume) in points:
+                # sent again, it is taken and changes nothing (`tanksets`)
+                continue
+            # written so that NaN and infinity fail it too
+            if not (height < diameter and volume < full
+                    and math.isfinite(height) and math.isfinite(volume)):
+                return refused, "REJECTED: pair outside the tank"
+            if any((height - h) * (volume - v) <= 0 for h, v in points):
+                return refused, "REJECTED: pair does not rise with the chart"
+            points.append((height, volume))
+        if len(points) > self.c.CHART_POINTS:
+            return refused, "REJECTED: more than fifty pairs"
+        points.sort(reverse=True)
+        self.c.values[f"S63B{tank:02d}"] = f"{tank:02d}{len(points):02d}" + \
+            "".join("01" + packed.hexfloat(h) + packed.hexfloat(v)
+                    for h, v in points)
+        # strapping a chart moves the tank to it, and taking every pair off
+        # leaves it there: I60A read 50 PTS with none (2026-10-09)
+        self.c.tank_profiles[tank] = "04"
+        self.c.record_chart_change(tank)
+        self.c.save()
+        return self._frame(code, self._chart_packed(tank)), "chart pairs set"
+
     def _nine(self, _code=None):
         """What the console says when it has not understood."""
         return NOT_UNDERSTOOD
@@ -2482,7 +2554,11 @@ class Handler:
         # centred: the numeric formats are shorter than the line (`   01-16-06
         # 20:30:09    ` on the bench), and 01 fills it
         top = self.c.clock_text()[:24].center(24)
-        shown = [a["screen"] for a in describe_alarms(self.c.compute_alarms())]
+        # the display's rotation, without a custom alarm whose LCD is off
+        shown = [a["screen"] for a in describe_alarms(self.c.compute_alarms(),
+                                                      self.c)
+                 if customalarms.shown_on_lcd(self.c, a["aa"], a["nn"],
+                                              a["tt"])]
         if shown:
             beat = int(time.mktime(self.c.now()))
             second = shown[beat % len(shown)][:24].ljust(24)
@@ -2527,6 +2603,10 @@ class Handler:
                 "TST EARLY STOP:" + early, ""])
         if not c.licensed("fuelman"):
             if tok in ("681", "682"):
+                return self._frame(code)
+            if tok == "680" and not c.has("probe"):
+                # ...but not with no probe card: bare (I68000, 2026-10-09,
+                # `bench-2026-10-09-plld`)
                 return self._frame(code)
             if tok == "680":
                 # the setup report answers with its defaults under the
@@ -2594,8 +2674,9 @@ class Handler:
             return self._raw_display(code, self._dst_lines())
         if tok in ("5BE", "5BF") and self._custom_alarms_on():
             # in no revision on this shelf; with custom alarms on (5BD) the
-            # bench answers its title and nothing set (`cap_tank1on`)
-            return self._raw_display(code, ["", "CUSTOM ALARMS".ljust(24), ""])
+            # bench answers its title and the labels set, none at first
+            # (`cap_tank1on`) -- `customalarms`
+            return self._raw_display(code, customalarms.display(c, tok))
         if tok == "V10" and not c.licensed("isd"):
             # the ISD software's version answers on a console with no ISD key
             return self._raw_display(code, ["", "ISD VERSION: 01.00", ""])
@@ -2634,7 +2715,7 @@ class Handler:
             # the start alone, as `i51B00` answered it
             return self._dst_window()[0]
         if tok in ("5BE", "5BF") and self._custom_alarms_on():
-            return "00"
+            return customalarms.packed(c, tok)
         if tok in ("681", "682") and not c.licensed("fuelman"):
             return ""
         if tok == "535":
@@ -2796,6 +2877,16 @@ class Handler:
 
     def _set_family(self, tok):
         """The card family whose positions a code's devices are, or None."""
+        from . import wiresensors
+        # the sensor reports, which no setup screen walks and no band
+        # letters: B01 fell to the tank default, so `IB0108` -- liquid input
+        # 8, which the bench answers with its row -- was past four positions
+        # and bare (2026-10-08)
+        sensor = (wiresensors.STATUS_CODE.get(tok)
+                  or wiresensors.HISTORY_CODE.get(tok)
+                  or (wiresensors.DIAGNOSTIC.get(tok) or (None,))[0])
+        if sensor:
+            return sensor
         family = wiretables.FAMILY_OF.get(wiretables.device_letter(tok))
         return family[0] if family else None
 
@@ -3176,6 +3267,18 @@ class Handler:
                 # (`BODY_TAIL`): 780 with every line off is its title alone
                 # and closes by TAIL's
                 tail = replytails.BODY_TAIL[tok]
+            if not any(r.strip() for r in rows[3:]):
+                # a BARE reply closes with one blank line whatever the code's
+                # own count: all 342 bare replies of the 2026-10-08 capture
+                # and every bare one before it. 75A, 787 and 7BD close with
+                # two over a body and went bare when the PLLD sensor board
+                # came out, and this gave them their body's two
+                tail = 1
+            elif tok == "101" and rows[-1].strip() == "ALL FUNCTIONS NORMAL":
+                # ...and 101 closes with none under ALL FUNCTIONS NORMAL, on
+                # the bench out of its 2026-10-08 cold start and in the 2006
+                # capture alike; with any alarm listed it closes with one
+                tail = 0
             out = (SEP.join(rows + [""] * (tail + 1))).encode("latin-1") + ETX
         return out, note
 
@@ -3192,6 +3295,27 @@ class Handler:
                     "7B0", "7B3", "901", "902", "904", "905", "V10"}
     #: codes the bench answers bare at device 00 whatever is stored
     NO_DEVICE_ZERO = {"536", "5E2", "881", "882", "889"}
+    #: A choice the REPORT spells otherwise than the panel's list, keyed by
+    #: the panel's word. The bench, 2026-10-08, setting each liquid sensor
+    #: type in turn and reading I70301 back: 3 to 7 come back
+    #: `DUAL POINT HYDROSTATIC`, `DUAL FLT. DISCRIMINATING`,
+    #: `DUAL FLT. HIGH VAPOR`, `INTERCEPTOR SENSOR` and `DW SUMP 2-1`. The
+    #: panel's own names stay the setup screen's.
+    WIRE_CHOICE_WORDS = {"703": {
+        "DUAL FLOAT HYDROSTATIC": "DUAL POINT HYDROSTATIC",
+        "DUAL FLOAT DISCRIMINATING": "DUAL FLT. DISCRIMINATING",
+        "DUAL FLOAT HIGH VAPOR": "DUAL FLT. HIGH VAPOR",
+        "INTERCEPTOR": "INTERCEPTOR SENSOR",
+        "DW SUMP": "DW SUMP 2-1"}}
+    #: PLLD settings in the console-wide 5xx band that went BARE when the
+    #: bench's PLLD sensor board came out (read out of the 2026-10-08 cold
+    #: start, with it gone) -- in display format all three, and of the
+    #: packed ones 55D alone: `i55400` and `i55500` went on answering their
+    #: flag. The PLLD power board was still in the cage. Keyed by number:
+    #: they are answered here, not read, and a quoted code is a reader to
+    #: `test_fidelity`'s source scan
+    PLLD_PRINTED = {1364, 1365, 1373}       # 554, 555, 55D
+    PLLD_PACKED = {1373}                    # 55D
     #: the comm port settings a port answers by its board (`_port_reply`)
     PORT_CODES = {"881", "882", "885", "886", "887", "889"}
 
@@ -3215,6 +3339,15 @@ class Handler:
             return self._frame(code), "no modem board"
         if tok == "889" and rs232:
             return self._frame(code), "not a setting of an RS-232 board"
+        if tok == "881" and code[:1].islower() and name in ("RS-232",
+                                                            "S-SAT "):
+            # BBBBB P S D T AA, the board's factory settings where nobody
+            # has set the port (`Console.UART_FACTORY`); a Set carries the
+            # eight UART digits and the tone and rings stay as they were
+            held = (self.c.stored(f"S881{port:02d}") or "").strip()
+            factory = self.c.UART_FACTORY[name]
+            return (self._frame(code, held[:11] + factory[len(held):]),
+                    "port settings")
         dtr = (self.c.values.get(f"S889{port:02d}") or "1").strip()[-1:]
         dtr = "LOW" if dtr == "0" else "HIGH"
         if tok == "889" and code[:1].isupper() and name == "S-SAT ":
@@ -3355,6 +3488,9 @@ class Handler:
             # that a tool sweeping the ranges wants to skip the function;
             # the bench TLS-350 answers a bare frame (`_absent`).
             return self._absent(code), "no module fitted"
+        if (_hex(tok) in self.PLLD_PRINTED and not self.c.has("plld")
+                and (code[:1].isupper() or _hex(tok) in self.PLLD_PACKED)):
+            return self._absent(code), "no PLLD sensor board"
         if tok in ("537", "538"):
             # the RS-232 ETX characters per port, which this drew bare at
             # every port (FIDELITY S38)
@@ -3369,7 +3505,10 @@ class Handler:
         if (tok in self.NO_LIVE_TANK
                 and not self.c.tank_level):
             text = self.NO_LIVE_TANK[tok]
+            # and with no probe card at all, bare: `I61700` cold started
+            # without one (2026-10-09, `bench-2026-10-09-plld`)
             if (text is None or code[:1].islower()
+                    or not self.c.has("probe")
                     or (tok in self.NO_LIVE_TANK_BARE_ONE and dev != "00")):
                 return self._frame(code), "no tank with a probe: bare"
             return self._raw_display(code, text), "no tank with a probe"
@@ -3452,7 +3591,7 @@ class Handler:
                 # message hard against the margin -- a device's padded to
                 # 23, `Q 1:SETUP DATA WARNING ` and `T 1:PROBE OUT          `,
                 # a system one bare, `PAPER OUT` -- and a blank line after.
-                shown = [a["screen"] for a in describe_alarms(recs)]
+                shown = [a["screen"] for a in describe_alarms(recs, self.c)]
                 if not shown:
                     rows = ["SYSTEM STATUS REPORT", "",
                             "  ALL FUNCTIONS NORMAL  "]
@@ -3462,7 +3601,11 @@ class Handler:
                              else s for s in shown]
                     rows.append("")
                 return self._frame(code, SEP.join(rows)), note
-            return (self._frame(code, "".join(recs) if recs else "000000"),
+            # "00=All Functions Normal" is a CATEGORY, and a quiet console
+            # sends it alone: the bench out of its 2026-10-08 cold start
+            # answered `i10100060116080200`, two zeroes after the stamp. This
+            # sent six, a whole AANNTT of them
+            return (self._frame(code, "".join(recs) if recs else "00"),
                     note)
         if tok in ("201", "21A"):
             # In-Tank Inventory Report, and the same report with the 90/95%
@@ -3476,8 +3619,11 @@ class Handler:
             body = "".join(self._inventory_data(t, tok) for t in tanks)
             return self._frame(code, body), "inventory report"
         if tok == "205":
-            # In-Tank Status Report: the alarms standing against each tank
-            if not self.c.has("probe"):
+            # In-Tank Status Report: the alarms standing against each tank.
+            # With no probe card the computer form is bare and the display
+            # form still heads its table: the bench cold started without
+            # one (I20500 and i20500, 2026-10-09, `bench-2026-10-09-plld`)
+            if not self.c.has("probe") and code[0].islower():
                 return self._absent(code), "no probe module fitted"
             active = {}
             for record in self.c.compute_alarms():
@@ -3534,8 +3680,10 @@ class Handler:
             # minute still under it. A tank is listed while 601 has it
             # switched on, probe or no probe, and not at all when it is off.
             # This listed every record in log order, each with its own
-            # description, for the tanks with a probe reporting.
-            if not self.c.has("probe"):
+            # description, for the tanks with a probe reporting. And with no
+            # probe card at all the display form is still its title, as 205's
+            # is (I20600, 2026-10-09); the computer form is bare
+            if not self.c.has("probe") and code[0].islower():
                 return self._absent(code), "no probe module fitted"
             on = list(self.c.configured("601", self.c.capacity("probe")))
             if dev == "00":
@@ -4857,20 +5005,17 @@ class Handler:
                 return self._frame(code, text), "tank chart"
             # `tanks` is empty on a console with a probe card and no tank
             # programmed, and the chart of no tank is an empty one
-            val = (self.c.values.get(f"S63B{tanks[0]:02d}")
-                   if tok == "63B" and tanks else None)
-            if tok == "63B" and tanks and val is None:
+            val = None
+            if tok == "63B" and tanks:
                 # the bench packs a fifty point tank as its number, a `0`
                 # whose meaning no page gives, the diameter, the full volume
                 # and the count of pairs: `0104479FF5C497423F000` for 999.99
-                # inches and 999999 gallons with none (`cap_tank1on`)
-                val = "".join(
-                    f"{t:02d}0" + packed.hexfloat(self.c.limit("607", t) or 0.0)
-                    + packed.hexfloat(self.c.full_volume(t) or 0.0)
-                    + f"{len(self.c.chart_points(t)):02d}"
-                    + "".join(packed.hexfloat(h) + packed.hexfloat(v)
-                              for h, v in self.c.chart_points(t))
-                    for t in tanks)
+                # inches and 999999 gallons with none (`cap_tank1on`). And
+                # with pairs strapped it is the same, never the Set it was
+                # given: `s63B01010142480000459C4000` read back, and was
+                # answered, `01042C00000461C40000142480000459C4000` -- the
+                # pairs without their add flags (2026-10-09, `tanksets`)
+                val = "".join(self._chart_packed(t) for t in tanks)
             return self._frame(code, val or ""), "tank chart"
         if tok == "217":
             # Tank Profile: which of the five a tank is on, per I217's table
@@ -6213,6 +6358,9 @@ class Handler:
         # I78500 with `NONE` for a line that has no tank, where this printed
         # `0` -- `screen_words` had the panel's NONE and nothing gave the
         # wire its own. Keyed by the number, so `00` and `0` are one value.
+        spelt = self.WIRE_CHOICE_WORDS.get(tok, {}).get(str(shown).strip())
+        if spelt is not None:
+            return spelt
         words = field.get("wire_words")
         if words:
             try:
@@ -6700,6 +6848,37 @@ class Handler:
 
     # ---- write -------------------------------------------------------------
     def set_(self, tok, dev, data, code):
+        if tok in ("5BE", "5BF") and self._custom_alarms_on():
+            # a custom alarm label added, changed or removed, answered with
+            # the code's own report (`customalarms`, 2026-10-08)
+            setter = (customalarms.set_label if tok == "5BE"
+                      else customalarms.set_outputs)
+            if not setter(self.c, data or ""):
+                return (self._refused(code, data, tok, dev),
+                        "REJECTED: not a custom alarm entry")
+            if code[:1].isupper():
+                return (self._raw_display(
+                    code, customalarms.display(self.c, tok)),
+                        "custom alarm set")
+            return (self._frame(code, customalarms.packed(self.c, tok)),
+                    "custom alarm set")
+        if (tok, (data or "").strip()) in self.STORED_BUT_REFUSED:
+            out, note = self._set(tok, dev, data, code)
+            if self.c.values.get(f"S{tok}{dev}", "").strip().endswith(
+                    (data or "").strip()):
+                return (self._refused(code, data, tok, dev),
+                        note + "; answered refused all the same")
+            return out, note
+        return self._set(tok, dev, data, code)
+
+    #: Sets the bench answers with a refusal and STORES all the same. Liquid
+    #: sensor type 7, DW SUMP 2-1: `S703017` answered `?` and `I70301` then
+    #: read `DW SUMP 2-1`, and the sensor raised its alarms as that type,
+    #: where 8 and 0 were refused and changed nothing (2026-10-08); and
+    #: `s703017` answered one `?` and `i70301` read `017` after it.
+    STORED_BUT_REFUSED = {("703", "7")}
+
+    def _set(self, tok, dev, data, code):
         if tok == "535":
             return self._set_hangup(dev, code, data)
         if tok in ("537", "538"):
@@ -6748,6 +6927,18 @@ class Handler:
             # time/date, 04 not numeric, 09 invalid volume -- so the generic
             # shape check must not get there first. See FIDELITY S2.
             return self._set_ticket(tok, dev, data, code)
+        if (tok == "63B" and code[:1].islower() and dev.isdigit()
+                and int(dev)):
+            return self._set_chart(code, dev, data)
+        if (tok in ("605", "606", "63B") and code[:1].isupper()
+                and set(data or "") - set("0123456789.,+- ")):
+            # The display form of a volume table is decimal, and the bench
+            # refused hex in it one `?` a character -- `S60501` with three
+            # floats, `S63B01` with a pair or a dumped header (2026-10-09,
+            # `bench-2026-10-09/tanksets.jsonl`). 606 is the same table
+            # twenty wide, not measured
+            return (self._refused(code, data, tok, dev),
+                    f"REJECTED: {tok}'s display form is decimal")
         shaped = self._as_read(tok, dev, data, code)
         if (tok in SETTABLE and data and shaped is not None
                 and not self._label_code(tok) and not formats.valid(
@@ -6764,6 +6955,14 @@ class Handler:
         verify = VERIFIED.get(tok)
         if verify:
             if not data.endswith(verify):
+                if tok == "530" and code[:1].isupper():
+                    # the bench refuses it as a value it cannot take, one
+                    # `?` a character sent, and leaves the beeper alone:
+                    # `S530001` answered `?` (2026-10-08). 081 to 084 are
+                    # not measured and keep 9999FF
+                    return (self._refused(code, data, tok, dev),
+                            f"REJECTED: {tok} wants the {verify} "
+                            "verification code")
                 return (self._nine(code),
                         f"REJECTED: {tok} wants the {verify} verification code")
             data = data[:-len(verify)]
@@ -7198,6 +7397,12 @@ class Handler:
             # bench answers `S60217X` -- tank 17 on a four-probe card -- with
             # the bare echo, and stores nothing.
             return self._frame(code), "no such position: acked, nothing stored"
+        if (code[:1].isupper() and tok in self.c.CONFIG_LABEL
+                and len(data or "") > 1):
+            # a position's ON/OFF is one character, and the display Set
+            # reads one and drops the rest: `S7010111` switched liquid
+            # sensor 1 ON on the bench (2026-10-08), where this refused it
+            data = data[:1]
         if (family and dev == "00" and code[:1].isupper()
                 and self.c.is_prefixed(tok)):
             # Device 00 on a one-value-per-device Set is EVERY position: the
@@ -7281,6 +7486,12 @@ class Handler:
             # `s63C01` tank 1 read 50 PTS (2026-09-19, `cap_tank1on`).
             self.c.tank_profiles[int(dev)] = {"60A": "03", "604": "00",
                                               "63C": "04"}[tok]
+            if tok != "63C":
+                # "Changing profile selection will erase the previously
+                # entered 50 point profile!" -- and over the wire too: after
+                # `s60401` moved tank 1 to 1 PT, taking off the pair it had
+                # held was refused, the pair gone (2026-10-09, `tanksets`)
+                self.c.values.pop(f"S63B{dev}", None)
             # And the three are ONE full volume. On the bench TLS-350
             # (2026-09-19, `transcripts/reset63c.log`) `S63C015000` made
             # I604 and I60A read 5000; `S60A01047000` made I604 read 47000
@@ -7418,6 +7629,11 @@ class Handler:
             or FIELDS.get(f"S{tok}00")
         if not field or field.get("part"):
             return False
+        if self._label_code(tok):
+            # a label shorter than its twenty is stored, padded: the bench
+            # answered `s70201PACKED LABEL` with `01PACKED LABEL` and eight
+            # spaces, and `i70201` read it back so (2026-10-08)
+            return False
         width = self._packed_input_width(field)
         return bool(width) and len(self._without_prefix(tok, dev, data)) < width
 
@@ -7529,6 +7745,9 @@ class Handler:
                                            self.c, code=f"S{tok}{dev}")
             except ValueError:
                 return None
+            # and how much of it was sent, which a report that prints the
+            # label last on its line keeps (`Console.label_sent`)
+            self.c.label_sent[f"S{tok}{dev}"] = min(len(data), len(cut))
             # Padded to the field's width, which is how the console holds it:
             # `i78201` on the bench answers `01RUAL` and sixteen blanks. A
             # label never set is still no value at all, so a header set to
@@ -7735,6 +7954,14 @@ class Handler:
         except ValueError:
             return None
 
+    #: Stick Height Offset and the leak test report's format, by number:
+    #: two console-wide settings SYSTEM SETUP draws, read back by the bench
+    #: with no probe card in the cage where the rest of the band was bare
+    #: (2026-10-09, `bench-2026-10-09-plld`). Decimal, because this lets the
+    #: code answer and reads nothing of its value, and `test_fidelity` takes
+    #: a code's hex as a reader of it.
+    NO_CARD_6XX = {1547, 1587}
+
     def _module_present(self, tok):
         """A console rejects what its card cage cannot serve.
 
@@ -7755,6 +7982,8 @@ class Handler:
             # lines, the same pairing the tape prints. It answered on a
             # console with no satellite in it. See FIDELITY S7a.
             return c.has("ssat") or c.has("asat")
+        if fn in self.NO_CARD_6XX:
+            return True
         if 0x601 <= fn <= 0x6FF:
             return c.has("probe")
         if 0x721 <= fn <= 0x72C:
@@ -7924,6 +8153,14 @@ def wire_cut(field):
     if field.get("kind") == "int" and field.get("width"):
         return field["width"]
     return None
+
+
+def _hex(tok):
+    """A function code as its number, or -1."""
+    try:
+        return int(tok, 16)
+    except ValueError:
+        return -1
 
 
 def _finite_packed(text):

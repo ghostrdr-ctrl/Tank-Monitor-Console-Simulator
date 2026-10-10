@@ -134,6 +134,12 @@ SETUP_NAME = {
     "R": "OUTPUT RELAY #{n}",           # 806
 }
 
+# the sensor families of those, which print an unlabelled device blank
+SENSOR_LETTERS = frozenset("LVGCHU")
+
+# ...and their label codes, whose tables are the label alone
+SENSOR_LABEL_CODES = frozenset({"702", "707", "712", "742", "747", "74C"})
+
 # where each of those families keeps the label a site DID programme
 _LABEL_CODE = {"L": "702", "V": "707", "G": "712", "C": "742", "H": "747",
                "U": "74C", "I": "802", "R": "807"}
@@ -507,11 +513,31 @@ def _row(handler, tok, device, layout, kind):
         # wired up. The reading was right and the LABEL was not: a real
         # console answers `I52000` with `   1                        ON DATE`
         # -- eight rows, every label column empty. See FIDELITY S17.
-        if letter in SETUP_NAME:
+        #
+        # And a SENSOR is no exception either. These tables named one
+        # `LIQUID SENSOR #1`, as 576013-635's typeset samples do, and the
+        # bench's interstitial card answered I701, I702, I703 and I704 with
+        # the label column empty, its sensor switched off and on alike
+        # (2026-10-08). The six sensor families share the tables, so all
+        # six go blank; the input and relay names stay `SETUP_NAME`'s until
+        # a console with an I/O card is read.
+        if letter in SENSOR_LETTERS:
+            label = ""
+        elif letter in SETUP_NAME:
             label = SETUP_NAME[letter].format(n=device)
         else:
             code = screens.DEVICE_LABEL_CODE.get(letter, "602")
             label = handler.c.text(code, device) or ""
+    if tok in SENSOR_LABEL_CODES:
+        # A sensor's LABEL table is the label alone, and a row for every
+        # position on the card, labelled or not, switched on or not: the
+        # bench's I70200 out of its cold start was eight rows of
+        # `     1` and 25 spaces, and with sensor 1 named,
+        # `     1  ABCDEFGHIJKLMNOPQRST   ` -- the label held to 20 and
+        # three spaces after it, every row 31 wide (2026-10-08). With
+        # nothing stored the value is empty and this drew no row at all, so
+        # the whole report fell back to the packed record.
+        return [f"{device:6d}  {label:<20.20s}   "]
     if _is_config(tok):
         # A CONFIG code stores one flag character per position, so its value
         # is a property of the DEVICE and not of the code: `display_value`

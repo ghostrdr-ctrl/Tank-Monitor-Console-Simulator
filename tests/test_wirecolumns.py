@@ -276,9 +276,14 @@ class ThingsTwoReadersHaveToAgreeOn(unittest.TestCase):
         c, _h = a_smart_site()
         counter = c.sample_counter()
         self.assertEqual(wiresensors._sample_counter(c), float(counter))
-        for token in ("sensor_liquid", "sensor_2wire", "sensor_groundtemp"):
+        for token in ("sensor_2wire", "sensor_groundtemp"):
             self.assertTrue(c.diag_reading(token, 1).startswith(
                 f"CNTR = {counter} "), c.diag_reading(token, 1))
+        # the liquid card's is its own, the same on the glass and the wire:
+        # `CNTR= 5` over IB01's 5 on the bench (2026-10-08)
+        card = int(wiresensors.MEASURED_DIAGNOSTIC["B01"][0])
+        self.assertTrue(c.diag_reading("sensor_liquid", 1).startswith(
+            f"CNTR={card:2d} "), c.diag_reading("sensor_liquid", 1))
 
     def test_the_mag_sensors_total_height_is_its_own_two_components(self):
         """FIDELITY L8. `TOTAL HT 15.0` over `FUEL HT 5.0` and `WATER HT
@@ -569,6 +574,14 @@ class HighRefIsAColumnAndNotTheLargerNumber(unittest.TestCase):
             rows = body(h, f"I{code}01").splitlines()
             row = [r for r in rows if r.split()[:1] == ["1"]][-1]
             got_high, got_low = (float(n) for n in row.split()[2:4])
+            measured = wiresensors.MEASURED_DIAGNOSTIC.get(code)
+            if measured:
+                # a card read on the bench prints its own, not the page's:
+                # the order still holds, HIGH in the left column
+                _counter, (h0, h1), (l0, l1) = measured
+                self.assertTrue(h0 <= got_high <= h1, (code, row))
+                self.assertTrue(l0 <= got_low <= l1, (code, row))
+                continue
             for got, want, which in ((got_high, high, "HIGH"),
                                      (got_low, low, "LOW")):
                 self.assertLess(abs(got - want) / want, 0.031,
@@ -655,8 +668,10 @@ class TheGroundTemperatureThermistorBelongsToVLLD(unittest.TestCase):
                   encoding="utf-8") as fh:
             data = json.load(fh)
         screen = next(d for d in data
-                      if d.get("function") == "GROUND TEMP DIAGNOSTIC")
-        self.assertEqual(screen.get("requires"), "vlld")
+                      if d.get("function") == "GROUNDTEMP DIAGNOSTIC")
+        # the probe card's: the bench's G.T. card offers it with no VLLD
+        # card at all, and IB2100 answers it so (2026-10-08)
+        self.assertEqual(screen.get("requires"), "probe")
         _c, h = self.fitted(vlld=1)
         self.assertNotIn("9999", body(h, "IB2100"))
 

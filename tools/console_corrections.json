@@ -440,5 +440,58 @@
   "_from": "bench-2026-09-18/transcripts/setsweep.jsonl",
   "_note": "The period is a number ending at column 9 with DAYS after it: LENGTH:  1 DAYS and LENGTH: 16 DAYS. The page's one sample, 31, cannot show it.",
   "line": {"align": "left", "end": 14, "label": "LENGTH:", "start": 8, "number_end": 9}
+ },
+ "609": {
+  "_from": "bench-2026-09-18/transcripts (64382b1, the thermal coefficient sweep)",
+  "_note": "The coefficient prints rounded from its fourth significant digit: 0.0009144 on the bench where the stored value reads 0.00091450. 64382b1 put round_from into wiretitles.json by hand and not here, so a regeneration dropped it (found 2026-10-08).",
+  "columns": [
+   {
+    "align": "right",
+    "end": 1,
+    "head": "TANK",
+    "start": 1
+   },
+   {
+    "align": "left",
+    "end": 22,
+    "head": "PRODUCT LABEL",
+    "start": 7
+   },
+   {
+    "align": "right",
+    "end": 40,
+    "head": "",
+    "places": 6,
+    "round_from": 4,
+    "start": 33
+   }
+  ]
+ },
+ "704": {
+  "_from": "bench-2026-10-08-cold/raw/I70400.bin",
+  "_note": "LIQUID CATEGORY heads its third column CATEGORY where p.321 prints TYPE, and prints the category whole: OTHER SENSORS, where p.321's sample row reads OTHER. The bench's interstitial card, out of its cold start and again after each category was set over the wire.",
+  "heading": "SENSOR  LOCATION               CATEGORY",
+  "columns": [
+   {
+    "align": "right",
+    "end": 5,
+    "head": "SENSOR",
+    "start": 5
+   },
+   {
+    "align": "left",
+    "end": 23,
+    "head": "LOCATION",
+    "start": 8
+   },
+   {
+    "align": "left",
+    "end": 39,
+    "head": "CATEGORY",
+    "start": 31
+   }
+  ],
+  "leads": {"SENSOR LOCATION CATEGORY": 1},
+  "sample": ["     1                         OTHER SENSORS"]
  }
 }

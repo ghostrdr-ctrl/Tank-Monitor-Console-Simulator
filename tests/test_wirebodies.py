@@ -797,16 +797,22 @@ class AnUnlabelledDeviceIsNamedTwice(unittest.TestCase):
         return c, h
 
     def test_each_family_is_named_as_its_own_setup_page_names_it(self):
+        """The inputs and relays. The six SENSOR families print an
+        unlabelled sensor blank -- the bench's interstitial card did, on
+        every one of these tables (2026-10-08), where the page prints
+        `LIQUID SENSOR #1` -- and the next test holds that."""
         c, h = self.an_unlabelled_site()
-        for code, wanted in (("703", "LIQUID SENSOR #1"),
-                             ("708", "VAPOR SENSOR #1"),
-                             ("713", "GROUNDWATER #1"),
-                             ("743", "2 WIRE CL SENSOR #1"),
-                             ("748", "3 WIRE CL SENSOR #1"),
-                             ("74D", "UNIVERSAL SENSOR #1"),
-                             ("801", "EXTERNAL INPUT #1"),
+        for code, wanted in (("801", "EXTERNAL INPUT #1"),
                              ("806", "OUTPUT RELAY #1")):
             self.assertIn(wanted, body(h, f"I{code}00"), code)
+
+    def test_an_unlabelled_sensor_is_blank(self):
+        c, h = self.an_unlabelled_site()
+        for code in ("703", "708", "713", "743", "748", "74D"):
+            rows = [r for r in body(h, f"I{code}00").splitlines()
+                    if r[:6].strip() == "1"]
+            self.assertTrue(rows, code)
+            self.assertEqual(rows[0][6:31].strip(), "", (code, rows[0]))
 
     def test_a_site_label_still_wins(self):
         """The default is only a default: a device the site has named prints
@@ -844,10 +850,11 @@ class EveryConfigReportSaysONOrOFF(unittest.TestCase):
         for key in list(c.values):
             if key[:4] in ("S702", "S742"):
                 c.values.pop(key)
+        # unlabelled, blank: the bench's I70100 (2026-10-08)
         rows = body(h, "I70100").splitlines()
-        self.assertIn("     1  LIQUID SENSOR #1       ON", rows)
+        self.assertIn("     1                         ON", rows)
         rows = body(h, "I74100").splitlines()
-        self.assertIn("     1  2 WIRE CL SENSOR #1    ON", rows)
+        self.assertIn("     1                         ON", rows)
 
     def test_a_position_nobody_switched_on_reads_OFF(self):
         c, h = a_programmed_site()

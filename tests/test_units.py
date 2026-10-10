@@ -199,11 +199,13 @@ class ADefaultIsNotSilence(unittest.TestCase):
 
     def test_a_part_field_carries_its_default_too(self):
         """881 holds a port's four UART settings as parts of one record, and
-        a port nobody has been near still runs at 1200, none, one and eight.
-        In the bench TLS-350's own layout (`I88101`, 2026-09-22)."""
+        a port nobody has been near reads its board's factory settings. In
+        the bench TLS-350's own layout (`I88101`, 2026-09-22) -- whose
+        RS-232 port reads ODD, which this test said was NONE until the
+        cold start of 2026-10-08 showed ODD on the glass too (S52)."""
         _c, h = a_site()
         shown = body(h, "I88101")
-        for want in (" BAUD RATE  : 1200", " PARITY     : NONE",
+        for want in (" BAUD RATE  : 1200", " PARITY     : ODD",
                      " STOP BIT   : 1 STOP", " DATA LENGTH: 7 DATA"):
             self.assertIn(want, shown)
 

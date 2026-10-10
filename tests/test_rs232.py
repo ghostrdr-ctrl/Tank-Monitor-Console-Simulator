@@ -304,8 +304,12 @@ class WhatTheBenchConsoleDidWithTheEdges(unittest.TestCase):
 
     def test_precision_print_is_a_setting(self):
         """55D, in no manual: `S55D001` ENABLED, `S55D000` DISABLED, packed
-        1 and 0, and `S55D002` refused (`transcripts/p55d.log`)."""
-        h = Handler(a_console(), verbose=False)
+        1 and 0, and `S55D002` refused (`transcripts/p55d.log`). Asked
+        of a console with a PLLD sensor board, as the bench had then: with
+        it out, 55D answers bare (2026-10-08)."""
+        c = a_console()
+        c.modules["plld"] = 1
+        h = Handler(c, verbose=False)
         self.assertIn(b"RESULTS: DISABLED", send(h, b"", b"I55D00"))
         self.assertIn(b"RESULTS: ENABLED", send(h, b"", b"S55D001\r"))
         self.assertIn(b"RESULTS: ENABLED", send(h, b"", b"I55D00"))

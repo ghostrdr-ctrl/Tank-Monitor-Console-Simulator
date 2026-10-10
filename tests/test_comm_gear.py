@@ -1267,6 +1267,31 @@ class TheWplldCommBoardInTheBay(unittest.TestCase):
         row = next(r for r in c.configuration_lines() if "COMM 3" in r)
         self.assertLess(float(row.split()[-2]), 1000000)
 
+    def test_a_card_swapped_since_keeps_its_name_and_type(self):
+        """The bench, 2026-10-08: its PLLD sensor board swapped for an
+        interstitial board, no cold start, printed slot 2 `PLLD SENSOR BD`,
+        type 1A, POR 3895 and CURRENT 201159. A cold start read it as
+        `INTERSTITIAL BD`, type 03, 200934 in both columns."""
+        c = Console()
+        c.modules = {"probe": 1, "plld": 1, "plldctl": 1, "rs232": 1}
+        c.cold_boot()
+        del c.modules["plld"]
+        c.modules["liquid"] = 1
+        row = next(r for r in c.configuration_lines() if r.startswith("  2"))
+        self.assertIn("PLLD SENSOR BD", row)
+        por, now = (float(x) for x in row.split()[-2:])
+        self.assertLess(abs(por - 3900) / 3900, 0.05)
+        self.assertLess(abs(now - 200000) / 200000, 0.05)
+        self.assertEqual(c.configuration_records()[22:26], "021A")
+        # what the bench panel says beside the cage: a cold start is needed
+        self.assertEqual(c.waiting_for_cold_start(), [(2, "plld", "liquid")])
+        c.cold_boot()
+        self.assertEqual(c.waiting_for_cold_start(), [])
+        row = next(r for r in c.configuration_lines() if r.startswith("  2"))
+        self.assertIn("INTERSTITIAL BD", row)
+        self.assertLess(abs(float(row.split()[-2]) - 200000) / 200000, 0.05)
+        self.assertEqual(c.configuration_records()[22:26], "0203")
+
     def test_a_card_pulled_since_keeps_its_figure_over_unused(self):
         c = Console()
         c.modules = {"probe": 1, "rs232": 1, "ssat": 1, "wplldcom": 1}

@@ -775,6 +775,9 @@ MODULE_PAPER = {
     # the bench, comm 3, 202958 ohms against Table 6-1's "WPLLD Comm 200K"
     # (2026-09-24, a 330812-001 fitted for the purpose)
     "wplldcom": "WPLLD COMM BD",
+    # the bench, slot 2, 200934 ohms against Table 6-1's "Interstitial/
+    # Liquid Sensor Interface 200K", after the cold start of 2026-10-08
+    "liquid": "INTERSTITIAL BD",
 }
 
 # A tank lying on its side is not a wedge, and the manuals' own examples say
@@ -1009,8 +1012,12 @@ LIQUID_TYPE_STATES = {
     "3": ("out", "high", "low"),                      # DUAL FLOAT HYDROSTATIC
     "4": ("fuel", "out", "short", "high", "warn"),    # DUAL FLOAT DISCRIM
     "5": ("fuel", "out", "short", "high", "warn"),    # DUAL FLOAT HIGH VAPOR
-    "6": ("fuel", "out"),                             # INTERCEPTOR
-    "7": ("fuel", "out", "short", "high", "warn"),    # DW SUMP 2-1
+    # the bench, resistors on its inputs (2026-10-08): an interceptor read
+    # 1k as SHORT, and a DW sump read 100k as LOW LIQUID and never short,
+    # high or warning -- `readings.BANDS`. And the interceptor reads WATER
+    # and WATER OUT too: 68.5k and 32.8k (2026-10-10, `sweep4k.jsonl`)
+    "6": ("fuel", "out", "short", "water", "waterout"),  # INTERCEPTOR
+    "7": ("fuel", "out", "low"),                      # DW SUMP 2-1
 }
 
 # S743, Type A. "DISCRIM INTERSTITIAL sensors have three sensing states:
@@ -1473,6 +1480,12 @@ class Console:
         self.wm_office = ""       # the Weights and Measures office
         self.tank_capacity = {}   # tank -> capacity the W&M officer entered
         self.chart_audit = {}     # tank -> [YYMMDDHHmm], newest first
+        # How many characters of a label a serial Set carried, by its key
+        # ("S60201"): the bench keeps a label as it was sent and pads it
+        # only where a report pads it -- I63B printed `T 1:TANKA` for
+        # `S60201TANKA`, and the label padded for it sent padded, while
+        # i602 answered twenty wide both times (2026-10-09, FIDELITY S46)
+        self.label_sent = {}
         self.tank_profiles = {}   # tank -> profile code, panel-set only
         self.printed_deliveries = []   # drops waiting for the printer
         self.meters = {}          # MeterId -> the tank it draws from
@@ -1577,6 +1590,7 @@ class Console:
         self.values.clear()
         self.tank_level.clear()
         self.sensor_state.clear()
+        self.label_sent.clear()
         self.siphon_shut.clear()
         self.low_temp.clear()
         self.tank_leak.clear()
@@ -1913,6 +1927,10 @@ class Console:
                                   in blob.get("tank_capacity", {}).items()}
             self.chart_audit = {int(k): v for k, v
                                 in blob.get("chart_audit", {}).items()}
+            # a saved state is only as good as its file
+            self.label_sent = {str(k): v for k, v
+                               in (blob.get("label_sent") or {}).items()
+                               if type(v) is int and 0 <= v <= 40}
             self.tank_profiles = {int(k): v for k, v
                                   in blob.get("tank_profiles",
                                               {}).items()}
@@ -2002,6 +2020,7 @@ class Console:
                            "wm_office": self.wm_office,
                            "tank_capacity": self.tank_capacity,
                            "chart_audit": self.chart_audit,
+                           "label_sent": self.label_sent,
                            "tank_profiles": self.tank_profiles,
                            "software": self.software,
                            "e2_accuchart": self.e2_accuchart,
@@ -2243,7 +2262,12 @@ class Console:
         `611schedule` names a code the step reaches THROUGH the function it
         is already on, so the code to ask about is the step's own.
         """
-        code = (step.get("code") or "").upper()
+        # and `knows`, the code a step stands for when what it writes is a
+        # console setting rather than the code: ISO 3166 COUNTRY is 54D,
+        # "Version 29" in 576013-635, and the bench (326.01) answered
+        # I54D00 with 9999FF and walked SYSTEM SETUP without the screen
+        # (2026-10-09)
+        code = (step.get("code") or step.get("knows") or "").upper()
         if not code.startswith("S") or len(code) < 4:
             return True
         return versions.knows_token(code[1:4], self.version, self.board)
@@ -2313,6 +2337,28 @@ class Console:
             return 0
         if module in COMM_IDENTITIES:
             return self.comm_count(module)
+        n = self.fitted(module)
+        if n and self.reset_cage is not None and MODULE_BAY.get(module) in (
+                "is", "power"):
+            # ...and a card put where a DIFFERENT one was at the last cold
+            # start is not driven until the next. The bench, 2026-10-08:
+            # an interstitial board in slot 2, where the PLLD sensor board
+            # had been at the reset, read its own 201159 ohms as CURRENT
+            # and answered I701 to I704, I301 and i701 bare, its slot still
+            # named for the PLLD board; a cold start and all of them
+            # answered. A position EMPTY at the reset is not measured for
+            # this and is driven, as it always was.
+            n -= sum(1 for slot, _bay, key, _name in self.cage_slots()
+                     if key == module
+                     and self.reset_card(f"S{slot}", key) != module)
+        return max(0, n)
+
+    def _cage_count(self, module):
+        """How many of that card the cage LISTS: `count` without the cold
+        start's say, which the slot report needs to place a card the console
+        does not yet drive."""
+        if not self.knows_module(module):
+            return 0
         return self.fitted(module)
 
     def fitted(self, module):
@@ -2600,6 +2646,26 @@ class Console:
                 return False
         if cond.get("tanks") and not self.programmed_tanks():
             return False
+        if cond.get("probe_reports") and int(device or 0) not in self.tank_level:
+            # this tank's probe reporting: the bench, tank 1 on with no probe,
+            # walked IN-TANK SETUP without FLOAT SIZE, the water limits and
+            # filter and PERIODIC TEST TYPE (2026-10-08, `menuwalk2.jsonl`),
+            # and refuses those codes' Sets in the same state
+            # (`NO_LIVE_TANK_SET_REFUSED`)
+            return False
+        if cond.get("hrm") and not self.display_blanked:
+            # "For international operation only! - set DIP switch 3 to the
+            # Closed position to enable HRM" -- 576013-623 Rev AN p.4-1, the
+            # same position that page says blanks the display; and the HRM
+            # limits are "(International Option)" on p.7-25. The bench, its
+            # display lit, did not draw them (2026-10-08)
+            return False
+        if cond.get("live_tank") and not self.tank_level:
+            # a tank with its probe reporting: the bench, CSLD keyed, a
+            # probe card in the cage and tank 1 switched on with no probe,
+            # offered no CSLD DIAGNOSTICS (2026-10-08, `menuwalk.jsonl`) --
+            # Figure 6-11 is a tank's own test rate, tests and volume
+            return False
         if cond.get("mag_sensor") and not self.mag_sensors():
             # "This menu displays only if the console detects a Mag Sump
             # Sensor capable of leak detection", 576013-610 Rev AC p.23-1
@@ -2668,6 +2734,17 @@ class Console:
             # ID. See FIDELITY D3.
             cards = [want] if isinstance(want, str) else want
             if any(self.has(card) for card in cards):
+                return False
+        want = cond.get("any_configured")
+        if want:
+            # CUSTOM ALARMS offers a category's switch only with one of its
+            # devices switched on: after the cold start of 2026-10-09 the
+            # bench offered SYSTEM ALARMS alone, liquid card and PLLD board
+            # in the cage, and LIQUID SENSOR ALMS and PRESSURE LINE LEAK
+            # both once a sensor and a line were switched on over the wire
+            module = {"701": "liquid", "781": "plld"}.get(want)
+            if not any(self._configured(want, n) for n in range(
+                    1, max(self.capacity(module), 1) + 1)):
                 return False
         want = cond.get("module")
         if want:
@@ -3452,6 +3529,9 @@ class Console:
 
     def setting(self, key, device=0, default=""):
         """One of the console's own settings, or what it reads out of the box."""
+        if key.startswith("ca_"):
+            from . import customalarms
+            return customalarms.panel_setting(self, key, device)
         if key in self.VALUE_SETTINGS:
             return isd.panel_processor(
                 self.values.get(self.VALUE_SETTINGS[key]))
@@ -3469,6 +3549,9 @@ class Console:
         return self.settings.get((key, int(device)), default)
 
     def set_setting(self, key, value, device=0):
+        if key.startswith("ca_"):
+            from . import customalarms
+            return customalarms.set_panel_setting(self, key, value, device)
         if key in self.VALUE_SETTINGS:
             # only the words that screen offers name a code; anything else
             # would have to invent one, so it leaves the field as it stands
@@ -4690,6 +4773,73 @@ class Console:
             return SMART_CATEGORY_STATES.get(kind or "00", _SMART_COMMON)
         return ()
 
+    # A sensor input with NOTHING on it -- `sensor_state` "open" -- is
+    # not a state any sensor reports: what the console makes of an open
+    # circuit depends on the type it was told is there. The bench's
+    # interstitial card, nothing wired, sensor 1 switched on as each type in
+    # turn (2026-10-08): SENSOR OUT ALARM for six of the seven, and FUEL
+    # ALARM for NORMALLY CLOSED -- whose float opens the circuit on liquid,
+    # so an open circuit is liquid to it. The input reads 1,000,000,000 on
+    # IB01 whatever the type. Liquid alone is measured; any other family's
+    # open input reads OUT.
+    OPEN_INPUT = {("liquid", "2"): "fuel"}
+
+    #: what a wired liquid input holds in `sensor_state`: `ohms:99400`, the
+    #: resistor on the terminals, beside "open" for nothing on them
+    OHMS = "ohms:"
+
+    def sensor_ohms(self, module, number):
+        """The resistance on this sensor's input, or None.
+
+        An open input is 1,000,000,000, as the card reads it; a wired one
+        (`ohms:99400` in `sensor_state`) is its resistor; a sensor given a
+        state rather than an input is None, and reads its band.
+        """
+        held = self.sensor_state.get((module, str(number)), "normal")
+        if held == "open":
+            from . import wiresensors
+            return float(wiresensors.OPEN_VALUE)
+        if isinstance(held, str) and held.startswith(self.OHMS):
+            try:
+                ohms = float(held[len(self.OHMS):])
+            except ValueError:
+                return None
+            # a saved state is only as good as its file
+            return ohms if math.isfinite(ohms) and ohms >= 0 else None
+        return None
+
+    def wire_sensor(self, module, number, ohms):
+        """Put a resistor on this sensor's input: None takes it off, and
+        leaves the input open."""
+        key = (module, str(number))
+        if ohms is None:
+            self.sensor_state[key] = "open"
+        else:
+            self.sensor_state[key] = f"{self.OHMS}{float(ohms):g}"
+
+    def sensor_condition(self, module, number):
+        """The state the console takes this sensor to be in, an open input
+        resolved by its type -- and a wired one by which of its type's
+        bands the input reads in.
+
+        The bench's interstitial card, with three metered resistors on its
+        inputs, read each sensor type's own state off the one resistance as
+        the type was changed over it (2026-10-08, `resistors.jsonl`): the
+        state is the console's reading of the input, not a property of the
+        sensor. Where no band holds the reading, the nearest does; the band
+        edges are not measured (FIDELITY S46)."""
+        state = self.sensor_state.get((module, str(number)), "normal")
+        if state == "open":
+            kind = self.sensor_type(module, number) or "1"
+            state = self.OPEN_INPUT.get((module, kind), "out")
+        elif isinstance(state, str) and state.startswith(self.OHMS):
+            ohms = self.sensor_ohms(module, number)
+            state = (readings.band_state(module,
+                                         self.sensor_type(module, number),
+                                         ohms * readings.INPUT_GAIN)
+                     if ohms is not None else "normal")
+        return state
+
     def sensor_alarm_allowed(self, module, number, state):
         """Can this sensor post that alarm right now?
 
@@ -4729,7 +4879,7 @@ class Console:
             return ""
         words = (SMART_STATE_WORDS if module == "smart"
                  else SENSOR_STATE_WORDS)
-        state = self.sensor_state.get((module, str(number)), "normal")
+        state = self.sensor_condition(module, number)
         if state != "normal" and not self.sensor_alarm_allowed(module, number,
                                                                state):
             # the wire cannot say that, so the console does not either
@@ -5718,12 +5868,18 @@ class Console:
         A console prints the features it can actually serve, which is all
         three gates: the card has to be in the cage, the S-Module has to
         license it, and the software in the console has to know what it is.
+        The in-tank tests are the exception: they stay with the probe card
+        out (2026-10-09).
         """
         out = []
         for key, feats in MODULE_FEATURES.items():
             if key in ("plld", "wplld"):
                 continue                  # the line leak keys, below
-            if not self.has(key):
+            if key != "probe" and not self.has(key):
+                # ...but the in-tank tests are the software's, not the
+                # card's: cold started with no probe card in it, the bench
+                # still printed PERIODIC and ANNUAL IN-TANK TESTS and CSLD
+                # (I90200, 2026-10-09, `bench-2026-10-09-plld`)
                 continue
             out.extend(f for f in feats
                        if self.supports(FEATURE_LINE.get(f.strip())))
@@ -5781,10 +5937,11 @@ class Console:
         The SYSTEM FEATURES list a console prints is prose: 905's computer
         format is the same answer enumerated, twelve named flags each 00 or
         01, and the names are the manual's own (notes 10 to 21). They are the
-        same three gates the printed list uses, so a card pulled out of the
-        cage or a key never cut turns its flag off:
+        same gates the printed list uses, so a key never cut turns its flag
+        off:
 
-        - the two in-tank tests are the probe module, which is what runs them
+        - the two in-tank tests are the software's: the bench flagged both
+          01 cold started with no probe card in it (2026-10-09)
         - TANKER LOAD is "a key-enabled option", S513, the flag the Tanker
           Load Report itself waits for
         - the three line leak flags split a distinction this bench does not
@@ -5795,8 +5952,16 @@ class Console:
         - SPECIAL 3-TANK/LINE CONSOLE is a different console from this one
         - UNUSED WAS PMC is what it says, and reads 00 on every console
         """
-        probe = self.has("probe")
-        line = self.has("plld") or self.has("wplld")
+        # the in-tank flags too: 01 01 with no probe card in the cage, as
+        # the printed list kept its lines (i90500, 2026-10-09)
+        probe = True
+        # the line flags are the KEYS', as the printed list's line section
+        # is: the bench went on flagging PRECISION PLLD 01 with its PLLD
+        # sensor board out and no WPLLD card (i90500, 2026-10-08, cold
+        # started that way). Its PLLD power board was still in slot 9, so a
+        # gate on the controller is not ruled out; the keys are what the
+        # printed list already follows
+        line = True
         p10, p20 = self.licensed("plld010"), self.licensed("plld020")
         state = {
             "PERIODIC IN-TANK TESTS":      probe,
@@ -5843,6 +6008,17 @@ class Console:
         yours. Point them at the device the panel is on, and give them the
         label that device was programmed with.
         """
+        if text.startswith("L 1: (PRODUCT LABEL)"):
+            # a liquid sensor's head as the bench's glass drew it: `L 1:SUMP1`
+            # and `L 2:SUMP2`, the label hard against the colon, and `L 3:`
+            # alone for one nobody labelled -- not its device word, and not
+            # the guide's `L 1: (PRODUCT LABEL)` spacing (2026-10-08)
+            return f"L{device:2d}:{self.text('702', device) or ''}"
+        if text == "T 1: (PRODUCT LABEL)" and not self.text("602", device):
+            # and an unlabelled tank's alike: IN-TANK LEAK RESULT headed
+            # `T 1:` alone on the bench's glass, where this made up `T 1:
+            # TANK 1` (2026-10-08). A labelled tank's head is not read yet
+            return f"T{device:2d}:"
         if len(text) > 3 and text[1] == " " and text[3] == ":"                 and (text[2].isdigit() or text[2] in "X#"):
             # "T 1:" and "T X:" are both the manual drawing a device number,
             # and so is "T #:" -- Figure 6-11's two CSLD MONTHLY screens, which
@@ -6142,19 +6318,20 @@ class Console:
         reset. C = current ID resistor value of module in this slot." Each
         compartment is walked in turn and an empty slot reads UNUSED.
         """
+        # The bench's glass, SYSTEM CONFIGURATION stepped at its keypad on
+        # 2026-10-08 (`transcripts/menuwalk.jsonl`): ` SLOT  2 INTERSTITIAL
+        # BD` over `POR=  200934  C=  200934`, `  COMM 1 RS232 SERIAL BD`
+        # over `POR=   15029  C=   15029` -- report 102's own names and
+        # readings (`slot_readings`, so a card swapped since the cold start
+        # keeps its old name here too), the slot right in two, each reading
+        # right in eight. This drew the screen's short names, `SLOT 2 8
+        # LIQUID`, and Figure 6-2's `POR= XXXXXX C= XXXXXX`.
         out = []
-        for slot, bay, key, name in self.cage_slots():
-            por, now = (self.empty_slot_reading(bay, slot) if key is None
-                        else self.module_id_resistance(key, slot))
-            por = self.power_on_reading(f"S{slot}", key, por, bay, slot)
-            out.append((f"SLOT {slot} {name}",
-                        self.resistance_line(por, now)))
-        # The comm bay is walked by POSITION rather than by card: a dual-port
-        # module in slot 4 has an ID resistor on each half and reads as two
-        # boards here, which is what six rows across four slots are for.
-        for port in range(1, BAY_SLOTS["comm"] + 1):
-            name, por, now = self.port_reading(port)
-            out.append((f"COMM {port} {name}", self.resistance_line(por, now)))
+        for slot, _key, name, por, now in self.slot_readings():
+            where = (f" SLOT {slot:2d} " if slot > 0
+                     else f"  COMM {-slot} ")
+            out.append(((where + name)[:24],
+                        self.glass_resistance_line(int(por), int(now))))
         return out
 
     @staticmethod
@@ -6177,6 +6354,11 @@ class Console:
         if max(por, now) < 1000000:
             return f"POR= {por:6d} C= {now:6d}"
         return f"POR={por:8d} C={now:8d}"
+
+    @staticmethod
+    def glass_resistance_line(por, now):
+        """The bench's one form: `POR=  163840  C=  163840`."""
+        return f"POR={por:8d}  C={now:8d}"
 
     def port_reading(self, port, paper=False):
         """(slot-line name, at the last reset, now) for a comm position.
@@ -6308,7 +6490,7 @@ class Console:
             for key, name, _part, mbay, _wires, _most in MODULES:
                 if mbay != bay:
                     continue
-                for _ in range(self.count(key)):
+                for _ in range(self._cage_count(key)):
                     if slot >= last:
                         break            # a bay cannot hold more than it has
                     slot += 1
@@ -6336,8 +6518,9 @@ class Console:
         for key in layout.values():
             if key:
                 wanted[key] = wanted.get(key, 0) + 1
-        fitted = {key: self.count(key) for key, _n, _p, bay, _w, _m
-                  in MODULES if bay in ("is", "power") and self.count(key)}
+        fitted = {key: self._cage_count(key) for key, _n, _p, bay, _w, _m
+                  in MODULES if bay in ("is", "power")
+                  and self._cage_count(key)}
         return layout if wanted == fitted else None
 
     def _site_reading(self, where, key, por, now):
@@ -6384,6 +6567,32 @@ class Console:
             return self.empty_slot_reading(bay, slot)[0]
         return self.module_id_resistance(then, slot)[0]
 
+    def waiting_for_cold_start(self):
+        """[(slot, card at the reset, card now)] for every card-cage slot
+        whose card the console will not drive until its next cold start
+        (`count`)."""
+        return [(slot, self.reset_card(f"S{slot}", key), key)
+                for slot, _bay, key, _name in self.cage_slots()
+                if key and self.reset_card(f"S{slot}", key) != key]
+
+    def reset_card(self, where, key_now):
+        """The card a position is still NAMED for: the one fitted at the
+        last reset, where a different card has replaced it since.
+
+        The bench TLS-350 on 2026-10-08, with its PLLD sensor board swapped
+        for an interstitial board and no cold start since, printed slot 2 as
+        `PLLD SENSOR BD` and packed its type 1A, with POWER ON RESET 3895 and
+        CURRENT 201159 -- the new card's resistor in the one column that is
+        read live. After a cold start the same slot read `INTERSTITIAL BD`,
+        type 03, 200934 in both. So the name and the type are read at the
+        reset with the first column. A position that was EMPTY at the reset
+        is named for what is in it now: the WPLLD comm card fitted in comm 3
+        on 09-24 printed `WPLLD COMM BD` over 15000000."""
+        if self.reset_cage is None or key_now is None:
+            return key_now
+        then = self.reset_cage.get(where)
+        return then if then is not None else key_now
+
     def slot_readings(self):
         """[(slot, key, name, power-on reset, current)] down the whole cage.
 
@@ -6409,6 +6618,9 @@ class Console:
                         else self.module_id_resistance(key, slot))
             por = self.power_on_reading(f"S{slot}", key, por, bay, slot)
             por, now = self._site_reading(f"S{slot}", key, por, now)
+            named = self.reset_card(f"S{slot}", key)
+            if named != key:
+                name = self.slot_name(named, True)
             out.append((slot, key, name, float(por), float(now)))
         # Same again for the communication bay: its cards have ID resistances
         # too -- RS-232 15K, SiteFax 47K, MT 402K, WPLLD Comm 200K -- and the
@@ -6445,6 +6657,8 @@ class Console:
         out = f"{len(rows):02X}"
         for slot, key, _name, por, current in rows:
             number = slot if slot > 0 else 16 - slot
+            if slot > 0:
+                key = self.reset_card(f"S{slot}", key)
             out += f"{number:02X}{self.module_type(key)}"
             out += packed.hexfloat(por)
             out += packed.hexfloat(current)
@@ -7107,14 +7321,18 @@ class Console:
         if token == "software":
             # the manual draws this screen as "SOFTWARE # XXXXXX-XXX-X" over
             # "CREATED - YY.MM.DD.HH.MM", and BOTH of those are the console's
-            # own numbers, not labels
-            return (f"SOFTWARE # {s['number']}" + chr(10)
+            # own numbers, not labels. The bench's glass writes the hash
+            # against the word, as I902 prints it: `SOFTWARE# 346326-100-B`
+            # (2026-10-08)
+            return (f"SOFTWARE# {s['number']}" + chr(10)
                     + f"CREATED - {s['created']}")
         if token == "created":
             return f"CREATED - {s['created']}"
         if token == "smodule":
             # Figure 6-2 draws a colon here, where the PRINTOUT uses a hash
-            return f"S-MODULE: {s['smodule']}"
+            # -- and so does the bench's glass, `S-MODULE# 330160-012-A`
+            # (2026-10-08): the figure is the odd one out
+            return f"S-MODULE# {s['smodule']}"
         if token == "modules":
             n = sum(self.count(m) for m in self.modules)
             return f"{n} MODULES FITTED"
@@ -8618,7 +8836,17 @@ class Console:
         one = readings.sensor_value(self, module, number, state, channel=1)
         counter = self.sample_counter()
         if token == "sensor_liquid":
-            return f"CNTR = {counter} VALUE = {one:.0f}"
+            # the bench's glass, liquid sensor 1 switched on with nothing on
+            # its input (2026-10-08, read through 5FA): `CNTR= 5
+            # VALUE=1000000000`, twenty-four columns to the character -- the
+            # counter held right in two and the value in ten, no space after
+            # either `=`, where the guide draws `CNTR = X VALUE = XXXXXX`.
+            # The counter is the card's, 5 as IB01 reads it
+            from . import wiresensors
+            if self.sensor_state.get((module, str(number))) == "open":
+                one = float(wiresensors.OPEN_VALUE)
+            counter = wiresensors.MEASURED_DIAGNOSTIC["B01"][0]
+            return f"CNTR={counter:2d} VALUE={one:10.0f}"
         if token == "sensor_2wire":
             return f"CNTR = {counter} VALUE = {one:.0f}"
         if token == "sensor_groundtemp":
@@ -8631,16 +8859,18 @@ class Console:
             # probe. Fuel underground sits near the ground temperature, so
             # the tank's own reading stands in for it.
             if self.probe_gt:
-                # the card's own input, read as the bench reads it
+                # the card's own input, read as the bench reads it -- and
+                # drawn as its glass draws it, `CNTR=50 VALUE=      9822`,
+                # the liquid diagnostic's own form (2026-10-08)
                 count, _hi, _lo, _last, average = self.thermistor_row(number)
-                return f"CNTR = {count} VALUE = {average:.0f}"
+                return f"CNTR={count:2d} VALUE={average:10.0f}"
             warm = self.product_temperature(number)
             return f"CNTR = {counter} VALUE = {ground_ohms(warm):.0f}"
         two = readings.sensor_value(self, module, number, state, channel=2)
         return f"1 = {one:.0f} 2 = {two:.0f}"
 
     def _sensor_state(self, module, number):
-        state = self.sensor_state.get((module, str(number)), "normal")
+        state = self.sensor_condition(module, number)
         if state != "normal" and not self.sensor_alarm_allowed(module, number,
                                                                state):
             return "normal"
@@ -9703,10 +9933,13 @@ class Console:
     def chart_report(self, tank):
         """I63B: the chart, with the W&M block when it is secured."""
         # `T 1:` and the label twenty wide, blank for a tank nobody labelled:
-        # the bench TLS-350's I63B00 (2026-09-19, `cap_tank1on`)
-        label = self.text("602", tank) or ""
+        # the bench TLS-350's I63B00 (2026-09-19, `cap_tank1on`) -- or as
+        # many characters as a serial Set gave it: `T 1:TANKA` for
+        # `S60201TANKA` (2026-10-09, `tanksets.jsonl`)
+        label = (self.text("602", tank) or "").ljust(20)[
+            :self.label_sent.get(f"S602{tank:02d}", 20)]
         out = ["TANK 50 POINT HEIGHTS AND VOLUMES", "",
-               f"T {tank}:{label:<20.20s}", ""]
+               f"T {tank}:{label}", ""]
         capacity = self.tank_capacity.get(tank) or self.full_volume(tank)
         if self.chart_secured():
             out.append(f"TANK CAPACITY : {capacity:.0f}")
@@ -9999,7 +10232,19 @@ class Console:
         if code.startswith("S52B") and code[4:6].isdigit():
             body = self.receiver_dial.get(int(code[4:6]))
             return None if body is None else code[4:6] + body
-        return self.values.get(code)
+        held = self.values.get(code)
+        if held is None and code.startswith("S881") and code[4:6].isdigit():
+            # a port nobody has set reads its BOARD's factory settings, and
+            # the two boards differ: the bench's RS-232 port came out of its
+            # cold starts at 1200 baud, odd, one stop, seven data
+            # (`i88101` ...01200117001), its serial satellite at 9600, none,
+            # one, eight (...09600018001) -- and the glass read the same out
+            # of the cold start of 2026-10-08
+            return self.UART_FACTORY.get(self.comm_board_name(int(code[4:6])))
+        return held
+
+    #: 881's BBBBB P S D T AA for a port nobody has set, by its board
+    UART_FACTORY = {"RS-232": "01200117001", "S-SAT ": "09600018001"}
 
     def store(self, code, data):
         """Put what the panel encoded where `stored` will read it back.
@@ -10243,6 +10488,36 @@ class Console:
         body = raw[2:] if len(raw) > 2 else raw
         return body[-1:] not in ("", "0")
 
+    def liquid_setup_warnings(self):
+        """[AANNTT] SETUP DATA WARNING for the liquid sensors.
+
+        The bench's interstitial card, 2026-10-08, once its checks were
+        armed (`tank_checks_armed`: out of the cold start it posted none,
+        for any sensor, until Setup Mode had been visited):
+
+        - a sensor switched on with no LABEL warns -- L 2 cleared the moment
+          it was named, L 4 switched on unlabelled warned and switched on
+          labelled did not. Its category reads OTHER SENSORS untouched, and
+          that is not what is missing; the label is.
+        - a position switched OFF with something on its input warns, label
+          or not: L 1 and L 3, off with metered resistors on them, warned
+          until L 3's resistor came off, and L 4 to L 8, off and open, never
+          did. A position nobody has put a sensor on (`sensor_state` with no
+          entry, or "open") is open.
+        """
+        if not self.tank_checks_armed():
+            return []
+        out = []
+        for n in range(1, self.capacity("liquid") + 1):
+            wired = self.sensor_state.get(("liquid", str(n)),
+                                          "open") != "open"
+            if self._configured("701", n):
+                if not self.text("702", n):
+                    out.append("0302" + f"{n:02d}")
+            elif wired:
+                out.append("0302" + f"{n:02d}")
+        return out
+
     def tank_checks_armed(self):
         """Are a switched-on tank's no-probe checks armed? FIDELITY S35.
 
@@ -10251,8 +10526,12 @@ class Console:
         switched off -- on 2026-09-19, and again on 2026-09-24 for tank 1,
         days on from any cold start. But out of its cold start of 09-18 it
         posted neither, for all four tanks, until one of three things had
-        happened: Setup Mode left, the clock set, or midnight passed. Which one
-        is not known, so each arms them. A console loaded from a working
+        happened: Setup Mode left, the clock set, or midnight passed.
+        Out of the cold start of 2026-10-08 a VISIT to Setup Mode was enough:
+        tank 1 switched on during the visit posted nothing, and on
+        leaving Setup Mode SETUP DATA WARNING and PROBE OUT, with no clock set and
+        no midnight. Whether the clock or midnight would also arm them is
+        not known, so each still does. A console loaded from a working
         site's backup is armed, and a new one here counts as cold started."""
         if self._was_in_setup and not self.in_setup:
             self.tank_checks = True
@@ -10503,6 +10782,15 @@ class Console:
         out.extend(self.inputs.conditions())
         for (mod, num), state in sorted(self.sensor_state.items()):
             aa = SENSOR_MODULE_CATEGORY.get(mod)
+            if state == "open" or str(state).startswith(self.OHMS):
+                # nothing on the input, or a resistor: an alarm only where
+                # the sensor is switched on, which the bench's eight open
+                # inputs showed -- one alarm, for the one sensor on
+                # (2026-10-08) -- and its state read off the input by type
+                if not self._configured(self.SENSOR_CONFIG.get(mod, ""),
+                                        int(num)):
+                    continue
+                state = self.sensor_condition(mod, num)
             table = SMART_STATE_NN if mod == "smart" else SENSOR_STATE_NN
             nn = table.get(state)
             if not (nn and aa and self.has(mod)):
@@ -10609,6 +10897,11 @@ class Console:
                     out.append(aa + warn_nn + f"{number:02d}")
         return out
 
+    # each sensor family's config screen
+    SENSOR_CONFIG = {"liquid": "701", "vapor": "706", "gw": "711",
+                     "2wire": "741", "3wire": "746", "universal": "74B",
+                     "smart": "721"}
+
     # which sensor module raises which category, and what makes it complete
     SETUP_CHECK = [("liquid", "03", "701", "704"), ("vapor", "04", "706", "709"),
                    ("gw", "07", "711", "713"), ("2wire", "08", "741", "744"),
@@ -10689,6 +10982,9 @@ class Console:
                         out.append("0201" + f"{n:02d}")
         for module, aa, config, category in self.SETUP_CHECK:
             if not self.has(module):
+                continue
+            if module == "liquid":
+                out += self.liquid_setup_warnings()
                 continue
             for n in range(1, self.capacity(module) + 1):
                 if self._configured(config, n) and not self.text(category, n):
@@ -11102,6 +11398,9 @@ class Console:
         for record in records:
             row = {"aa": record[:2], "nn": record[2:4], "tt": record[4:6],
                    "at": when, "state": state}
+            reading = self.alarm_reading(row)
+            if reading is not None:
+                row["reading"] = reading
             self.alarm_log.insert(0, row)
             self.keep_device_history(row)
         kept, out = {True: 0, False: 0}, []
@@ -11186,7 +11485,7 @@ class Console:
         if numbers is not None:
             return record["nn"] not in numbers
         described = describe_alarms([record["aa"] + record["nn"]
-                                     + record["tt"]])
+                                     + record["tt"]], self)
         if not described:
             return False
         return "WARNING" not in described[0]["description"].upper()
@@ -11627,13 +11926,45 @@ class Console:
     # number is, is not known: it does not follow the units (cap_metric sent
     # the same bytes), nor the tank, nor the minute. Types never seen take
     # the tank warnings' 1.875. FIDELITY S38.
+    # 121's last eight characters are not a float: they are the high word
+    # of a DOUBLE, the device's reading when the alarm came, printed as a
+    # %8X would print it -- a liquid sensor's alarm on 1,009 ohms packed
+    # 408F7FDD (1008), on 100,455 ohms 40F88547 (100436), on an open input
+    # 41CDCD65 (1,000,000,000, what IB01 reads), and a word of zero as
+    # `       0`, spaces and all (2026-10-09, `bench-2026-10-09/float121`).
+    # What each other alarm's word measures is not known, so these are as
+    # read: PAPER OUT 3.0, a tank's SETUP DATA WARNING and PROBE OUT 1.0,
+    # PLLD OPEN ALARM -26287.
     ALARM_121_FLOAT = {
-        "0101": "40080000",     # PAPER OUT, 2.125 (2026-09-18)
-        "0201": "3FF00000",     # SETUP DATA WARNING, 1.875 (2026-09-25)
-        "0209": "3FF00000",     # PROBE OUT, 1.875 (2026-09-24/25)
+        "0101": "40080000",     # PAPER OUT, 3.0 (2026-09-18)
+        "0201": "3FF00000",     # SETUP DATA WARNING, 1.0 (2026-09-25)
+        "0209": "3FF00000",     # PROBE OUT, 1.0 (2026-09-24/25)
         "2101": "3FF00000",     # PLLD SETUP DATA WARNING (2026-09-25)
-        "2106": "C0D9ABCB",     # PLLD OPEN ALARM, -6.80 (2026-09-18)
+        "2106": "C0D9ABCB",     # PLLD OPEN ALARM, -26287 (2026-09-18)
     }
+
+    def alarm_reading(self, row):
+        """What a liquid sensor's input read as its alarm came, for 121.
+
+        The reading IB01 gives, 1,000,000,000 for an open input. A SETUP
+        DATA WARNING on a sensor with no label packed a word of 0 on both
+        sensors it was raised on; the labelled ones packed their reading
+        (2026-10-09). Other categories keep `ALARM_121_FLOAT`: None."""
+        if row["aa"] != "03" or not row["tt"].isdigit():
+            return None
+        number = int(row["tt"])
+        if row["nn"] == "02" and not self.device_label(row).strip():
+            return 0.0
+        state = self._sensor_state("liquid", number)
+        return float(readings.sensor_value(self, "liquid", number, state,
+                                           channel=1))
+
+    @staticmethod
+    def high_word(value):
+        """A double's top four bytes as the console prints them, %8X."""
+        import struct
+        word = struct.unpack(">Q", struct.pack(">d", value))[0] >> 32
+        return f"{word:8X}"
 
     def alarm_121_records(self):
         """121's packed form, a record of its own and not 113's.
@@ -11656,11 +11987,20 @@ class Console:
                 + [r for r in live if not self.priority(r)])
         digit = str(int(_units.system(self)) - 1)
         out = self.station_header_field() + digit
+        logged = {}
+        for e in self.alarm_log:
+            logged.setdefault(e["aa"] + e["nn"] + e["tt"], e)
         for i, r in enumerate(live, 1):
             label = self.device_label(r)[:20]
             label = f"{label:>20s}" if r["aa"] == "02" else f"{label:<20s}"
-            out += (f"{i:02d}" + r["at"] + r["key"] + label
-                    + self.ALARM_121_FLOAT.get(r["aa"] + r["nn"], "3FF00000"))
+            reading = logged.get(r["key"], {}).get("reading")
+            # a saved state's row is only as good as the file it came from
+            ok = (isinstance(reading, (int, float))
+                  and not isinstance(reading, bool) and math.isfinite(reading))
+            word = (self.high_word(reading) if ok
+                    else self.ALARM_121_FLOAT.get(r["aa"] + r["nn"],
+                                                  "3FF00000"))
+            out += f"{i:02d}" + r["at"] + r["key"] + label + word
         # and none at all is an index of 00, `000` with the units digit
         return out if live else out + "00"
 
@@ -11762,7 +12102,7 @@ class Console:
         rows = [title, head]
         for record in records:
             described = describe_alarms([record["aa"] + record["nn"]
-                                         + record["tt"]])
+                                         + record["tt"]], self)
             if not described:
                 continue
             cell = None
@@ -11853,7 +12193,7 @@ class Console:
             if bool(self.priority(record)) != bool(priority):
                 continue
             described = describe_alarms([record["aa"] + record["nn"]
-                                         + record["tt"]])
+                                         + record["tt"]], self)
             if not described:
                 continue
             # "W 3 OTHER SPECIAL WPLLD SHUTDOWN ALM CLEAR": the category is
@@ -11883,6 +12223,14 @@ class Console:
     SENSOR_CATEGORY = {"0": "OTHER", "1": "ANNULAR", "2": "DISPENSER PAN",
                        "3": "MONITOR WELL", "4": "STP SUMP",
                        "5": "PIPING SUMP"}
+    # ...which is not how the category SETTINGS number them. 704, 713, 744
+    # and 749 store 1 for OTHER SENSORS up to 6 for PIPING SUMP, and this
+    # read the store through i11100's table, so every liquid sensor alarm
+    # was filed one category up: the bench's sensor 1, OTHER SENSORS, filed
+    # `L 1 OTHER` in I11100 where this printed `L 1 ANNULAR` (2026-10-08).
+    STORED_CATEGORY = {"1": "OTHER", "2": "ANNULAR", "3": "DISPENSER PAN",
+                       "4": "MONITOR WELL", "5": "STP SUMP",
+                       "6": "PIPING SUMP"}
 
     # which S-function holds the label and the category, per alarm category
     ALARM_DEVICE = {"02": ("602", None), "03": ("702", "704"),
@@ -11908,7 +12256,9 @@ class Console:
             return "OTHER"
         number = int(record["tt"]) if record["tt"].isdigit() else 0
         raw = (self.values.get(f"S{category}{number:02d}") or "").strip()
-        return self.SENSOR_CATEGORY.get(raw[-1:], "OTHER")
+        table = (self.SENSOR_CATEGORY if category == "724"
+                 else self.STORED_CATEGORY)
+        return table.get(raw[-1:], "OTHER")
 
     def device_label(self, record):
         """The DESCRIPTION column: what the site called the device."""
@@ -11999,8 +12349,9 @@ class Console:
         return len(shown), len(live), len(gone)
 
 
-def describe_alarms(records):
-    """AANNTT -> readable text, using the console's own tables."""
+def describe_alarms(records, console=None):
+    """AANNTT -> readable text, using the console's own tables -- and, given
+    the console, its custom alarm labels (`customalarms.label_for`)."""
     out = []
     s = "".join(records)
     for i in range(0, len(s) - len(s) % 6, 6):
@@ -12009,6 +12360,9 @@ def describe_alarms(records):
             continue
         cat = STATUS_CATEGORIES.get(aa, f"Category {aa}")
         desc = (STATUS_TYPES.get(aa) or {}).get(nn, f"Alarm type {nn}")
+        if console is not None:
+            from . import customalarms
+            desc = customalarms.label_for(console, aa, nn, tt) or desc
         word = STATUS_DEVICE_WORD.get(aa)
         try:
             n = int(tt)

@@ -331,6 +331,11 @@ def open_gate(c, cond, device=DEVICE):
         open_gate(c, also, device)
     if cond.get("chart_secured"):
         c.set_chart_code("123456")
+    if cond.get("hrm"):
+        # SW2-3 closed, which is HRM on an international console
+        c.display_blanked = True
+    if cond.get("probe_reports"):
+        c.tank_level.setdefault(device, {"volume": 2500.0, "water": 0.0})
     if cond.get("meter_events") or cond.get("last_event"):
         # "If there is data in Meter Events Table, you see" -- so there has
         # to be data in it before that screen exists to be walked. See

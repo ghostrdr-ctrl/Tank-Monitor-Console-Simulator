@@ -23,7 +23,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 211,
-   "seen": "x 1:"
+   "seen": "# 1:"
   },
   "# #: #": {
    "how": "exact",
@@ -162,12 +162,6 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 149,
    "seen": "2\" PIPING LENGTH: 000"
-  },
-  "##:": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 38,
-   "seen": "#1:"
   },
   "##: ALARM HISTORY": {
    "how": "exact",
@@ -463,11 +457,221 @@
    "page": 61,
    "seen": "ALL VAC SENSORS"
   },
+  "ALL: ANN TST NEEDED ALM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: ANN TST NEEDED ALM"
+  },
+  "ALL: ANN TST NEEDED WRN": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: ANN TST NEEDED WRN"
+  },
+  "ALL: ANNUAL LINE FAIL": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: ANNUAL LINE FAIL"
+  },
+  "ALL: BATTERY IS OFF": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: BATTERY IS OFF"
+  },
+  "ALL: CLOCK IS INCORRECT": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: CLOCK IS INCORRECT"
+  },
+  "ALL: CONT HANDLE ALRM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: CONT HANDLE ALRM"
+  },
+  "ALL: FUEL ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: FUEL ALARM"
+  },
+  "ALL: FUEL OUT": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: FUEL OUT"
+  },
+  "ALL: GROSS LINE FAIL": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: GROSS LINE FAIL"
+  },
+  "ALL: HIGH LIQUID ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: HIGH LIQUID ALARM"
+  },
+  "ALL: LN EQUIP FAULT ALM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: LN EQUIP FAULT ALM"
+  },
+  "ALL: LOW LIQUID ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: LOW LIQUID ALARM"
+  },
+  "ALL: LOW PRESSURE ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: LOW PRESSURE ALARM"
+  },
+  "ALL: PAPER OUT": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PAPER OUT"
+  },
+  "ALL: PC(H#) REVISION WAR": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PC(H8) REVISION WAR"
+  },
+  "ALL: PER TST NEEDED ALM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PER TST NEEDED ALM"
+  },
+  "ALL: PER TST NEEDED WRN": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PER TST NEEDED WRN"
+  },
+  "ALL: PERIOD LINE FAIL": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PERIOD LINE FAIL"
+  },
+  "ALL: PLLD OPEN ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PLLD OPEN ALARM"
+  },
+  "ALL: PLLD SHUTDOWN ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PLLD SHUTDOWN ALARM"
+  },
+  "ALL: PRINTER ERROR": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: PRINTER ERROR"
+  },
+  "ALL: ROM REVISION WARNIN": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: ROM REVISION WARNIN"
+  },
+  "ALL: SENSOR OUT ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SENSOR OUT ALARM"
+  },
+  "ALL: SETUP DATA WARNING": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SETUP DATA WARNING"
+  },
+  "ALL: SHORT ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SHORT ALARM"
+  },
+  "ALL: SOFTWARE MODULE WAR": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SOFTWARE MODULE WAR"
+  },
+  "ALL: SYS SECURITY WARNIN": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SYS SECURITY WARNIN"
+  },
+  "ALL: SYSTEM SELF TEST AL": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: SYSTEM SELF TEST AL"
+  },
+  "ALL: TANK TEST SHUTDOWN": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: TANK TEST SHUTDOWN"
+  },
+  "ALL: TOO MANY TANKS": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: TOO MANY TANKS"
+  },
+  "ALL: WATER ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: WATER ALARM"
+  },
+  "ALL: WATER OUT ALARM": {
+   "how": "label",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 61,
+   "seen": "ALL: WATER OUT ALARM"
+  },
   "ALM UPGRADE DELAY: #": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 208,
    "seen": "ALM UPGRADE DELAY: 0000"
+  },
+  "ANN LN FAIL:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "ANN LN FAIL:NO LINES"
+  },
+  "ANN NEED AL:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "ANN NEED AL:NO LINES"
+  },
+  "ANN NEED WN:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "ANN NEED WN:NO LINES"
   },
   "ANN TEST AVERAGING: OFF": {
    "how": "exact",
@@ -823,23 +1027,23 @@
    "page": 19,
    "seen": "BALANCE"
   },
-  "BAUD RATE: #": {
-   "how": "exact",
+  "BATTERY OFF:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "BATTERY OFF:NO"
+  },
+  "BAUD RATE : #": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 66,
-   "seen": "BAUD RATE: 1200"
+   "page": 220,
+   "seen": " BAUD RATE  : 1200"
   },
   "BDIM TRANS ALARM DELAY": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 22,
    "seen": "BDIM TRANS ALARM DELAY"
-  },
-  "BEEPER": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 63,
-   "seen": "BEEPER"
   },
   "BEGIN INVENTORY: #": {
    "how": "exact",
@@ -973,6 +1177,12 @@
    "page": 51,
    "seen": "CALIBRATE SMARTSENSOR"
   },
+  "CATEGORY : OTHER SENSORS": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 175,
+   "seen": "CATEGORY : OTHER SENSORS"
+  },
   "CATEGORY: OTHER SENSORS": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -1073,7 +1283,13 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 52,
-   "seen": "CNTR = 0 VALUE = 115243"
+   "seen": "CNTR = 0 VALUE = 4376"
+  },
+  "CNTR= # VALUE= #": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "CNTR= 5 VALUE=    115243"
   },
   "CODE : #": {
    "how": "exact",
@@ -1081,23 +1297,17 @@
    "page": 53,
    "seen": "CODE : 000000"
   },
+  "CODE : DISABLED": {
+   "how": "label",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 53,
+   "seen": "CODE : DISABLED"
+  },
   "CODE:": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 152,
    "seen": "CODE:"
-  },
-  "CODE: #": {
-   "how": "exact",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 152,
-   "seen": "CODE: 000000"
-  },
-  "CODE: DISABLED": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 68,
-   "seen": "CODE: DISABLED"
   },
   "COLLECTIION TESTS": {
    "how": "exact",
@@ -1135,83 +1345,89 @@
    "page": 39,
    "seen": "COMM 1 (UNUSED)"
   },
-  "COMM # EDIM": {
+  "COMM # ELEC DISP INT.": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 2 EDIM"
+   "seen": "  COMM 2 ELEC DISP INT."
+  },
+  "COMM # FAXMODEM BOARD": {
+   "how": "cage",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": "  COMM 2 FAXMODEM  BOARD"
   },
   "COMM # MT COMM": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 3 MT COMM"
+   "seen": "  COMM 3 MT COMM"
   },
   "COMM # REMOTE PRINT": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 3 REMOTE PRINT"
+   "seen": "  COMM 3 REMOTE PRINT"
+  },
+  "COMM # RS# SERIAL BD": {
+   "how": "cage",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": "  COMM 1 RS232 SERIAL BD"
   },
   "COMM # RS-#": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 1 RS-232"
+   "seen": "  COMM 5 RS-485"
   },
-  "COMM # S-SAT COMM": {
+  "COMM # SERIAL SAT BD": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 1 S-SAT COMM"
-  },
-  "COMM # SITEFAX": {
-   "how": "cage",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "COMM 2 SITEFAX"
+   "seen": "  COMM 1 SERIAL SAT BD"
   },
   "COMM # UNUSED": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 4 UNUSED"
+   "seen": "  COMM 4 UNUSED"
   },
   "COMM # VMCI": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 5 VMCI"
+   "seen": "  COMM 5 VMCI"
   },
-  "COMM # WPLLD COMM": {
+  "COMM # WPLLD COMM BD": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "COMM 1 WPLLD COMM"
+   "seen": "  COMM 1 WPLLD COMM BD"
+  },
+  "COMM BOARD : # (RS-#)": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 469,
+   "seen": "COMM BOARD  : 1 (RS-232)"
+  },
+  "COMM BOARD : # (S-SAT)": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 469,
+   "seen": "COMM BOARD  : 1 (S-SAT )"
+  },
+  "COMM BOARD : # (UNUSED)": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 469,
+   "seen": "COMM BOARD  : 1 (UNUSED)"
   },
   "COMM BOARD RE-INITIALIZE": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
    "seen": "COMM BOARD RE-INITIALIZE"
-  },
-  "COMM BOARD: # (RS-#)": {
-   "how": "exact",
-   "manual": "577013-800_RevP_ISD_ISO",
-   "page": 43,
-   "seen": "COMM BOARD: 1 (RS-232)"
-  },
-  "COMM BOARD: # (S-SAT)": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 69,
-   "seen": "COMM BOARD: 1 (S-SAT )"
-  },
-  "COMM BOARD: # (UNUSED)": {
-   "how": "label",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 66,
-   "seen": "COMM BOARD: 1 (UNUSED)"
   },
   "COMM BOARD: # S-LINK": {
    "how": "exact",
@@ -1393,11 +1609,11 @@
    "page": 67,
    "seen": "CURRENT: CLOSED"
   },
-  "CUSTOM ALARM LABELS": {
+  "CUSTOM ALARMS": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 53,
-   "seen": "CUSTOM ALARM LABELS"
+   "page": 22,
+   "seen": "CUSTOM ALARMS"
   },
   "D #: ALARM HISTORY": {
    "how": "exact",
@@ -1445,7 +1661,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 67,
-   "seen": "DATA LENGTH: 7 DATA"
+   "seen": " DATA LENGTH: 7 DATA"
   },
   "DATE:": {
    "how": "label",
@@ -1459,11 +1675,11 @@
    "page": 37,
    "seen": "DATE: 06/15/2026"
   },
-  "DAYLIGHT SAVINGS TIME": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 50,
-   "seen": "DAYLIGHT SAVINGS TIME"
+  "DAYLIGHT SAVING TIME": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 180,
+   "seen": "DAYLIGHT SAVING TIME"
   },
   "DAYS = #": {
    "how": "exact",
@@ -1513,17 +1729,17 @@
    "page": 12,
    "seen": "DELIVERY = 0 GALS"
   },
-  "DELIVERY DELAY: #": {
-   "how": "exact",
+  "DELIVERY DELAY : #": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 117,
-   "seen": "DELIVERY DELAY: 01"
+   "page": 221,
+   "seen": "DELIVERY DELAY  : 01"
   },
-  "DELIVERY LIMIT: #%": {
-   "how": "exact",
+  "DELIVERY LIMIT : #%": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 108,
-   "seen": "DELIVERY LIMIT: 000%"
+   "page": 220,
+   "seen": "DELIVERY LIMIT  : 000%"
   },
   "DELIVERY MAINTENANCE": {
    "how": "exact",
@@ -1637,7 +1853,7 @@
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 69,
-   "seen": "DTR NORMAL STATE: HIGH"
+   "seen": " DTR NORMAL STATE: HIGH"
   },
   "DURATION: #": {
    "how": "exact",
@@ -1777,11 +1993,11 @@
    "page": 24,
    "seen": "ENTER PIPE LABEL"
   },
-  "ENTER PRODUCT LABEL": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 93,
-   "seen": "ENTER PRODUCT LABEL"
+  "ENTER PRODUCT LABEL:": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "ENTER PRODUCT LABEL:"
   },
   "ENTER PUMP MONITOR LABEL": {
    "how": "exact",
@@ -1975,6 +2191,12 @@
    "page": 41,
    "seen": "FP: ff h:HH nnnnnnnnnnn"
   },
+  "FUEL : NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "FUEL      : NO SENSORS"
+  },
   "FUEL COUNTER: #": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -2023,29 +2245,35 @@
    "page": 127,
    "seen": "FUEL MGT AUTO PRINT"
   },
+  "FUEL OUT :NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "FUEL OUT   :NO LINES"
+  },
   "FUEL TYPE: GASOLINE": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 149,
    "seen": "FUEL TYPE: GASOLINE"
   },
-  "FULL VOL: #": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 97,
-   "seen": "FULL VOL: 000000"
+  "FULL VOL : #": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "       FULL VOL : 000000"
+  },
+  "G #:": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 70,
+   "seen": "g 1:"
   },
   "G #: ALARM HISTORY": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 56,
    "seen": "G 1: ALARM HISTORY"
-  },
-  "G #: GRND TEMP #": {
-   "how": "label",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 70,
-   "seen": "g 1: GRND TEMP 1"
   },
   "G #: GRND WATER #": {
    "how": "label",
@@ -2083,17 +2311,23 @@
    "page": 46,
    "seen": "GROSS CHANGE: 0"
   },
+  "GROSS FAIL :NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "GROSS FAIL :NO LINES"
+  },
   "GROSS TEST: ALL TANK": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 124,
    "seen": "GROSS TEST: ALL TANK"
   },
-  "GROUND TEMP DIAGNOSTIC": {
-   "how": "suffix",
-   "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
-   "page": 13,
-   "seen": "GROUND TEMP DIAGNOSTIC"
+  "GROUNDTEMP DIAGNOSTIC": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 55,
+   "seen": "GROUNDTEMP DIAGNOSTIC"
   },
   "GROUNDWATER ALMS: NO": {
    "how": "exact",
@@ -2173,6 +2407,12 @@
    "page": 21,
    "seen": "H-PROTOCOL DATA FORMAT"
   },
+  "HANDLE ALRM:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "HANDLE ALRM:NO LINES"
+  },
   "HC SENSOR #%": {
    "how": "exact",
    "manual": "577013-819_RevF_ISD_TSG",
@@ -2197,11 +2437,17 @@
    "page": 32,
    "seen": "HEIGHT = 28.61 INCHES"
   },
-  "HIGH PRODUCT: #%": {
-   "how": "exact",
+  "HIGH LIQUID:NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "HIGH LIQUID:NO SENSORS"
+  },
+  "HIGH PRODUCT : #%": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 108,
-   "seen": "HIGH PRODUCT: 000%"
+   "page": 220,
+   "seen": "HIGH PRODUCT    : 000%"
   },
   "HIGH PRODUCT: %FULL": {
    "how": "label",
@@ -2461,11 +2707,77 @@
    "page": 42,
    "seen": "J SMYTHE          A12345"
   },
+  "L # FUEL : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 FUEL      :  NO"
+  },
+  "L # HIGH LIQUID: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 HIGH LIQUID: NO"
+  },
+  "L # LOW LIQUID: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 LOW LIQUID:  NO"
+  },
+  "L # OPEN : NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 OPEN      :  NO"
+  },
+  "L # SETUP WARN : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 SETUP WARN : NO"
+  },
+  "L # SHORT : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 SHORT     :  NO"
+  },
+  "L # WATER : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 WATER     :  NO"
+  },
+  "L # WATER OUT : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "L 1 WATER OUT :  NO"
+  },
+  "L #:": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1:"
+  },
   "L #: ALARM HISTORY": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 56,
    "seen": "L 1: ALARM HISTORY"
+  },
+  "L #: FUEL ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: FUEL ALARM"
+  },
+  "L #: HIGH LIQUID ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: HIGH LIQUID ALARM"
   },
   "L #: LIQUID SENSOR #": {
    "how": "label",
@@ -2473,17 +2785,47 @@
    "page": 148,
    "seen": "L 1: LIQUID SENSOR 1"
   },
-  "L#:": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 174,
-   "seen": "L1:"
+  "L #: LOW LIQUID ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: LOW LIQUID ALARM"
   },
-  "L#: ENTER SENSOR TYPE": {
+  "L #: SENSOR OUT ALARM": {
    "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 174,
-   "seen": "L1: ENTER SENSOR TYPE"
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: SENSOR OUT ALARM"
+  },
+  "L #: SETUP DATA WARNING": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: SETUP DATA WARNING"
+  },
+  "L #: SHORT ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: SHORT ALARM"
+  },
+  "L #: WATER ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: WATER ALARM"
+  },
+  "L #: WATER OUT ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1: WATER OUT ALARM"
+  },
+  "L #:ENTER SENSOR TYPE": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 148,
+   "seen": "L 1:ENTER SENSOR TYPE"
   },
   "LABEL:": {
    "how": "label",
@@ -2557,23 +2899,23 @@
    "page": 152,
    "seen": "LBL:"
   },
-  "LEAK ALARM LIMIT: #": {
-   "how": "exact",
+  "LEAK ALARM LIMIT:#": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 109,
-   "seen": "LEAK ALARM LIMIT: 99"
+   "seen": "LEAK ALARM LIMIT:0099"
   },
-  "LEAK MIN ANNUAL: #%": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 113,
-   "seen": "LEAK MIN ANNUAL: 000%"
+  "LEAK MIN ANNUAL : #%": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "LEAK MIN ANNUAL : 000%"
   },
-  "LEAK MIN PERIODIC: #%": {
-   "how": "exact",
+  "LEAK MIN PERIODIC:#%": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 112,
-   "seen": "LEAK MIN PERIODIC: 000%"
+   "seen": "LEAK MIN PERIODIC:000%"
   },
   "LEAK RATE = -# GAL/HR": {
    "how": "exact",
@@ -2701,6 +3043,12 @@
    "page": 52,
    "seen": "LIQUID DIAGNOSTIC"
   },
+  "LIQUID SENSOR ALMS": {
+   "how": "prefix",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 82,
+   "seen": "LIQUID SENSOR ALMS"
+  },
   "LIQUID SENSOR ALMS: NO": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -2719,11 +3067,23 @@
    "page": 22,
    "seen": "LIQUID STATUS"
   },
+  "LN EQ FAULT:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "LN EQ FAULT:NO LINES"
+  },
   "LO # HI #": {
    "how": "exact",
    "manual": "577013-344_RevH_PLLD_WPLLD_Troubleshooting",
    "page": 26,
    "seen": "LO  2902.30 HI   444.80"
+  },
+  "LO PRES ALM:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "LO PRES ALM:NO LINES"
   },
   "LOAD: #%": {
    "how": "exact",
@@ -2737,6 +3097,12 @@
    "page": 159,
    "seen": "LOCKOUT SCHEDULE"
   },
+  "LOW LIQUID: NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "LOW LIQUID: NO SENSORS"
+  },
   "LOW PRESSURE SHUTOFF: NO": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -2749,11 +3115,11 @@
    "page": 134,
    "seen": "LOW PRESSURE: 00"
   },
-  "LOW PRODUCT: #": {
-   "how": "exact",
+  "LOW PRODUCT :#": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 108,
-   "seen": "LOW PRODUCT: 000000"
+   "page": 6,
+   "seen": "LOW PRODUCT     :0000000"
   },
   "LOW PRODUCT: %FULL": {
    "how": "label",
@@ -3109,6 +3475,18 @@
    "page": 76,
    "seen": "ON DATE"
   },
+  "OPEN : NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "OPEN      : NO SENSORS"
+  },
+  "OPEN ALARM :NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "OPEN ALARM :NO LINES"
+  },
   "OPENING TIME: # #": {
    "how": "printed",
    "manual": "576013-635_RevAA_SerialInterfaceManual",
@@ -3145,11 +3523,11 @@
    "page": 20,
    "seen": "OUTPUT RELAY SETUP"
   },
-  "OVERFILL LIMIT: #%": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 107,
-   "seen": "OVERFILL LIMIT: 000%"
+  "OVERFILL LIMIT : #%": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "OVERFILL LIMIT  : 000%"
   },
   "OVERFILL: %FULL": {
    "how": "table",
@@ -3229,11 +3607,23 @@
    "page": 47,
    "seen": "PAGE EJECT DISABLED"
   },
-  "PARITY: NONE": {
-   "how": "label",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 67,
-   "seen": "PARITY: NONE"
+  "PAPER OUT :NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "PAPER OUT  :NO"
+  },
+  "PARITY : NONE": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 469,
+   "seen": " PARITY     : NONE"
+  },
+  "PARITY : ODD": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 469,
+   "seen": " PARITY     : ODD"
   },
   "PASS LINE TEST": {
    "how": "exact",
@@ -3283,11 +3673,29 @@
    "page": 39,
    "seen": "PC SWARE# 330269-002-B"
   },
+  "PC(H#) REV :NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "PC(H8) REV :NO"
+  },
   "PD = #%": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 122,
    "seen": "Pd = 95%"
+  },
+  "PER NEED AL:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "PER NEED AL:NO LINES"
+  },
+  "PER NEED WN:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "PER NEED WN:NO LINES"
   },
   "PER TEST AVERAGING: OFF": {
    "how": "exact",
@@ -3300,6 +3708,12 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 48,
    "seen": "PER: NO TEST DATA AVAILA"
+  },
+  "PERIOD FAIL:NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "PERIOD FAIL:NO LINES"
   },
   "PERIODIC BOOK VAR RPTS": {
    "how": "exact",
@@ -3359,13 +3773,19 @@
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "POR=   2058 C=   2061"
+   "seen": "POR=    2058  C=    2061"
   },
   "POR=# C=#": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "POR=15000000 C=15000000"
+   "seen": "POR=15000000  C=15000000"
+  },
+  "PORT SETTINGS": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 66,
+   "seen": "PORT SETTINGS"
   },
   "POS REJECTS: #": {
    "how": "exact",
@@ -3469,6 +3889,12 @@
    "page": 23,
    "seen": "PRESSURE LINE LABEL"
   },
+  "PRESSURE LINE LEAK": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 32,
+   "seen": "PRESSURE LINE LEAK"
+  },
   "PRESSURE LINE LEAK DIAG": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
@@ -3559,11 +3985,17 @@
    "page": 47,
    "seen": "PRINT TC VOLUMES"
   },
-  "PROBE OFFSET: +#": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 111,
-   "seen": "PROBE OFFSET: +0000.00"
+  "PRINTER ERR:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "PRINTER ERR:NO"
+  },
+  "PROBE OFFSET :+#": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "PROBE OFFSET   :+0000.00"
   },
   "PROCESSOR STATUS TEST": {
    "how": "exact",
@@ -3583,11 +4015,11 @@
    "page": 102,
    "seen": "PROD 1:REGULAR UNLEADED"
   },
-  "PRODUCT CODE:": {
-   "how": "label",
+  "PRODUCT CODE : #": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 93,
-   "seen": "PRODUCT CODE:"
+   "page": 6,
+   "seen": "PRODUCT CODE    : 1"
   },
   "PRV CSLD MONTHLY <PRINT>": {
    "how": "exact",
@@ -3667,11 +4099,11 @@
    "page": 20,
    "seen": "PUMP SENSOR SETUP"
   },
-  "PUMP THRESHOLD : #": {
-   "how": "exact",
+  "PUMP THRESHOLD : #%": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 117,
-   "seen": "PUMP THRESHOLD : 10.00"
+   "seen": "PUMP THRESHOLD  : 10.00%"
   },
   "PUMPSENS CONFIG: MODULE#": {
    "how": "exact",
@@ -3691,17 +4123,167 @@
    "page": 81,
    "seen": "PUSH ALARM/TEST KEY"
   },
+  "Q # ANN LN FAIL: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 ANN LN FAIL: NO"
+  },
+  "Q # ANN NEED AL: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 ANN NEED AL: NO"
+  },
+  "Q # ANN NEED WN: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 ANN NEED WN: NO"
+  },
+  "Q # FUEL OUT : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 FUEL OUT   : NO"
+  },
+  "Q # GROSS FAIL : NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 GROSS FAIL : NO"
+  },
+  "Q # HANDLE ALRM: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 HANDLE ALRM: NO"
+  },
+  "Q # LN EQ FAULT: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 LN EQ FAULT: NO"
+  },
+  "Q # LO PRES ALM: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 LO PRES ALM: NO"
+  },
+  "Q # OPEN ALARM : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 OPEN ALARM : NO"
+  },
+  "Q # PER NEED AL: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 PER NEED AL: NO"
+  },
+  "Q # PER NEED WN: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 PER NEED WN: NO"
+  },
+  "Q # PERIOD FAIL: NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 PERIOD FAIL: NO"
+  },
+  "Q # SETUP WARN : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 SETUP WARN : NO"
+  },
+  "Q # SHUTDOWN : NO": {
+   "how": "photographed",
+   "manual": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "Q 1 SHUTDOWN  :  NO"
+  },
   "Q #: ALARM HISTORY": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 56,
    "seen": "Q 1: ALARM HISTORY"
   },
+  "Q #: ANN TST NEEDED ALM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: ANN TST NEEDED ALM"
+  },
+  "Q #: ANN TST NEEDED WRN": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: ANN TST NEEDED WRN"
+  },
+  "Q #: ANNUAL LINE FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: ANNUAL LINE FAIL"
+  },
   "Q #: BLEND PARTNERS": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 139,
    "seen": "Q 1: BLEND PARTNERS"
+  },
+  "Q #: CONT HANDLE ALRM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: CONT HANDLE ALRM"
+  },
+  "Q #: FUEL OUT": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: FUEL OUT"
+  },
+  "Q #: GROSS LINE FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: GROSS LINE FAIL"
+  },
+  "Q #: LN EQUIP FAULT ALM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: LN EQUIP FAULT ALM"
+  },
+  "Q #: LOW PRESSURE ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: LOW PRESSURE ALARM"
+  },
+  "Q #: PER TST NEEDED ALM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: PER TST NEEDED ALM"
+  },
+  "Q #: PER TST NEEDED WRN": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: PER TST NEEDED WRN"
+  },
+  "Q #: PERIOD LINE FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: PERIOD LINE FAIL"
   },
   "Q #: PLLD ##": {
    "how": "exact",
@@ -3721,6 +4303,18 @@
    "page": 52,
    "seen": "Q 1: PLLD NUMBER 1"
   },
+  "Q #: PLLD OPEN ALARM": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: PLLD OPEN ALARM"
+  },
+  "Q #: PLLD SHUTDOWN ALAR": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: PLLD SHUTDOWN ALAR"
+  },
   "Q #: PSI PUMP OFF": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -3732,6 +4326,12 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 51,
    "seen": "Q 1: RELAY (IN): ON"
+  },
+  "Q #: SETUP DATA WARNING": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 51,
+   "seen": "Q 1: SETUP DATA WARNING"
   },
   "Q #: SNS CNTS #": {
    "how": "exact",
@@ -4027,6 +4627,12 @@
    "page": 213,
    "seen": "RESTORE SETUP DATA: NO"
   },
+  "ROM REV WRN:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "ROM REV WRN:NO"
+  },
   "ROM=PASS RAM=PASS": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
@@ -4189,11 +4795,11 @@
    "page": 136,
    "seen": "S1: SWITCHOVER VOLUME"
   },
-  "S-MODULE: #": {
+  "S-MODULE# #": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "S-MODULE: 330160-119-A"
+   "page": 11,
+   "seen": "S-MODULE# 330160-119-A"
   },
   "S/N :": {
    "how": "label",
@@ -4393,11 +4999,23 @@
    "page": 41,
    "seen": "SETUP TEST"
   },
-  "SHIFT ## START TIME": {
-   "how": "exact",
+  "SETUP WARN :NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "SETUP WARN :NO LINES"
+  },
+  "SETUP WARN :NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "SETUP WARN :NO SENSORS"
+  },
+  "SHIFT ## START TIME :": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 38,
-   "seen": "SHIFT #1 START TIME"
+   "page": 21,
+   "seen": "SHIFT #1 START TIME :"
   },
   "SHIFT BIR PRINTOUTS": {
    "how": "exact",
@@ -4410,6 +5028,18 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 100,
    "seen": "SHIFT CLOSE NOW: NO"
+  },
+  "SHORT : NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "SHORT     : NO SENSORS"
+  },
+  "SHUTDOWN : NO LINES": {
+   "how": "printed",
+   "manual": "576013-635_RevAA_SerialInterfaceManual",
+   "page": 357,
+   "seen": "SHUTDOWN  : NO LINES"
   },
   "SHUTDOWN RATE: # GPH": {
    "how": "exact",
@@ -4439,97 +5069,109 @@
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 4 5 GRND WATER"
+   "seen": " SLOT  4 5 GRND WATER"
   },
   "SLOT # # IN/# RELAY": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 11 2 IN/2 RELAY"
-  },
-  "SLOT # # LIQUID": {
-   "how": "cage",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "SLOT 2 8 LIQUID"
-  },
-  "SLOT # # PLLD SENSOR": {
-   "how": "cage",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "SLOT 8 6 PLLD SENSOR"
+   "seen": " SLOT 11 2 IN/2 RELAY"
   },
   "SLOT # # PROBE": {
    "how": "prefix",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 1 4 PROBE"
+   "seen": " SLOT  1 4 PROBE"
   },
   "SLOT # # PUMP SENSE": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 13 4 PUMP SENSE"
+   "seen": " SLOT 13 4 PUMP SENSE"
   },
   "SLOT # # RELAY": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 12 4 RELAY"
+   "seen": " SLOT 12 4 RELAY"
   },
   "SLOT # # SMART": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 7 8 SMART"
+   "seen": " SLOT  7 8 SMART"
   },
   "SLOT # # TYPE A": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 5 8 TYPE A"
+   "seen": " SLOT  5 8 TYPE A"
   },
   "SLOT # # TYPE B": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 6 5 TYPE B"
+   "seen": " SLOT  6 5 TYPE B"
   },
   "SLOT # # VAPOR": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 3 5 VAPOR"
+   "seen": " SLOT  3 5 VAPOR"
+  },
+  "SLOT # - # # # #": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 92,
+   "seen": "SLOT 1 - X X X X"
+  },
+  "SLOT # - # # # # # # # #": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 173,
+   "seen": "SLOT 2 - X X X X X X X X"
+  },
+  "SLOT # INTERSTITIAL BD": {
+   "how": "cage",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": " SLOT  2 INTERSTITIAL BD"
   },
   "SLOT # LINE LEAK": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 9 LINE LEAK"
+   "seen": " SLOT  9 LINE LEAK"
   },
   "SLOT # MDIM": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 15 MDIM"
+   "seen": " SLOT 15 MDIM"
+  },
+  "SLOT # PLLD SENSOR BD": {
+   "how": "cage",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 39,
+   "seen": " SLOT  8 PLLD SENSOR BD"
   },
   "SLOT # PUMP RELAY": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 14 PUMP RELAY"
+   "seen": " SLOT 14 PUMP RELAY"
   },
   "SLOT # UNUSED": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 16 UNUSED"
+   "seen": " SLOT 16 UNUSED"
   },
   "SLOT # WPLLD AC INT": {
    "how": "cage",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SLOT 10 WPLLD AC INT"
+   "seen": " SLOT 10 WPLLD AC INT"
   },
   "SLOT #: # #": {
    "how": "label",
@@ -4603,12 +5245,6 @@
    "page": 20,
    "seen": "SN#: 36463HC001 DISABLED"
   },
-  "SOFTWARE # #": {
-   "how": "exact",
-   "manual": "576013-818_RevAA_TLS3XX_TSG",
-   "page": 39,
-   "seen": "SOFTWARE # 346333-102-B"
-  },
   "SOFTWARE MODULE:": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
@@ -4620,6 +5256,12 @@
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 11,
    "seen": "SOFTWARE REVISION LEVEL"
+  },
+  "SOFTWARE# #": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 11,
+   "seen": "SOFTWARE# 346333-102-B"
   },
   "SS CONFIG - MODULE #": {
    "how": "exact",
@@ -4819,11 +5461,11 @@
    "page": 116,
    "seen": "STICK OFFSET:  0000.00"
   },
-  "STOP BIT: # STOP": {
-   "how": "exact",
+  "STOP BIT : # STOP": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 67,
-   "seen": "STOP BIT: 1 STOP"
+   "page": 220,
+   "seen": " STOP BIT   : 1 STOP"
   },
   "STOP EVAC HOLD": {
    "how": "exact",
@@ -4927,11 +5569,29 @@
    "page": 166,
    "seen": "STUCK DELAY (SEC): 60"
   },
-  "SUDDEN LOSS LIMIT: #": {
-   "how": "exact",
+  "SUDDEN LOSS LIMIT:#": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 109,
-   "seen": "SUDDEN LOSS LIMIT: 00100"
+   "seen": "SUDDEN LOSS LIMIT:000099"
+  },
+  "SW MOD WARN:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "SW MOD WARN:NO"
+  },
+  "SYS SECRITY:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "SYS SECRITY:NO"
+  },
+  "SYS SLF TST:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "SYS SLF TST:NO"
   },
   "SYSTEM ALARM HISTORY": {
    "how": "exact",
@@ -4939,11 +5599,29 @@
    "page": 95,
    "seen": "SYSTEM ALARM HISTORY"
   },
+  "SYSTEM ALARMS": {
+   "how": "prefix",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 54,
+   "seen": "SYSTEM ALARMS"
+  },
+  "SYSTEM ALARMS : NO": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 54,
+   "seen": "SYSTEM ALARMS     : NO"
+  },
+  "SYSTEM BEEPER": {
+   "how": "exact",
+   "manual": "576013-623_AN_SystemSetup",
+   "page": 63,
+   "seen": "SYSTEM BEEPER"
+  },
   "SYSTEM CONFIGURATION": {
    "how": "exact",
    "manual": "576013-818_RevAA_TLS3XX_TSG",
    "page": 39,
-   "seen": "SYSTEM CONFIGURATION"
+   "seen": "  SYSTEM CONFIGURATION"
   },
   "SYSTEM DATE/TIME FORMAT": {
    "how": "exact",
@@ -5017,6 +5695,12 @@
    "page": 35,
    "seen": "T 1: LAST DELIVERY"
   },
+  "T #: LINE MANIFOLDED": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1: LINE MANIFOLDED"
+  },
   "T #: NEXT DELIVERY": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -5059,77 +5743,71 @@
    "page": 45,
    "seen": "T 1: SHIFT TIME 1"
   },
+  "T #: SIPHON MANIFOLDED": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1: SIPHON MANIFOLDED"
+  },
+  "T #:ADD HEIGHT/VOL PTS": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:ADD HEIGHT/VOL PTS"
+  },
+  "T #:ANNUAL TEST FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:ANNUAL TEST FAIL"
+  },
+  "T #:GROSS TEST FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:GROSS TEST FAIL"
+  },
   "T #:MMM #, # #": {
    "how": "label",
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 31,
    "seen": "T 1:JUN 15, 2026 12:00PM"
   },
+  "T #:PERIODIC TEST FAIL": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:PERIODIC TEST FAIL"
+  },
+  "T #:PERIODIC TEST TYPE": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:PERIODIC TEST TYPE"
+  },
+  "T #:REGULAR UNLEADED": {
+   "how": "exact",
+   "manual": "576013-818_RevAA_TLS3XX_TSG",
+   "page": 115,
+   "seen": "T 1:REGULAR UNLEADED"
+  },
+  "T #:REMOVE HEIGHT/VOL PT": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:REMOVE HEIGHT/VOL PT"
+  },
+  "T #:VIEW HEIGHT/VOL PTS": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 31,
+   "seen": "T 1:VIEW HEIGHT/VOL PTS"
+  },
   "T#: #": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 111,
-   "seen": "T#: 00,00,00,00,00,00,00"
-  },
-  "T#: ADD HEIGHT/VOL PTS": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 98,
-   "seen": "T1: ADD HEIGHT/VOL PTS"
-  },
-  "T#: ANNUAL TEST FAIL": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 113,
-   "seen": "T1: ANNUAL TEST FAIL"
-  },
-  "T#: GROSS TEST FAIL": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 114,
-   "seen": "T1: GROSS TEST FAIL"
-  },
-  "T#: LINE MANIFOLDED": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 112,
-   "seen": "T1: LINE MANIFOLDED"
-  },
-  "T#: PERIODIC TEST FAIL": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 114,
-   "seen": "T1: PERIODIC TEST FAIL"
-  },
-  "T#: PERIODIC TEST TYPE": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 113,
-   "seen": "T1: PERIODIC TEST TYPE"
-  },
-  "T#: REGULAR UNLEADED": {
-   "how": "exact",
-   "manual": "576013-610_RevAC_OperatorManual",
-   "page": 33,
-   "seen": "T1: REGULAR UNLEADED"
-  },
-  "T#: REMOVE HEIGHT/VOL PT": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 98,
-   "seen": "T1: REMOVE HEIGHT/VOL PT"
-  },
-  "T#: SIPHON MANIFOLDED": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 111,
-   "seen": "T1: SIPHON MANIFOLDED"
-  },
-  "T#: VIEW HEIGHT/VOL PTS": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 98,
-   "seen": "T1: VIEW HEIGHT/VOL PTS"
+   "seen": "T#: 00"
   },
   "TANK #: ALL TANK": {
    "how": "exact",
@@ -5161,11 +5839,11 @@
    "page": 92,
    "seen": "TANK CONFIG - MODULE 1"
   },
-  "TANK DIAMETER: #": {
-   "how": "exact",
+  "TANK DIAMETER :#": {
+   "how": "table",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 96,
-   "seen": "TANK DIAMETER: 000.00"
+   "page": 6,
+   "seen": "TANK DIAMETER   :0000.00"
   },
   "TANK PER TST NEEDED ALM": {
    "how": "exact",
@@ -5179,11 +5857,11 @@
    "page": 42,
    "seen": "TANK PER TST NEEDED WRN"
   },
-  "TANK PROFILE #PT": {
-   "how": "exact",
+  "TANK PROFILE : # PT": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
-   "page": 96,
-   "seen": "TANK PROFILE 1PT"
+   "page": 100,
+   "seen": "TANK PROFILE    : 1 PT"
   },
   "TANK PROFILE : # PTS": {
    "how": "exact",
@@ -5197,11 +5875,11 @@
    "page": 115,
    "seen": "TANK TEST NOTIFY: OFF"
   },
-  "TANK TILT: +#": {
-   "how": "exact",
-   "manual": "576013-623_AN_SystemSetup",
-   "page": 110,
-   "seen": "TANK TILT: +000.00"
+  "TANK TILT +#": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "TANK TILT       +0000.00"
   },
   "TANK#: NONE": {
    "how": "label",
@@ -5383,11 +6061,17 @@
    "page": 121,
    "seen": "TEST WEEKLY: ALL TANKS"
   },
+  "THERMAL COEFF :#": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "THERMAL COEFF  :0.000000"
+  },
   "THERMAL COEFF: #": {
    "how": "exact",
    "manual": "576013-623_AN_SystemSetup",
    "page": 94,
-   "seen": "THERMAL COEFF: 0.00000"
+   "seen": "THERMAL COEFF: 0.000700"
   },
   "THRESHOLD: #": {
    "how": "exact",
@@ -5443,11 +6127,23 @@
    "page": 74,
    "seen": "TIMED DURATION"
   },
-  "TNK TST SIPHON BREAK: OF": {
-   "how": "clip",
+  "TK TST SDWN:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "TK TST SDWN:NO"
+  },
+  "TNK TST SIPHON BREAK:OFF": {
+   "how": "label",
    "manual": "576013-623_AN_SystemSetup",
    "page": 115,
-   "seen": "TNK TST SIPHON BREAK: OF"
+   "seen": "TNK TST SIPHON BREAK:OFF"
+  },
+  "TOO MNY TKS:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "TOO MNY TKS:NO"
   },
   "TOTAL HT # IN.": {
    "how": "exact",
@@ -5887,6 +6583,12 @@
    "page": 15,
    "seen": "WARNINGS"
   },
+  "WATER : NO SENSORS": {
+   "how": "label",
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 45,
+   "seen": "WATER     : NO SENSORS"
+  },
   "WATER = # INCHES": {
    "how": "exact",
    "manual": "576013-610_RevAC_OperatorManual",
@@ -5934,6 +6636,12 @@
    "manual": "576013-623_AN_SystemSetup",
    "page": 107,
    "seen": "WATER MINIMUM: 0.000"
+  },
+  "WATER OUT : NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350",
+   "seen": "WATER OUT : NO SENSORS"
   },
   "WATER VOL = # GALS": {
    "how": "exact",
@@ -6024,10 +6732,16 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 22,
    "seen": "WPLLD LINE RESULTS"
+  },
+  "WRONG CLOCK:NO": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-08",
+   "page": "a real TLS-350",
+   "seen": "WRONG CLOCK:NO"
   }
  },
- "lines": 1004,
- "options": 641,
+ "lines": 1123,
+ "options": 1219,
  "options_cited": {
   "S50600=DISABLED": {
    "manual": "576013-610_RevAC_OperatorManual",
@@ -7829,6 +8543,2348 @@
    "manual": "576013-610_RevAC_OperatorManual",
    "page": 23
   },
+  "set.ca_0101=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0101=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0101_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0101_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0101_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0101_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0101_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0101_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0101_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0101_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0102=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0102=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0102_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0102_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0102_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0102_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0102_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0102_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0102_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0102_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0104=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0104=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0104_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0104_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0104_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0104_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0104_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0104_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0104_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0104_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0105=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0105=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0105_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0105_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0105_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0105_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0105_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0105_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0105_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0105_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0106=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0106=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0106_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0106_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0106_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0106_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0106_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0106_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0106_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0106_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0107=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0107=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0107_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0107_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0107_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0107_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0107_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0107_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0107_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0107_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0110=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0110=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0110_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0110_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0110_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0110_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0110_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0110_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0110_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0110_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0111=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0111=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0111_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0111_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0111_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0111_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0111_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0111_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0111_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0111_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0115=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0115=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0115_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0115_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0115_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0115_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0115_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0115_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0115_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0115_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0116=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0116=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0116_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0116_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0116_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0116_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0116_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0116_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0116_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0116_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0117=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0117=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0117_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0117_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0117_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0117_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0117_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0117_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0117_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0117_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0302=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0302=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0302_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0302_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0302_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0303=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0303=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0303_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0303_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0303_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0304=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0304=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0304_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0304_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0304_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0305=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0305=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0305_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0305_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0305_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0306=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0306=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0306_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0306_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0306_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0307=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0307=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0307_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0307_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0307_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0308=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0308=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0308_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0308_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0308_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309=ALL SENSORS": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 25
+  },
+  "set.ca_0309=NO SENSORS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0309=SINGLE SRS": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_0309_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_0309_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_0309_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2101=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2101=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2101_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2101_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2101_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2102=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2102=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2102_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2102_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2102_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2103=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2103=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2103_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2103_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2103_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2104=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2104=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2104_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2104_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2104_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2105=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2105=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2105_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2105_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2105_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2106=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2106=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2106_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2106_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2106_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2108=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2108=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2108_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2108_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2108_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2111=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2111=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2111_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2111_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2111_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2112=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2112=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2112_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2112_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2112_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2113=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2113=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2113_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2113_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2113_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2114=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2114=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2114_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2114_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2114_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2116=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2116=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2116_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2116_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2116_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2117=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2117=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2117_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2117_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2117_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118=ALL LINES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2118=NO LINES": {
+   "how": "photographed",
+   "manual": "read off the bench's glass 2026-10-09",
+   "page": "a real TLS-350"
+  },
+  "set.ca_2118=SINGLE LINE": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 5
+  },
+  "set.ca_2118_bep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_bep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_dbep=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_dbep=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_dlcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_dlcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_dled=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_dled=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_dprt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_dprt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_lcd=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_lcd=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_led=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_led=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_prt=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_prt=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_2118_s=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_2118_s=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_g01=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_g01=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_g03=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_g03=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
+  "set.ca_g21=NO": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 1
+  },
+  "set.ca_g21=YES": {
+   "manual": "576013-610_RevAC_OperatorManual",
+   "page": 23
+  },
   "set.custom_delivery=%FULL": {
    "manual": "576013-623_AN_SystemSetup",
    "page": 63
@@ -8595,6 +11651,6 @@
   }
  },
  "options_uncited": [],
- "screens": 1083,
+ "screens": 1419,
  "uncited": {}
 }

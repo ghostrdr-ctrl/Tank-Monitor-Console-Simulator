@@ -5,6 +5,83 @@ per change, written for somebody using the simulator rather than building it.
 
 ## Unreleased
 
+## 0.8.0 - 2026-10-10
+
+- The interstitial (liquid sensor) card reports as a real one does: the
+  card named INTERSTITIAL BD, unlabelled sensors left blank, the category
+  column headed CATEGORY, the sensor type names the console prints, the
+  status and history reports empty until a sensor is switched on, and the
+  history keeping the last three alarms.
+- A liquid sensor can be set to an open input (nothing wired), which the
+  console reads as SENSOR OUT, or FUEL ALARM for a normally closed sensor.
+  The liquid diagnostic lists all eight inputs, and the display's liquid
+  diagnostic reads as a real console's does.
+- Normally closed, interceptor and DW sump liquid sensors read the
+  resistances, and raise the alarms, measured on a real console.
+- A liquid sensor switched on without a label, or a sensor wired to an
+  input that is switched off, raises a setup data warning, once the console
+  has been into Setup Mode since its cold start.
+- A card fitted where a different card was at the last cold start keeps the
+  old card's name and is not used until the next cold start.
+- Liquid sensor alarms are filed under their own category in the alarm
+  history; they were filed one category off.
+- The in-tank setup screens look as a real console's do: field labels
+  padded to their colons, values at their real widths, and STEP walking
+  only the tanks that are switched on.
+- Custom alarm labels set over the serial port are kept and reported,
+  as a list, as a real console keeps them.
+- A custom alarm label replaces the alarm's name on the display, in the
+  status report and in the histories, and an alarm whose LCD output is
+  off leaves the display's rotation.
+- The system setup, communications setup, mode and passcode screens read
+  as a real console's: their names and spacing, the four station header
+  lines and shift times walked on STEP, port settings in their own branch,
+  and a serial port's factory settings by its board.
+- The diagnostic screens read as a real console's: the card cage in the
+  report's names, the ground temperature diagnostic offered with the
+  probe card, and a tank with no probe shown as one.
+- Custom alarms can be set at the keypad, as on a real console: each
+  system alarm's switch, its label and its four outputs, shared with the
+  serial port's custom alarm list.
+- The packed alarm list (121) carries a liquid sensor's reading at the
+  moment of its alarm, as a real console does.
+- A tank's 50 point chart set over the serial port follows a real
+  console's rules: each pair has to sit inside the tank and rise with the
+  rest, a pair taken off has to be there, the tank moves to the 50 point
+  profile, and setting a one point full volume erases the chart.
+- Custom alarms at the keypad cover the liquid sensor and pressure line
+  leak alarms as a real console's do: all sensors or lines, or one at a
+  time with TANK/SENSOR, each with its own label. A category is offered
+  once one of its devices is switched on, and the keypad takes ten
+  characters of a label.
+- With no probe card fitted, the console still lists its in-tank test
+  features and still answers the tank status and alarm history headings.
+- The security passcode is asked when you press FUNCTION on the mode's
+  screen, as a real console asks it; the ISO 3166 COUNTRY screen appears
+  only on software version 29 and later; and the communication and CSLD
+  diagnostics appear only with a modem, or a tank whose probe reports.
+- An archive save takes about a minute, as on a real console, and the
+  keypad stays usable while it runs; ARCHIVE DIAGNOSTIC shows its progress.
+- In-tank setup leaves out the float size, water and periodic test type
+  screens for a tank whose probe is not reporting, and the HRM
+  reconciliation limits unless HRM is switched on, as a real console does.
+- System setup keeps the tank test warning, TC volume, temperature
+  compensation and stick offset screens with no probe card fitted, and
+  names the line tests 0.20 and 0.10 GPH, as a real console does.
+- A liquid sensor's input can carry a resistor on the bench view: the
+  console reads its state off the resistance by the sensor's type, so
+  changing the type over the same resistor changes the alarm, as on a real
+  console.
+- Liquid sensor resistance bands corrected from six more resistors on a
+  real console, 4.7k to 470k: every type now reads them as it does, and an
+  interceptor sensor can report water and water out.
+- A tank label set over the serial port prints on the 50 point chart
+  report as it was sent, not padded, as on a real console.
+- Smaller wire fixes: the beeper Set without its 149 is refused as a
+  real console refuses it, a short label sent in computer format is stored, a
+  quiet console's computer status reply is 00, and empty replies end as a
+  real console's do.
+
 ## 0.7.0 - 2026-10-07
 
 - The console keeps its histories when the simulator is closed and started

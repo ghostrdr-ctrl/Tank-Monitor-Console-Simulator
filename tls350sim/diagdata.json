@@ -22,7 +22,7 @@
     "live": "smodule"
    },
    {
-    "l1": "SYSTEM CONFIGURATION",
+    "l1": "  SYSTEM CONFIGURATION",
     "l2": "PRESS <ENTER>",
     "depth": 0
    },
@@ -715,6 +715,7 @@
  },
  {
   "function": "CSLD DIAGNOSTICS",
+  "requires": "probe",
   "screens": [
    {
     "l1": "CSLD MONTHLY REPORT",
@@ -817,7 +818,14 @@
    }
   ],
   "when": {
-   "software": "csld"
+   "and": [
+    {
+     "software": "csld"
+    },
+    {
+     "live_tank": true
+    }
+   ]
   }
  },
  {
@@ -1193,12 +1201,12 @@
   ]
  },
  {
-  "function": "GROUND TEMP DIAGNOSTIC",
-  "requires": "vlld",
+  "function": "GROUNDTEMP DIAGNOSTIC",
+  "requires": "probe",
   "screens": [
    {
-    "l1": "g 1: LOCATION",
-    "l2": "CNTR = X VALUE = XXXX",
+    "l1": "g 1:",
+    "l2": "CNTR=XX VALUE=XXXXXXXXXX",
     "depth": 0,
     "live": "sensor_groundtemp"
    }
@@ -1480,7 +1488,6 @@
  {
   "function": "COMMUNICATION DIAGNOSTIC",
   "requires": [
-   "rs232",
    "modem",
    "mt",
    "vmc"

@@ -290,12 +290,9 @@ _COMM_ROW = re.compile(r"^\s*COMM\s+(\d)\s+(\S.*?)(?:\s+(\d+)\s+(\d+))?\s*$")
 # Printed names a real console has been seen to use that this console does
 # not print itself, so `MODULE_PAPER` cannot supply them. Read, never
 # written: a name goes into MODULE_PAPER only with its resistance beside it.
-#
-#   INTERSTITIAL BD   the multitool's second bench TLS-350, slot 1 of its
-#                     I10200 (VR-Tool docs/NOTES.md, 2026-07-18). Table
-#                     6-1's "Interstitial/Liquid Sensor Interface" is the
-#                     eight-input liquid card.
-PRINTED_ALIASES = {"INTERSTITIAL BD": ("liquid", None)}
+# `INTERSTITIAL BD` was one until the bench printed it beside 200934 ohms
+# (2026-10-08); none is left.
+PRINTED_ALIASES = {}
 
 
 def _squash(name):

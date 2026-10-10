@@ -76,6 +76,11 @@ FAMILY = {
 # no such sensor to report on.
 UNIVERSAL_CODES = {"34B", "34C", "B4B"}
 
+# How many incidents a sensor's alarm history keeps: the last three. The
+# bench's liquid sensor 1 had raised eight alarms when I30200 listed three,
+# newest first, and i30200 counted `03` (2026-10-08).
+SENSOR_HISTORY = 3
+
 # Which family each status and each alarm history report belongs to
 STATUS_CODE = {"301": "liquid", "306": "vapor", "311": "gw",
                "341": "2wire", "346": "3wire", "34B": "universal"}
@@ -186,7 +191,7 @@ def _standing(console, aa):
     return out
 
 
-def _incidents(console, aa, number):
+def _incidents(console, aa, number, most=99):
     """The alarm history for one device, newest first.
 
     "NN - Number of Alarm Incidents to follow" over a list of alarm type
@@ -197,7 +202,7 @@ def _incidents(console, aa, number):
     tt = f"{int(number):02d}"
     return [r for r in console.alarm_log
             if r["aa"] == aa and r["tt"] == tt
-            and r.get("state", "02") != "01"][:99]
+            and r.get("state", "02") != "01"][:most]
 
 
 def _sample_counter(console):
@@ -284,7 +289,8 @@ def _status_report(handler, code, aa, devices, label_of, title, header, row):
 
 
 def _history_report(handler, code, aa, devices, label_of, title,
-                    header, row, indent, column, count="%02d"):
+                    header, row, indent, column, count="%02d", strip=True,
+                    most=99):
     """One ALARM HISTORY report, both formats.
 
     Display format is the device, then a line per incident carrying the date
@@ -298,15 +304,16 @@ def _history_report(handler, code, aa, devices, label_of, title,
     if code[0].isupper():
         rows = [title, "", header] if title else [header]
         for number in devices:
-            rows.append(row(number, label_of(number)).rstrip())
-            for one in _incidents(handler.c, aa, number):
+            head = row(number, label_of(number))
+            rows.append(head.rstrip() if strip else head)
+            for one in _incidents(handler.c, aa, number, most):
                 rows.append(f"{'':{indent}s}"
                             + f"{_when(one['at']):<{column - indent}s}"
                             + _words(aa, one["nn"]))
         return handler._frame(code, SEP.join(rows))
     body = ""
     for number in devices:
-        found = _incidents(handler.c, aa, number)
+        found = _incidents(handler.c, aa, number, most)
         body += f"{number:02d}" + count % len(found)
         body += "".join(one["at"] + _status_value(aa, one["nn"])
                         for one in found)
@@ -949,6 +956,16 @@ REFERENCE = {"B01": (1072.0, 193.0),
              "B46": (8900.0, 32000.0),
              "B4B": (8900.0, 32000.0)}
 
+# The bench's interstitial card, 2026-10-08, IB0100 read five times over
+# sixteen minutes out of its cold start: every one of its eight inputs listed
+# whether switched on or not, SAMPLE COUNTER 5 on every row every time, HIGH
+# REF 941 to 943 and LOW REF 157 to 158 -- whole numbers, packed so too
+# (`446BC000` is 943.0) -- where p.523's typical response prints 1072 and
+# 193. An input with nothing on it reads OPEN_VALUE.
+#                     code   counter  high        low
+MEASURED_DIAGNOSTIC = {"B01": (5, (941.0, 943.0), (157.0, 158.0))}
+OPEN_VALUE = 1000000000
+
 # Which family each resistance diagnostic reads, how many channels it reads,
 # whether the second channel has reference channels of its own, and the title
 # the report prints.
@@ -967,7 +984,7 @@ def _sensor_state(console, module, number):
     A sensor cannot report a condition its own type cannot sense, so the
     console's own gate decides what band the resistance falls in.
     """
-    state = console.sensor_state.get((module, str(number)), "normal")
+    state = console.sensor_condition(module, number)
     if state != "normal" and not console.sensor_alarm_allowed(module, number,
                                                               state):
         return "normal"
@@ -982,6 +999,11 @@ def _sensor_pair(console, module, number, channel):
     conversion of it, which is that value plus the sample to sample noise a
     single conversion has.
     """
+    if console.sensor_state.get((module, str(number))) == "open":
+        # an input with nothing on it reads 1,000,000,000 on both, as the
+        # ground temperature inputs do (`groundtemp.OPEN`); the bench's
+        # eight liquid inputs, 2026-10-08
+        return float(OPEN_VALUE), float(OPEN_VALUE)
     average = readings.sensor_value(console, module, number,
                                     _sensor_state(console, module, number),
                                     channel)
@@ -1004,6 +1026,10 @@ def _diagnostic_report(handler, code, tok, dev):
     aa, config, label_code, _title, pattern = FAMILY[module]
     del aa, _title
     devices = _devices(c, module, config, dev)
+    if tok in MEASURED_DIAGNOSTIC:
+        # every input on the card, switched on or not
+        if not (dev != "00" and dev.isdigit() and int(dev)):
+            devices = list(range(1, c.capacity(module) + 1))
     high, low = REFERENCE[tok]
     rows = [f"{title} DIAGNOSTIC REPORT", ""]
     rows += _diag_header(channels)
@@ -1012,6 +1038,15 @@ def _diagnostic_report(handler, code, tok, dev):
         counter = _sample_counter(c)
         hi1 = _reference(c, tok, number, high, "high")
         lo1 = _reference(c, tok, number, low, "low")
+        if tok in MEASURED_DIAGNOSTIC:
+            counter, (h0, h1), (l0, l1) = MEASURED_DIAGNOSTIC[tok]
+            counter = float(counter)
+            hi1 = float(round(readings.wander(c, h0, h1, "high", tok,
+                                              number, swing=1.0,
+                                              period=300.0)))
+            lo1 = float(round(readings.wander(c, l0, l1, "low", tok,
+                                              number, swing=1.0,
+                                              period=300.0)))
         last1, avg1 = _sensor_pair(c, module, number, 1)
         values = [counter, hi1, lo1, last1, avg1]
         shown = [last1]
@@ -1083,10 +1118,31 @@ def handle(handler, tok, dev, code, data):
                     "sensor diagnostic")
         aa, config, label_code, title, pattern = FAMILY[module]
         devices = _devices(c, module, config, dev)
-        status_row, history_row = _sensor_rows()
+        devices = [n for n in devices if c.position_on(config, n)]
+        if not devices:
+            # no sensor switched on: a bare frame in both formats, not the
+            # title over an empty table -- the bench's I30100 and I30200 out
+            # of its cold start, and again once sensor 1 was switched back
+            # off with three alarms in its history (2026-10-08). The same
+            # for one sensor asked by number that is switched off: I30101
+            # and I30201 were bare with sensor 1 off
+            return handler._frame(code), f"no {module} sensor switched on"
+        status_row, _history_row = _sensor_rows()
+
+        def history_row(number, label):
+            # the label held to 20 and one space after it, blank or not:
+            # `     1  ABCDEFGHIJKLMNOPQRST ` and `     1` and 23 spaces
+            # on the bench's I30200 (2026-10-08)
+            return f"{number:{SENSOR_COLUMN}d}  {label:<20.20s} "
 
         def label_of(number):
-            return _label(c, label_code, number, pattern)
+            # blank for a sensor nobody labelled, not `pattern`: the bench,
+            # 2026-10-08, its interstitial card's sensor 1 switched on with
+            # no label, printed `     1                         SENSOR OUT
+            # ALARM` on I30100 and the label column empty on I30200 -- where
+            # 576013-635's typeset samples print `LIQUID # 1`. One family
+            # measured; the six share these reports and are taken together
+            return c.text(label_code, number) or ""
 
         if tok in STATUS_CODE:
             return (_status_report(
@@ -1096,8 +1152,8 @@ def handle(handler, tok, dev, code, data):
         return (_history_report(
             handler, code, aa, devices, label_of,
             f"{title} ALARM HISTORY REPORT",
-            HISTORY_HEADER, history_row, LOCATION_COLUMN, HISTORY_WORDS),
-            "sensor alarm history")
+            HISTORY_HEADER, history_row, LOCATION_COLUMN, HISTORY_WORDS,
+            strip=False, most=SENSOR_HISTORY), "sensor alarm history")
 
     # ---- the smart sensors -------------------------------------------------
     if tok in ("315", "316", "333", "B33", "B34", "B35", "B36", "B37",

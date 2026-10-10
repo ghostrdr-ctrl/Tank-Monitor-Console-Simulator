@@ -320,13 +320,110 @@ PHOTOGRAPHED = {
     # console. The manuals write ACCUCHART, GROUNDTEMP and -- for the last
     # -- an index row this project had imported as a function name (DG7).
     "ACCU_CHART DIAGNOSTICS": "photographed 2026-09-10",
-    "GROUND TEMP DIAGNOSTIC": "photographed 2026-09-10",
+    # GROUND TEMP DIAGNOSTIC was photographed so on 2026-09-10; the
+    # bench's glass READ through 5FA on 2026-10-08, character for
+    # character, is `GROUNDTEMP DIAGNOSTIC`, and the characters win
+    "GROUNDTEMP DIAGNOSTIC": "read off the bench's glass 2026-10-08",
+    "g #:": "read off the bench's glass 2026-10-08",
+    "CNTR=# VALUE=#": "read off the bench's glass 2026-10-08",
+    # CUSTOM ALARMS' keypad branch (`transcripts/menuwalk3.jsonl`): the
+    # SYSTEM alarms in the console's own eleven-wide names, and the outputs
+    "BATTERY OFF:NO": "read off the bench's glass 2026-10-08",
+    "BEEP : YES": "read off the bench's glass 2026-10-08",
+    "LCD : YES": "read off the bench's glass 2026-10-08",
+    "LED : YES": "read off the bench's glass 2026-10-08",
+    "PAPER OUT :NO": "read off the bench's glass 2026-10-08",
+    "PC(H#) REV :NO": "read off the bench's glass 2026-10-08",
+    "PRINT : YES": "read off the bench's glass 2026-10-08",
+    "PRINTER ERR:NO": "read off the bench's glass 2026-10-08",
+    "ROM REV WRN:NO": "read off the bench's glass 2026-10-08",
+    "SW MOD WARN:NO": "read off the bench's glass 2026-10-08",
+    "SYS SECRITY:NO": "read off the bench's glass 2026-10-08",
+    "SYS SLF TST:NO": "read off the bench's glass 2026-10-08",
+    "TK TST SDWN:NO": "read off the bench's glass 2026-10-08",
+    "TOO MNY TKS:NO": "read off the bench's glass 2026-10-08",
+    "WRONG CLOCK:NO": "read off the bench's glass 2026-10-08",
     "ARCHIVE DIAGNOSTIC": "photographed 2026-09-10",
     # The same bare console's function screens in Operating Mode, its probe
     # and PLLD cards fitted and nothing programmed on either. No manual
     # draws a console with nothing programmed. CLOSED U18.
     "NO ACTIVE TANKS": "photographed 2026-09-10",
     "SENSORS NOT CONFIGURED": "photographed 2026-09-10",
+    # The bench TLS-350's own glass with an interstitial card in it, READ
+    # over the wire through 5FA while the keys were stepped -- the text the
+    # display held, character for character, rather than a picture of it.
+    # The guides draw `L1: ENTER SENSOR TYPE` and `CNTR = X VALUE = XXXXXX`.
+    # (`CATEGORY : OTHER SENSORS` and `SLOT # - ...` it read too, and the
+    # Setup manual draws both exactly, so the page cites them.) CLOSED S47.
+    "L #:": "read off the bench's glass 2026-10-08",
+    "L #:ENTER SENSOR TYPE": "read off the bench's glass 2026-10-08",
+    "CNTR= # VALUE= #": "read off the bench's glass 2026-10-08",
+    # and IN-TANK SETUP, tank 1 stepped (`transcripts/menuwalk2`):
+    # labels padded to their own colon, which no page draws
+    "ENTER PRODUCT LABEL:": "read off the bench's glass 2026-10-08",
+    "FULL VOL : #": "read off the bench's glass 2026-10-08",
+    "LEAK MIN ANNUAL : #%": "read off the bench's glass 2026-10-08",
+    "OVERFILL LIMIT : #%": "read off the bench's glass 2026-10-08",
+    "PROBE OFFSET :+#": "read off the bench's glass 2026-10-08",
+    "TANK TILT +#": "read off the bench's glass 2026-10-08",
+    "THERMAL COEFF :#": "read off the bench's glass 2026-10-08",
+    # CUSTOM ALARMS' liquid and PLLD categories (`bench-2026-10-09/glass.jsonl`
+    # and `bench-2026-10-09-plld/glass.jsonl`): each alarm's switch in the
+    # console's eleven-wide names, all read; and one device's switch, read
+    # for OPEN on L 2 and GROSS FAIL on Q 1 to Q 3, the others the same
+    # screen with their own name in it. CLOSED S56.
+    "ANN LN FAIL:NO LINES": "read off the bench's glass 2026-10-09",
+    "ANN NEED AL:NO LINES": "read off the bench's glass 2026-10-09",
+    "ANN NEED WN:NO LINES": "read off the bench's glass 2026-10-09",
+    "FUEL : NO SENSORS": "read off the bench's glass 2026-10-09",
+    "FUEL OUT :NO LINES": "read off the bench's glass 2026-10-09",
+    "GROSS FAIL :NO LINES": "read off the bench's glass 2026-10-09",
+    "HANDLE ALRM:NO LINES": "read off the bench's glass 2026-10-09",
+    "HIGH LIQUID:NO SENSORS": "read off the bench's glass 2026-10-09",
+    "L # FUEL : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # HIGH LIQUID: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # LOW LIQUID: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # OPEN : NO": "read off the bench's glass 2026-10-09",
+    "L # SETUP WARN : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # SHORT : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # WATER : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "L # WATER OUT : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "LN EQ FAULT:NO LINES": "read off the bench's glass 2026-10-09",
+    "LO PRES ALM:NO LINES": "read off the bench's glass 2026-10-09",
+    "LOW LIQUID: NO SENSORS": "read off the bench's glass 2026-10-09",
+    "OPEN : NO SENSORS": "read off the bench's glass 2026-10-09",
+    "OPEN ALARM :NO LINES": "read off the bench's glass 2026-10-09",
+    "PER NEED AL:NO LINES": "read off the bench's glass 2026-10-09",
+    "PER NEED WN:NO LINES": "read off the bench's glass 2026-10-09",
+    "PERIOD FAIL:NO LINES": "read off the bench's glass 2026-10-09",
+    "Q # ANN LN FAIL: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # ANN NEED AL: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # ANN NEED WN: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # FUEL OUT : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # GROSS FAIL : NO": "read off the bench's glass 2026-10-09",
+    "Q # HANDLE ALRM: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # LN EQ FAULT: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # LO PRES ALM: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # OPEN ALARM : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # PER NEED AL: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # PER NEED WN: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # PERIOD FAIL: NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # SETUP WARN : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "Q # SHUTDOWN : NO": "the rule of `L # OPEN : NO` and `Q # GROSS FAIL : NO`, read off the bench's glass 2026-10-09",
+    "SETUP WARN :NO LINES": "read off the bench's glass 2026-10-09",
+    "SETUP WARN :NO SENSORS": "read off the bench's glass 2026-10-09",
+    "SHORT : NO SENSORS": "read off the bench's glass 2026-10-09",
+    "WATER OUT : NO SENSORS": "read off the bench's glass 2026-10-09",
+}
+
+#: the words a CHANGE walks onto that no manual prints and a real console
+#: was seen offering: CUSTOM ALARMS' per-device switches, CHANGE cycled
+#: round all three on the bench's glass (2026-10-09). `ALL SENSORS`, `ALL
+#: LINES` and `SINGLE LINE` the manuals print, so they cite there.
+OPTIONS_SEEN = {
+    "NO SENSORS": "read off the bench's glass 2026-10-09",
+    "SINGLE SRS": "read off the bench's glass 2026-10-09",
+    "NO LINES": "read off the bench's glass 2026-10-09",
 }
 
 
@@ -544,6 +641,10 @@ def main():
             if where:
                 opt_cited[f"{key}={lab}"] = {"manual": where[0],
                                              "page": where[1]}
+            elif lab in OPTIONS_SEEN:
+                opt_cited[f"{key}={lab}"] = {"manual": OPTIONS_SEEN[lab],
+                                             "page": "a real TLS-350",
+                                             "how": "photographed"}
             else:
                 opt_uncited.append(f"{key}={lab}")
 

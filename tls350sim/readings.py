@@ -130,19 +130,100 @@ _SINGLE_FLOAT = {"normal": (55000, 135000), "fuel": (0, 50000),
                  "out": (150000, 400000)}
 _DUAL_HYDROSTATIC = {"normal": (80000, 150000), "out": (150000, 400000),
                      "high": (9000, 80000), "low": (0, 9000)}
-_DUAL_DISCRIM = {"normal": (113000, 247000), "fuel": (76000, 107000),
+# A state can hold more than one range: Figure 6-17 gives the
+# discriminating sensor's FUEL as three, 43-49k, 76-107k and 337-570k, and
+# the bench read FUEL at 47k and at 478k under DUAL FLOAT DISCRIM
+# (2026-10-10, `bench-2026-10-09/sweep47k.jsonl`). The HIGH VAPOR type
+# read 478k as NORMAL -- its third range is the vapour's, not the fuel's.
+# And NORMAL again at 75.3k, between its WARNING at 68.5k and its FUEL at
+# 80.1k, both discriminating types (2026-10-10, `sweep75k.jsonl`).
+_DUAL_DISCRIM = {"normal": [(113000, 247000), (72000, 75900)],
+                 "fuel": [(76000, 107000), (43000, 49000), (337000, 570000)],
                  "out": (612000, 900000), "short": (0, 28000),
                  "high": (29000, 41000), "warn": (52000, 71000)}
+_DUAL_HIGH_VAPOR = dict(_DUAL_DISCRIM,
+                        fuel=[(76000, 107000), (43000, 49000)],
+                        normal=[(113000, 247000), (72000, 75900),
+                                (337000, 570000)])
+
+# Three of the liquid types are in no figure, and the bench read them with
+# metered resistors on its interstitial card's inputs (2026-10-08,
+# `transcripts/resistors.jsonl`): 0.999k read ~1000, 99.4k read ~100500,
+# 219.3k read ~222200, and nothing on the input 1000000000.
+#
+#                   ~1k      ~100k        ~222k   open
+#   NORMALLY CLOSED normal   FUEL         FUEL    FUEL
+#   INTERCEPTOR     SHORT    SENSOR OUT   OUT     OUT
+#   DW SUMP 2-1     FUEL     LOW LIQUID   OUT     OUT
+#
+# These were the single float's and the discriminating sensor's bands, which
+# put 100k at NORMAL for the first two and FUEL for the third. Each band
+# below holds the point measured in it; where a band's EDGES fall is not
+# measured, and a state with no point (an interceptor's fuel, a DW sump's
+# normal) keeps the nearest figure's band trimmed clear of the measured
+# points. The other four types read all three resistors where Figure 6-17
+# puts them. See FIDELITY S46.
+#
+# And 46.6k and 471k, metered, on inputs 1 and 2 (2026-10-10, read 47042
+# and 478373; `bench-2026-10-09/sweep47k.jsonl`):
+#
+#                   ~47k         ~478k
+#   SINGLE FLOAT    FUEL         OUT
+#   NORMALLY CLOSED FUEL         FUEL
+#   HYDROSTATIC     HIGH LIQUID  OUT
+#   DISCRIM         FUEL         FUEL
+#   HIGH VAPOR      FUEL         NORMAL
+#   INTERCEPTOR     NORMAL       OUT
+#   DW SUMP 2-1     FUEL         OUT
+#
+# And 4.66k, 21.73k, 32.55k and 67.7k on inputs 3 to 6 (2026-10-10, read
+# 4635, 21821, 32814 and 68474; `sweep4k.jsonl`):
+#
+#                   ~4.6k  ~21.8k  ~32.8k     ~68.5k
+#   SINGLE FLOAT    FUEL   FUEL    FUEL       NORMAL
+#   NORMALLY CLOSED FUEL   FUEL    FUEL       FUEL
+#   HYDROSTATIC     LOW    HIGH    HIGH       HIGH
+#   DISCRIM         SHORT  SHORT   HIGH       WARNING
+#   HIGH VAPOR      SHORT  SHORT   HIGH       WARNING
+#   INTERCEPTOR     NORMAL FUEL    WATER OUT  WATER
+#   DW SUMP 2-1     FUEL   FUEL    FUEL       FUEL
+#
+# The interceptor is normal at 4.6k and again at 47k, with FUEL and WATER
+# OUT between and WATER above: five states in its first 100k, which no
+# figure draws. Each range brackets the points in it; the edges are
+# halfway between neighbours where nothing better is known.
+#
+# And 89.4k in series on input 7, read 90580 (`sweep89k.jsonl`): FUEL for
+# the interceptor, between its WATER at 68.5k and OUT at 100k; LOW LIQUID
+# for the DW sump, whose normal is somewhere between 68.5k (FUEL) and here
+# and has still not been read. The other five as their tables had them.
+_NORMALLY_CLOSED = {"normal": (500, 2000), "fuel": (3000, 600000)}
+#
+# And 74.6k on input 1, read 75315 (`sweep75k.jsonl`): SENSOR OUT for the
+# interceptor, between its WATER at 68.5k and its FUEL at 80.1k.
+_INTERCEPTOR = {"short": (500, 2500),
+                "normal": [(3000, 13000), (40000, 57000)],
+                "fuel": [(13000, 27000), (78000, 95500)],
+                "waterout": (27000, 40000),
+                "water": (57000, 72000),
+                "out": [(95500, 600000), (72000, 78000)]}
+# And 46.6k + 32.55k on input 8, read 80136 (`sweep79k.jsonl`), and 74.6k
+# on input 1, read 75315 (`sweep75k.jsonl`): LOW LIQUID for the DW sump
+# both times, and 72.6k (read 73299, `sweep72k.jsonl`) LOW LIQUID again:
+# any normal it has is between 68.5k and 73.3k, and it may well have none,
+# going straight from FUEL to LOW. The band below is that gap, unread.
+_DW_SUMP = {"fuel": (500, 70000), "normal": (70000, 71000),
+            "low": (71000, 110000), "out": (200000, 400000)}
 
 BANDS = {
     "liquid": {
         "1": _SINGLE_FLOAT,          # TRI-STATE (single float)
-        "2": _SINGLE_FLOAT,          # NORMALLY CLOSED
+        "2": _NORMALLY_CLOSED,       # NORMALLY CLOSED
         "3": _DUAL_HYDROSTATIC,      # DUAL FLOAT HYDROSTATIC
         "4": _DUAL_DISCRIM,          # DUAL FLOAT DISCRIM
-        "5": _DUAL_DISCRIM,          # DUAL FLOAT HIGH VAPOR
-        "6": _SINGLE_FLOAT,          # INTERCEPTOR
-        "7": _DUAL_DISCRIM,          # DW SUMP 2-1
+        "5": _DUAL_HIGH_VAPOR,       # DUAL FLOAT HIGH VAPOR
+        "6": _INTERCEPTOR,           # INTERCEPTOR
+        "7": _DW_SUMP,               # DW SUMP 2-1
     },
     # "Value 1 - Liquid Sensor: Normal = 52500 - 380000; Open = > 400000;
     # Short = 0 - 200; Water = 200 - 50000"
@@ -481,12 +562,48 @@ def vapor_ppm(console, number, ohms):
     return max(0.0, min(1.0, share)) * VAPOR_PPM_FULL
 
 
+#: how the interstitial card reads a resistor: 0.999k as 1009, 99.4k as
+#: 100455 and 219.3k as 222200 on the bench's meter and IB01 (2026-10-08) --
+#: a percent and a bit high, all three alike
+INPUT_GAIN = 1.011
+
+
+def band_state(module, kind, reading):
+    """The state whose band of that sensor type holds `reading`, or the
+    nearest band's where none does."""
+    by_type = BANDS.get(module) or {}
+    table = by_type.get(kind) or by_type.get("") or by_type.get("1") or {}
+    best, gap = "normal", None
+    for state, ranges in table.items():
+        for low, high in spans(ranges):
+            if low <= reading <= high:
+                return state
+            miss = low - reading if reading < low else reading - high
+            if gap is None or miss < gap:
+                best, gap = state, miss
+    return best
+
+
+def spans(ranges):
+    """A band as a list of (low, high): one range, or several."""
+    return ranges if isinstance(ranges, list) else [ranges]
+
+
 def sensor_value(console, module, number, state, channel=1):
     """The resistance the diagnostic screen prints for that sensor.
 
     Which band it falls in IS the sensor's state, which is what the screen is
-    for; where in the band is the sensor's own, and it moves a little.
+    for; where in the band is the sensor's own, and it moves a little. An
+    input with a resistor on it -- or nothing -- reads that instead.
     """
+    if console is not None and channel == 1 and hasattr(console,
+                                                        "sensor_ohms"):
+        ohms = console.sensor_ohms(module, number)
+        if ohms is not None:
+            from . import wiresensors
+            if ohms >= wiresensors.OPEN_VALUE:
+                return float(wiresensors.OPEN_VALUE)
+            return ohms * INPUT_GAIN
     kind = console.sensor_type(module, number) if console else ""
     if channel == 2:
         table = (vapor_bands(console, number) if module == "vapor"
@@ -494,6 +611,6 @@ def sensor_value(console, module, number, state, channel=1):
     else:
         by_type = BANDS.get(module) or {}
         table = by_type.get(kind) or by_type.get("") or by_type.get("1") or {}
-    band = table.get(state) or table.get("normal") or (0, 1)
+    band = spans(table.get(state) or table.get("normal") or (0, 1))[0]
     return wander(console, band[0], band[1], module, number, channel,
                   swing=0.10, period=1200.0)

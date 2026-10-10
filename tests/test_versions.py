@@ -199,15 +199,18 @@ class TheSecondRevisionReport(unittest.TestCase):
         self.assertEqual(dict(fitted(33, "E7").revision_flags())["UNUSED WAS PMC"],
                          False)
 
-    def test_a_pulled_card_turns_its_flags_off(self):
-        """The flags are the printed list enumerated, and gate the same way."""
+    def test_a_pulled_probe_card_keeps_the_in_tank_flags(self):
+        """The flags are the printed list enumerated, and gate the same way
+        -- which for the in-tank tests is not the card: the bench, cold
+        started with no probe card, flagged PERIODIC, ANNUAL and CSLD 01
+        and printed all three (i90500, I90200, 2026-10-09, CLOSED S56)."""
         c = fitted(33, "E7")
         self.assertTrue(dict(c.revision_flags())["PERIODIC IN-TANK TESTS"])
         c.modules["probe"] = 0
         flags = dict(c.revision_flags())
-        self.assertFalse(flags["PERIODIC IN-TANK TESTS"])
-        self.assertFalse(flags["ANNUAL IN-TANK TESTS"])
-        self.assertFalse(flags["CSLD"])
+        self.assertTrue(flags["PERIODIC IN-TANK TESTS"])
+        self.assertTrue(flags["ANNUAL IN-TANK TESTS"])
+        self.assertTrue(flags["CSLD"])
 
     def test_tanker_load_is_the_flag_the_report_itself_waits_for(self):
         """"Tanker Load Report is a key-enabled option", S513."""

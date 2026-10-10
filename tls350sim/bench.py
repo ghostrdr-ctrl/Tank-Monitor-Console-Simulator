@@ -1329,13 +1329,23 @@ class SensorTile(tk.Frame):
                      fill="x", padx=8, pady=(1, 0))
 
         states = ["normal"] + list(self.console.sensor_states(mod, num))
+        if mod == "liquid":
+            # nothing on the input at all, which the console reads by the
+            # sensor's type: OUT for most, FUEL for a normally closed one
+            # (`Console.OPEN_INPUT`, measured on the bench 2026-10-08)
+            states.append("open")
+            # or a resistor on it, which the console reads by type too: the
+            # bench's three metered resistors read a different state under
+            # each type (`Console.sensor_condition`, 2026-10-08)
+            states.append(self.WIRE)
         cur = self.console.sensor_state.get((mod, str(num)), "normal")
-        if cur not in states:
+        if cur not in states and not str(cur).startswith(
+                self.console.OHMS):
             cur = "normal"
             self.console.sensor_state[(mod, str(num))] = cur
         self.var = tk.StringVar(value=cur)
-        self.pill = tk.Label(inner, text=cur.upper(), bg="#24262b",
-                             fg=state_colour(cur),
+        self.pill = tk.Label(inner, text=self._shown(cur), bg="#24262b",
+                             fg=state_colour(self._condition(cur)),
                              font=("Segoe UI", 8, "bold"),
                              padx=8, pady=3, anchor="w", cursor="hand2")
         self.pill.pack(fill="x", padx=8, pady=(4, 0))
@@ -1451,13 +1461,44 @@ class SensorTile(tk.Frame):
         m.tk_popup(self.pill.winfo_rootx(),
                    self.pill.winfo_rooty() + self.pill.winfo_height())
 
+    #: the menu entry that asks for a resistor rather than naming a state
+    WIRE = "resistor..."
+
+    def _condition(self, held):
+        """The state the console reads off what is held: itself, unless it
+        is an input (open, or a resistor), which the type decides."""
+        if held == "open" or str(held).startswith(self.console.OHMS):
+            return self.console.sensor_condition(self.mod, self.num)
+        return held
+
+    def _shown(self, held):
+        ohms = self.console.sensor_ohms(self.mod, self.num)
+        if str(held).startswith(self.console.OHMS) and ohms is not None:
+            word = f"{ohms / 1000:g}K" if ohms >= 1000 else f"{ohms:g}"
+            return f"{word} OHM -> {self._condition(held).upper()}"
+        return str(held).upper()
+
     def _pick(self, state):
-        self.console.sensor_state[(self.mod, str(self.num))] = state
+        if state == self.WIRE:
+            from tkinter import simpledialog
+            ohms = simpledialog.askfloat(
+                "Resistor on the input",
+                f"{self.mod.upper()} {self.num}: ohms across the input "
+                "(the console reads the state off it by the sensor's type)",
+                parent=self, minvalue=0.0)
+            if ohms is None:
+                self.var.set(self.console.sensor_state.get(
+                    (self.mod, str(self.num)), "normal"))
+                return
+            self.console.wire_sensor(self.mod, self.num, ohms)
+            state = self.console.sensor_state[(self.mod, str(self.num))]
+        else:
+            self.console.sensor_state[(self.mod, str(self.num))] = state
         self._paint(state)
 
     def _paint(self, state):
-        colour = state_colour(state)
-        self.pill.config(text=state.upper(), fg=colour)
+        colour = state_colour(self._condition(state))
+        self.pill.config(text=self._shown(state), fg=colour)
         self.lamp.itemconfig(self._dot, fill=colour)
 
 

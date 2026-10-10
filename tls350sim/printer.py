@@ -398,12 +398,12 @@ def alarms(console):
     the name it belongs to, so this one does too.
     """
     out = header(console, "ALARM/WARNING REPORT")
-    shown = describe_alarms(console.compute_alarms())
+    shown = describe_alarms(console.compute_alarms(), console)
     if not shown:
         out.append("ALL FUNCTIONS NORMAL")
         return out
     live = {a["aa"] + a["nn"] + a["tt"]
-            for a in describe_alarms(console.conditions())}
+            for a in describe_alarms(console.conditions(), console)}
     for a in shown:
         key = a["aa"] + a["nn"] + a["tt"]
         out.append("")
@@ -590,7 +590,7 @@ def _cleared_hoses(console, record):
 def status(console):
     """SYSTEM STATUS, the report the console sits on."""
     out = header(console, "SYSTEM STATUS REPORT", rule=True)
-    shown = describe_alarms(console.compute_alarms())
+    shown = describe_alarms(console.compute_alarms(), console)
     if not shown:
         out.append("ALL FUNCTIONS NORMAL")
     else:
@@ -989,7 +989,7 @@ def setup_footer(console):
     out.extend(["", "", ""])
     out.append(_centre("SYSTEM STATUS REPORT"))
     out.append(SETUP_RULE)
-    shown = describe_alarms(console.compute_alarms())
+    shown = describe_alarms(console.compute_alarms(), console)
     out.extend([a["screen"] for a in shown] or ["ALL FUNCTIONS NORMAL"])
     return out
 
@@ -3145,7 +3145,7 @@ def _marks(console):
         return marks
     marks = {"clock": time.mktime(console.now()), "bir": {}, "loads": {},
              "posted": {a["aa"] + a["nn"] + a["tt"]
-                        for a in describe_alarms(console.compute_alarms())}}
+                        for a in describe_alarms(console.compute_alarms(), console)}}
     for (_tank, kind), rows in console.bir.closed.items():
         if rows:
             marks["bir"][kind] = max(marks["bir"].get(kind, 0.0),
@@ -3363,7 +3363,7 @@ def _auto_alarms(console, marks):
     """"If your system has a printer, it will print an alarm or warning
     report when it detects a warning or alarm condition"."""
     keys = {a["aa"] + a["nn"] + a["tt"]
-            for a in describe_alarms(console.compute_alarms())}
+            for a in describe_alarms(console.compute_alarms(), console)}
     fresh = keys - marks["posted"]
     marks["posted"] = keys
     # An ISD site or hose alarm prints its own slip, 577013-800 Rev P Figures

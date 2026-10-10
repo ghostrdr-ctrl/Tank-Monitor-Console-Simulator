@@ -289,13 +289,17 @@ class TheSetupPrintAgainstARealOne(unittest.TestCase):
             # its own citation before it can be gated. TANKER LOAD REPORT
             # and QPLD MONTHLY PRINTOUT are two of T6's six.
             ("TANKER LOAD REPORT", "DISABLED"),
-            ("PRINT PRECISION LINE", "TEST RESULTS: DISABLED"),
+            # PRINT PRECISION LINE was here, and left on 2026-10-08: it is
+            # the PLLD sensor board's (the bench without one answered I55D00
+            # bare and drew no such screen), the fixture has none, and the
+            # tape printed none -- two consoles agreeing.
             # Paired the other way round since the two printout screens
             # went into the manual's order (SU3): the tape has RE-DIRECT
             # and not QPLD, so the run the diff hands this heuristic now
             # opens on the value and closes on the head. Same one screen,
-            # same reason it is here.
-            ("DISABLED", "QPLD MONTHLY PRINTOUT"),
+            # same reason it is here. (And back the right way round once
+            # PRINT PRECISION LINE left the run beside it.)
+            ("QPLD MONTHLY PRINTOUT", "DISABLED"),
             # The tape prints no BEEPER screen at all, so this is a screen
             # this console draws and the paper does not, whatever it reads.
             # It read DISABLED until the beeper gained the default the setup

@@ -21,6 +21,7 @@ of the mistakes below.
 """
 import io
 import os
+import re
 import sys
 import unittest
 
@@ -168,6 +169,8 @@ class TheFourMistakesItMade(unittest.TestCase):
 # (2026-09-25, `bench-2026-09-25/emptylists.jsonl`), and so does this
 # console. They are no part of a restore on either.
 EMPTY_LISTS = {"5BC", "5BE", "5BF", "7BD"}
+#: i63BTT for a tank with no chart points, as a backup stores it
+CHART_HEADER_ONLY = re.compile(r"^(\d\d)?\d[0-9A-F]{16}00$")
 
 
 class ItRefusesNothingARealSiteSends(unittest.TestCase):
@@ -199,6 +202,13 @@ class ItRefusesNothingARealSiteSends(unittest.TestCase):
             if tok in EMPTY_LISTS and data in ("00", dev + "00"):
                 # an empty list, which a Set cannot carry: the console
                 # refuses it too
+                continue
+            if tok == "63B" and CHART_HEADER_ONLY.match(data):
+                # a tank chart with no points: the inquiry's own header --
+                # a digit, the diameter, the full volume, `00` pairs -- as
+                # the bench's four programmed tanks dumped it on 2026-10-08.
+                # It is not a Set's shape, and the bench refused it sent
+                # back, every spelling of it (2026-10-09, CLOSED S55)
                 continue
             seen += 1
             if not formats.valid(tok, data,

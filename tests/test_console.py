@@ -176,7 +176,10 @@ class Menus(unittest.TestCase):
                           (NORMAL_MENU, empty.available_operating())):
             self.assertLess(len(got), len(menu))
         full = fitted()
-        # every diagnostic function but the one that also needs a setting
+        # every diagnostic function but the one that also needs a setting,
+        # and CSLD's, which wants a tank whose probe reports (2026-10-08)
+        self.assertEqual(len(full.available_diagnostics()), len(DIAG_MENU) - 2)
+        full.tank_level[1] = {"volume": 5000.0, "water": 0.0}
         self.assertEqual(len(full.available_diagnostics()), len(DIAG_MENU) - 1)
         full.values["S56600"] = "1"      # SERVICE NOTICE: ENABLED
         full.modules["pumpmon"] = 1      # its own card, not the pump sense one
@@ -497,7 +500,9 @@ class ChartSecurity(unittest.TestCase):
         c = fitted()
         c.set_slots("601", "1 X X X")
         h = Handler(c, verbose=False)
-        chart = b"\x01S63B01010142B00000461C4000\r"
+        # computer form: the display form is decimal, and hex in it is
+        # refused before security is asked (2026-10-09)
+        chart = b"\x01s63B01010142B00000461C4000"
         self.assertNotIn(b"9999", h.handle(chart))
         c.set_chart_code("778899")
         self.assertIn(b"9999", h.handle(chart))
@@ -667,13 +672,14 @@ class CardCage(unittest.TestCase):
         c.set_module("relay", 1)
         c.set_module("rs232", 1)
         screens = [l1 for l1, _l2 in c.slot_report()]
-        self.assertIn("SLOT 1 4 PROBE", screens)
-        self.assertIn("SLOT 9 4 RELAY", screens)
-        self.assertIn("COMM 1 RS-232", screens)
+        # in the bench's layout and report 102's names (2026-10-08)
+        self.assertIn(" SLOT  1 4 PROBE", screens)
+        self.assertIn(" SLOT  9 4 RELAY", screens)
+        self.assertIn("  COMM 1 RS232 SERIAL BD", screens)
         self.assertEqual(len(screens), 8 + 8 + 6)
         # and no slot number twice, which is the defect stated plainly
         numbers = [line.split()[1] for line in screens
-                   if line.startswith("SLOT ")]
+                   if line.strip().startswith("SLOT ")]
         self.assertEqual(numbers, [str(n) for n in range(1, 17)])
 
     def test_i102_numbers_the_bays_the_same_way_the_panel_does(self):
@@ -685,7 +691,8 @@ class CardCage(unittest.TestCase):
         c.set_module("probe", 1)
         c.set_module("relay", 1)
         panel = [line.split()[1] + " " + " ".join(line.split()[2:])
-                 for line, _l2 in c.slot_report() if line.startswith("SLOT ")]
+                 for line, _l2 in c.slot_report()
+                 if line.strip().startswith("SLOT ")]
         report = [f"{slot} {name}" for slot, _key, name, _p, _c
                   in c.slot_readings() if slot > 0]
         self.assertEqual(panel, report)
@@ -749,7 +756,10 @@ class TheProbeFamilyIsTwoCards(unittest.TestCase):
         One name table served both surfaces, so whichever was chosen the
         other one was wrong."""
         c = self.a_cage(gt=True)
-        self.assertEqual(c.slot_report()[0][0], "SLOT 1 4 PROBE/ G. T.")
+        # ...and they do not: the bench's glass and report 102 both read
+        # `4 PROBE / G.T.` (2026-10-08). The figure's spelling was a
+        # typesetter's
+        self.assertEqual(c.slot_report()[0][0], " SLOT  1 4 PROBE / G.T.")
         paper = [name for slot, _key, name, _p, _c in c.slot_readings()
                  if slot == 1]
         self.assertEqual(paper, ["4 PROBE / G.T."])
@@ -840,12 +850,14 @@ class ThePrintedBoardNamesAreTheirOwnVocabulary(unittest.TestCase):
         """The screen's names are Table 6-1's, which is what the citation
         audit sanctions on a `SLOT #` line -- so this is not one table
         replacing another, it is two tables where there was one."""
+        # It does not: the bench's glass walked SYSTEM CONFIGURATION in
+        # report 102's own names -- ` SLOT  2 INTERSTITIAL BD`, ` SLOT  9
+        # PLLD POWER BD`, `  COMM 1 RS232 SERIAL BD` (2026-10-08). One
+        # vocabulary for both, so every attested printed name is on the
+        # glass too.
         glass = "\n".join(l1 for l1, _l2 in self.a_cage().slot_report())
-        for name in ("6 PLLD SENSOR", "PLLD CNTRL", "RS-232", "S-SAT COMM",
-                     "SITEFAX", "EDIM", "4 PROBE/ G. T."):
-            self.assertIn(name, glass, name)
         for name, _por, _now, _key in self.ATTESTED:
-            self.assertNotIn(name, glass, name)
+            self.assertIn(name, glass, name)
 
     def test_the_resistance_beside_each_name_identifies_its_card(self):
         """The cross-check that makes the mapping evidence rather than a
@@ -868,12 +880,17 @@ class ThePrintedBoardNamesAreTheirOwnVocabulary(unittest.TestCase):
 
     def test_a_card_with_no_attested_name_prints_the_screen_s(self):
         """Most of the cage appears in no sample at all. Inventing
-        `8 LIQUID BD` from the pattern would be drawing a line on the one
-        report a technician reads to find out what is in the console."""
+        `5 VAPOR BD` from the pattern would be drawing a line on the one
+        report a technician reads to find out what is in the console. (The
+        liquid card was the example here until the bench printed its own
+        `INTERSTITIAL BD`, 2026-10-08 -- not the `8 LIQUID BD` the pattern
+        gave.)"""
         c = self.a_cage()
+        c.modules["vapor"] = 1
+        self.assertEqual(c.slot_name("vapor"), c.slot_name("vapor", True))
+        self.assertEqual(c.slot_name("vapor"), "5 VAPOR")
         c.modules["liquid"] = 1
-        self.assertEqual(c.slot_name("liquid"), c.slot_name("liquid", True))
-        self.assertEqual(c.slot_name("liquid"), "8 LIQUID")
+        self.assertEqual(c.slot_name("liquid", True), "INTERSTITIAL BD")
 
     def test_every_attested_name_belongs_to_a_card_this_console_has(self):
         """`4 INPUT BOARD` is in the sample too, at slot 9, and is
@@ -1066,8 +1083,12 @@ class WhatIsOnTheMenu(unittest.TestCase):
         self.assertTrue([t for t in steps() if t.startswith("Line Reenable")])
 
     def test_the_features_list_is_cards_and_keys_together(self):
+        """Keys, and cards -- but not the in-tank tests, which are the
+        software's: the bench cold started with no probe card in it and
+        still listed them (I90200, 2026-10-09)."""
         c = self.bare()
-        self.assertEqual(c.features(), [])
+        self.assertEqual(c.features()[:2], ["PERIODIC IN-TANK TESTS",
+                                            "ANNUAL IN-TANK TESTS"])
         c.set_module("probe", 1)
         self.assertIn("PERIODIC IN-TANK TESTS", c.features())
         c.software["fuelman"] = True
@@ -2583,7 +2604,23 @@ class TheWaterStepsOfInTankSetup(unittest.TestCase):
     def steps(self, console):
         from tls350sim.console import SETUP_MENU
         fn = [f for f in SETUP_MENU if f["function"] == "IN-TANK SETUP"][0]
+        # with its probe reporting: without one the bench draws none of
+        # these (2026-10-08, CLOSED S59)
+        console.tank_level.setdefault(1, {"volume": 2500.0, "water": 0.0})
         return [st.get("text", "") for st in console.visible_steps(fn, 1)]
+
+    def test_no_probe_reporting_no_water_screens(self):
+        """The bench, tank 1 on and no probe, walked IN-TANK SETUP without
+        FLOAT SIZE, the water limits and filter and PERIODIC TEST TYPE
+        (2026-10-08). CLOSED S59."""
+        from tls350sim.console import SETUP_MENU
+        c = Console()
+        fn = [f for f in SETUP_MENU if f["function"] == "IN-TANK SETUP"][0]
+        shown = [st.get("text", "") for st in c.visible_steps(fn, 1)]
+        for name in ("Float Size", "Water Warning", "High Water Limit",
+                     "Water Alarm Filter", "Periodic Test Type",
+                     "HRM Reconciliation"):
+            self.assertFalse(any(t.startswith(name) for t in shown), name)
 
     def test_the_threshold_comes_after_the_alarm_filter(self):
         c = Console()
@@ -2840,8 +2877,9 @@ class Wire(unittest.TestCase):
 
     def test_the_beeper_wants_its_verification_code(self):
         """"149 - This verification code must be sent to confirm the command",
-        <SOH>S53000x149."""
-        self.assertEqual(self.ask(SOH + "S530000" + CR), NOT_UNDERSTOOD_TEXT)
+        <SOH>S53000x149. Without it the bench answers `?` and changes
+        nothing (2026-10-08, CLOSED S50) -- not 9999FF."""
+        self.assertIn("\r\n?\r\n", self.ask(SOH + "S530000" + CR))
         self.assertNotIn("S53000", self.c.values)
         self.ask(SOH + "S530001149" + CR)
         self.assertEqual(self.c.values["S53000"], "1")
@@ -2875,8 +2913,11 @@ class Wire(unittest.TestCase):
         self.assertIn("020501", self.ask(SOH + "i10100" + CR))
         self.assertIn("LOW PRODUCT ALARM", self.ask(SOH + "I10100" + CR))
 
-    def test_all_functions_normal_is_six_zeroes(self):
-        self.assertIn("000000", self.ask(SOH + "i10100" + CR))
+    def test_all_functions_normal_is_category_00_alone(self):
+        """The bench, 2026-10-08, quiet out of a cold start:
+        `i10100060116080200` -- the stamp, then `00` and the checksum."""
+        said = self.ask(SOH + "i10100" + CR)
+        self.assertRegex(said, r"i10100\d{10}00&&")
         self.assertIn("ALL FUNCTIONS NORMAL", self.ask(SOH + "I10100" + CR))
 
     def test_the_reply_is_stamped_with_the_console_clock(self):
@@ -4964,13 +5005,13 @@ class ModuleIdResistors(unittest.TestCase):
         c.modules = {"probe": 1}
         rows = [(k, v) for k, v in c.slot_report() if "UNUSED" in k]
         safe = [v for k, v in rows
-                if k.startswith("SLOT") and int(k.split()[1]) <= 8]
+                if k.strip().startswith("SLOT") and int(k.split()[1]) <= 8]
         power = [v for k, v in rows
-                 if k.startswith("SLOT") and int(k.split()[1]) > 8]
-        comms = [v for k, v in rows if k.startswith("COMM")]
+                 if k.strip().startswith("SLOT") and int(k.split()[1]) > 8]
+        comms = [v for k, v in rows if k.strip().startswith("COMM")]
         self.assertEqual((len(safe), len(power), len(comms)), (7, 8, 6))
         for line in safe + power + comms:
-            self.assertEqual(line, "POR=15000000 C=15000000")
+            self.assertEqual(line, "POR=15000000  C=15000000")
 
     def test_and_the_captured_console_s_own_empty_rows_replay(self):
         """The rows this had never been compared against. `I10200` is on the
@@ -5369,9 +5410,14 @@ class TheCommBayCardsThatWereMissing(unittest.TestCase):
         and what this has always been about; it used to ask `slot_readings`,
         which is the printout and is now a different vocabulary. M20."""
         c = self.a_bay(ssat=1, asat=1)
-        names = [line.split(" ", 2)[2] for line, _l2 in c.slot_report()
-                 if "S-SAT" in line]
-        self.assertEqual(names, ["S-SAT COMM", "S-SAT COMM"])
+        # The slot line is report 102's vocabulary since the bench's glass
+        # showed it so (2026-10-08), and the printout tells the serial
+        # satellite apart by name where it has one; the BOARD name each
+        # port carries is still the same for both
+        names = [line.strip().split(" ", 2)[2] for line, _l2
+                 in c.slot_report() if line.strip().startswith("COMM ")
+                 and "UNUSED" not in line]
+        self.assertEqual(names, ["SERIAL SAT BD", "S-SAT COMM"])
         # `S-SAT ` with its own trailing space: the manual prints
         # `COMM BOARD  : 1 (S-SAT )` and so does a real console. It is a
         # character of the name, not a six-wide field being padded -- the

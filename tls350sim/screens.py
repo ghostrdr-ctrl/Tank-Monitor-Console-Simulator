@@ -179,6 +179,15 @@ def named_head(console, head, device, letter):
     neither.
     """
     head = head.replace("%d", str(device))
+    if "{ca_label:" in head:
+        # `ALL: KPM` over the four outputs, the label just entered
+        head = re.sub(r"\{ca_label:(\d{4})\}",
+                      lambda m: console.setting(f"ca_{m.group(1)}_lbl"), head)
+    if "{ca_dlabel:" in head:
+        # `L 2: BOOP` over the four outputs of one device's entry
+        head = re.sub(r"\{ca_dlabel:(\d{4})\}",
+                      lambda m: console.setting(f"ca_{m.group(1)}_dlbl",
+                                                device), head)
     if "(" in head:
         label = device_label(console, letter, device)
         for placeholder in ("(PRODUCT LABEL)", "(Product Label)",
@@ -507,7 +516,250 @@ def setup_context(console, function, step, device):
     return f"{letter}{device}: {named}".rstrip(), label or text + ":"
 
 
+# LIQUID SENSOR SETUP as the bench's glass drew it, read through 5FA with
+# stepped at its keypad (2026-10-08, the interstitial card in slot 2, sensor 2
+# switched on):
+#
+#     SENSOR CONFIG - MODULE 1      ENTER SENSOR LOCATION
+#     SLOT 2 - X 2 X X X X X X      L 2:
+#
+#     L 2:ENTER SENSOR TYPE         L 2:
+#     TRI-STATE (SINGLE FLOAT)      CATEGORY : OTHER SENSORS
+#
+# The device is `L 2:` -- the number held right in two, as the alarm
+# display holds it, and nothing after the colon -- where the guide draws
+# `L1: ENTER SENSOR TYPE`; the category has a space before its colon; and
+# the slot line is the card's own SLOT number, ` - `, then the positions.
+# Those last two the Setup manual draws as well (576013-623 Rev AN p.173 to
+# p.175), and this console had misspelt them.
+# The other sensor families draw the same way on the page and none has been
+# read, so this is the liquid card's alone (FIDELITY S46).
+#
+# IN-TANK SETUP the same way, tank 1 of the cold-started bench stepped
+# with nothing programmed on it (`transcripts/menuwalk2.jsonl`): `T 1:` with
+# the label hard against the colon, `T 1:ANNUAL TEST FAIL` likewise -- but
+# `T 1: SIPHON MANIFOLDED` and `T 1: LINE MANIFOLDED` keep their space --
+# and `ENTER PRODUCT LABEL:` with a colon the guide does not draw.
+MEASURED_FACES = {"LIQUID SENSOR SETUP": "L", "IN-TANK SETUP": "T"}
+HEADS_KEEP_THE_SPACE = {"SIPHON MANIFOLDED", "LINE MANIFOLDED"}
+
+
+# SYSTEM SETUP's own lines off the bench's glass (`transcripts/menuwalk`,
+# `menuwalk3`), each rewritten where this drew the guide's or its own:
+# the station header line `# 1:`, the shift time `SHIFT #1 START TIME :`,
+# the security code `CODE : 000000` as TANK CHART SECURITY already drew it,
+# and three names -- `DAYLIGHT SAVING TIME` (which the setup printout here
+# already spelt so, off the tape), `CUSTOM ALARMS` and `SYSTEM BEEPER`.
+LINE_FACES = {"SYSTEM SETUP": (
+    (r"^#(\d): ?", r"# \1:"),
+    (r"^(SHIFT #\d START TIME)$", r"\1 :"),
+    (r"^CODE: ", "CODE : "),
+    (r"^DAYLIGHT SAVINGS TIME$", "DAYLIGHT SAVING TIME"),
+    (r"^CUSTOM ALARM LABELS$", "CUSTOM ALARMS"),
+    (r"^BEEPER$", "SYSTEM BEEPER"),
+),
+    # a port's settings, at rest and while CHANGE walks them, in the setup
+    # printout's own words, which the bench's glass draws too
+    "COMMUNICATIONS SETUP": (
+    (r"^COMM BOARD: ", "COMM BOARD  : "),
+    (r"^BAUD RATE: ", " BAUD RATE  : "),
+    (r"^PARITY: ", " PARITY     : "),
+    (r"^STOP BIT: ", " STOP BIT   : "),
+    (r"^DATA LENGTH: ", " DATA LENGTH: "),
+    (r"^CODE: ", "CODE : "),
+)}
+
+
+def _measured_face(function, lines):
+    """`lines` as a function in `MEASURED_FACES` draws them."""
+    name = (function or {}).get("function", "")
+    rules = LINE_FACES.get(name)
+    if rules:
+        out = []
+        for line in lines:
+            for pattern, repl in rules:
+                line = re.sub(pattern, repl, line)
+            out.append(line[:COLS])
+        lines = out
+    letter = MEASURED_FACES.get(name)
+    if not letter:
+        return lines
+
+    def head(m):
+        rest = m.group(2)
+        gap = " " if rest.strip() in HEADS_KEEP_THE_SPACE else ""
+        return f"{letter}{int(m.group(1)):2d}:{gap}{rest}"
+
+    out = []
+    for line in lines:
+        line = re.sub(rf"^{letter}(\d+): ?(.*)$", head, line)
+        line = re.sub(r"^CATEGORY: ", "CATEGORY : ", line)
+        if line == "ENTER PRODUCT LABEL":
+            line = "ENTER PRODUCT LABEL:"
+        if letter == "T":
+            # the bench's own label wherever the line still carries the
+            # guide's -- CHANGE paging a word draws `TNK TST SIPHON
+            # BREAK:ON `, the value hard against the label as at rest
+            for label, _form in TANK_FACES.values():
+                root = label.replace(":", "").strip()
+                m = re.match(rf"^\s*{re.escape(root)}\s*: ?(.*)$", line)
+                if m:
+                    # a line already in the bench's form comes back as it
+                    # was; an edit buffer keeps its own right alignment
+                    line = label + m.group(1)
+                    break
+        out.append(line[:COLS])
+    return out
+
+
+def _whole(width):
+    return lambda v: f"{int(v):0{width}d}"
+
+
+def _percent(v):
+    return f"{int(v):03d}%"
+
+
+def _signed(v):
+    return ("-" if v < 0 else "+") + f"{abs(v):07.2f}"
+
+
+# IN-TANK SETUP's second lines off the bench's glass, tank 1 unprogrammed:
+# every label padded to its own colon, every value at its own width and
+# truncated, not rounded -- the 99.9 sudden loss default reads `000099`, and
+# the wire's I625 reads 99 -- where this drew the guide's `LABEL: value`
+# through each field's mask. TANK TILT has no colon at all. Keyed by code.
+# keyed by the code's NUMBER: these draw a setting, they do not read it,
+# and a quoted code is a reader to `test_fidelity`'s source scan
+TANK_FACES = {
+    1539: ("PRODUCT CODE    : ", None),
+    1545: ("THERMAL COEFF  :", lambda v: f"{v:.6f}"),
+    1543: ("TANK DIAMETER   :", lambda v: f"{v:07.2f}"),
+    1540: ("       FULL VOL : ", _whole(6)),
+    1576: ("MAX OR LABEL VOL: ", _whole(6)),
+    1571: ("OVERFILL LIMIT  : ", _percent),
+    1570: ("HIGH PRODUCT    : ", _percent),
+    1577: ("DELIVERY LIMIT  : ", _percent),
+    1569: ("LOW PRODUCT     :", _whole(7)),
+    1574: ("LEAK ALARM LIMIT:", _whole(4)),
+    1573: ("SUDDEN LOSS LIMIT:", _whole(6)),
+    1544: ("TANK TILT       ", _signed),
+    1551: ("PROBE OFFSET   :", _signed),
+    1590: ("LEAK MIN PERIODIC:", _percent),
+    1578: ("LEAK MIN ANNUAL : ", _percent),
+    1586: ("TNK TST SIPHON BREAK:", None),
+    1552: ("DELIVERY DELAY  : ", _whole(2)),
+    1594: ("PUMP THRESHOLD  : ", lambda v: f"{v:05.2f}%"),
+}
+# `TANK PROFILE    : 1 PT`, `:  4 PTS`, `: 20 PTS`, `: LINEAR`, `: 50 PTS`
+TANK_PROFILE_FACE = {"00": "1 PT", "01": " 4 PTS", "02": "20 PTS",
+                     "03": "LINEAR", "04": "50 PTS"}
+
+
+# the settings PORT SETTINGS holds, a port's own: UART, security code,
+# modem, dial tone and DTR -- and not the receivers' beside them
+PORT_SETTING_CODES = {"881", "536", "885", "886", "887", "889"}
+
+
+def _port_face(console, step, device, lines):
+    """A port setting as the bench's glass draws it -- which is the setup
+    printout's own line: `COMM BOARD  : 1 (RS-232)` over ` BAUD RATE  :
+    1200`, ` PARITY     : ODD`, ` STOP BIT   : 1 STOP`, ` DATA LENGTH: 7
+    DATA` and `CODE : DISABLED`, inside PORT SETTINGS / PRESS <ENTER>
+    (`transcripts/menuwalk2.jsonl`, 2026-10-08). The guide drew
+    `COMM BOARD: 1` and `BAUD RATE: 1200`."""
+    if (step.get("code") or "")[1:4] not in PORT_SETTING_CODES:
+        return lines
+    form = ((step.get("print") or {}).get("lines") or [None])[0]
+    if not form or len(lines) < 2 or ":" not in str(lines[1]):
+        return lines
+    value = str(lines[1]).split(":", 1)[1].strip()
+    board = console.comm_board_name(device)
+    return [f"COMM BOARD  : {device} ({board})"[:COLS],
+            form.format(value)[:COLS]]
+
+
+def tank_faced(step):
+    """Does this IN-TANK SETUP step draw a `TANK_FACES` face?"""
+    try:
+        return int((step.get("code") or "")[1:4], 16) in TANK_FACES
+    except ValueError:
+        return False
+
+
+def _tank_face(console, step, device, lines):
+    """IN-TANK SETUP's second line as the bench draws it, where it was
+    read (`TANK_FACES`); every other screen as drawn."""
+    if len(lines) < 2:
+        return lines
+    if step.get("profile"):
+        name = TANK_PROFILE_FACE.get(console.tank_profile(device))
+        if name:
+            return [lines[0], "TANK PROFILE    : " + name]
+        return lines
+    tok = (step.get("code") or "")[1:4]
+    if tok in ("612", "61D"):
+        # `T#: 00` under an unprogrammed manifold, where this listed seven
+        # zero pairs; a programmed one is not read
+        held = str(shown(console, field_of(console, step, device) or {},
+                         stored(console, step, device)) or "")
+        if not held.replace("0", "").replace(",", "").strip():
+            return [lines[0], "T#: 00"]
+        return lines
+    try:
+        face = TANK_FACES.get(int(tok, 16))
+    except ValueError:
+        face = None
+    if not face:
+        return lines
+    label, form = face
+    f = field_of(console, step, device) or {}
+    held = str(shown(console, f, stored(console, step, device, f)) or "")
+    if form is None:
+        if tok == "603" and not held.strip():
+            # the product code defaults to the tank's own number, as I603
+            # answers it (`blankrows`)
+            held = str(device)
+        return [lines[0], (label + held.strip())[:COLS]]
+    try:
+        value = float(held.rstrip("%").strip() or 0)
+    except ValueError:
+        return lines
+    return [lines[0], (label + form(value))[:COLS]]
+
+
+# the config screens read off the bench's glass: the tank's
+# `SLOT 1 - 1 X X X` and the liquid card's `SLOT 2 - X 2 X X X X X X`
+SLOT_CARD = {"601": "probe", "701": "liquid"}
+
+
+def slot_line(console, code, module, cells):
+    """The config screen's second line: which positions are connected.
+
+    The guide draws the slot as `#`, and it is a placeholder: the bench's
+    liquid config screen printed its card's slot, `SLOT 2 - X 2 X X X X X
+    X`. The liquid card's is drawn so; the others keep the page's until one
+    is read."""
+    if code in SLOT_CARD:
+        slots = [slot for slot, _bay, key, _name in console.cage_slots()
+                 if key == SLOT_CARD[code]]
+        where = slots[module - 1] if 0 < module <= len(slots) else "#"
+        return f"SLOT {where} - {cells}"
+    return "SLOT #: " + cells
+
+
 def setup_lines(console, function, step, device=1, chart_open=True):
+    """The two lines this setup step draws, as `_setup_lines` composes them
+    and as a measured console draws its own (`MEASURED_FACES`)."""
+    lines = _setup_lines(console, function, step, device, chart_open)
+    if (function or {}).get("function") == "IN-TANK SETUP":
+        lines = _tank_face(console, step, device, lines)
+    if (function or {}).get("function") == "COMMUNICATIONS SETUP":
+        lines = _port_face(console, step, device, lines)
+    return _measured_face(function, lines)
+
+
+def _setup_lines(console, function, step, device=1, chart_open=True):
     """The two lines this setup step draws on a console nobody is typing at.
 
     `chart_open` is whether the passcode for a secured 50-point chart has
@@ -524,7 +776,8 @@ def setup_lines(console, function, step, device=1, chart_open=True):
         base = ((device - 1) // wires) * wires
         cells = console.slot_text(f["code"][1:4], wires, base)
         return [module_head(text, base // wires + 1)[:COLS],
-                ("SLOT #: " + cells)[:COLS]]
+                slot_line(console, f["code"][1:4], base // wires + 1,
+                          cells)[:COLS]]
 
     if not chart_open and _chart_locked(console, step, device):
         # "TANK PROFILE : 50 PTS / ENTER PASSCODE->______<"
@@ -535,8 +788,9 @@ def setup_lines(console, function, step, device=1, chart_open=True):
         prompt = f2.get("prompt", text + ":").replace("%d", str(device))
         value = console_value(console, step, device)
         head, _p = setup_context(console, function, step, device)
-        if f2.get("scope") == "system":
-            # "TANK CHART SECURITY / CODE : 000000"
+        if f2.get("scope") == "system" or step.get("ca_devices"):
+            # "TANK CHART SECURITY / CODE : 000000"; and CUSTOM ALARMS'
+            # screens for one device, `L 2: SENSOR OUT ALARM` over `LBL:`
             head = named_head(console, step.get("head") or text, device,
                               letter)
         if step.get("smart_kind"):
@@ -685,7 +939,9 @@ def panel_value(console, function, step, device):
     The report row carries its own label in its own column, so what it
     wants from the screen is the value alone.
     """
-    drawn = setup_lines(console, function, step, device, chart_open=False)
+    # the PAPER's own composition: the glass's measured faces are the
+    # glass's, and the setup report keeps the tape's (`setup_lines`)
+    drawn = _setup_lines(console, function, step, device, chart_open=False)
     if len(drawn) < 2:
         return ""
     line = str(drawn[1]).strip()
@@ -836,7 +1092,7 @@ def print_lines(console, function, step, device=1):
             # It is a way in like the `PRESS <ENTER>` screens below, and it
             # was printing once per DEVICE besides. See FIDELITY T7.
             return []
-        drawn = setup_lines(console, function, step, device, chart_open=False)
+        drawn = _setup_lines(console, function, step, device, chart_open=False)
         if len(drawn) > 1 and KEYPRESS.match(str(drawn[1]).strip()):
             # a screen that asks for a key is a way in, not a value, and a
             # report has no way in. 576013-623 Rev AN draws PRESS <ENTER>

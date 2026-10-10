@@ -3438,8 +3438,18 @@ class SimApp(tk.Tk):
         self._refresh_site()
         self.refresh_traffic()
         n = self.console.fitted(key)
-        self._bench_say(f"{n} x {MODULE_PART.get(key) or 'MODULE'} "
-                        + MODULE_LABEL[key])
+        said = f"{n} x {MODULE_PART.get(key) or 'MODULE'} " + MODULE_LABEL[key]
+        waiting = self.console.waiting_for_cold_start()
+        if waiting:
+            # faithful, and said: the bench TLS-350 went on naming slot 2
+            # for the PLLD board it reset with and left the interstitial
+            # board in it unused until a cold start (2026-10-08), and so
+            # does this console -- which looks like a dead card unless the
+            # bench says why
+            said += ("    cold start needed: slot "
+                     + ", ".join(str(slot) for slot, _was, _now in waiting)
+                     + " still reads the card it had at the last one")
+        self._bench_say(said)
 
     def _sync_bays(self):
         for bay, label in self.bay_labels.items():
@@ -4437,6 +4447,39 @@ class SimApp(tk.Tk):
             return True
         return str(self.sel.get(want, "")) in (step["when"].get("is") or [])
 
+    # A tank switched on with no probe reporting, as the bench's glass drew
+    # it (tank 1 on, nothing on the probe card, `transcripts/menuwalk.jsonl`
+    # and `menuwalk2.jsonl`, 2026-10-08): the probe diagnostics are one
+    # screen, `T 1: TYPE UNUSED` over `PRESS <TANK> TO CONTINUE`; the power
+    # diagnostic is `T 1:POWER REMOVED` over `NO DATA HISTORY`; and the leak
+    # result offers its three printouts and none of a result's screens.
+    # This drew a probe with a serial number and a power record with
+    # volumes in it, for a tank with neither.
+    NO_PROBE_SCREENS = {
+        "IN-TANK DIAGNOSTIC": [("T %d: TYPE UNUSED", "PRESS <TANK> TO CONTINUE")],
+        "IN-TANK LEAK DIAGNOSTIC": [("T %d: TYPE UNUSED",
+                                     "PRESS <TANK> TO CONTINUE")],
+        "POWER DIAGNOSTIC": [("T %d:POWER REMOVED", "NO DATA HISTORY")],
+    }
+
+    def _no_probe_screens(self, fn):
+        """The screens a function draws for a tank with no probe, or None."""
+        name = (fn or {}).get("function")
+        tank = self.device
+        c = self.console
+        if (not c.has("probe") or tank in c.tank_level
+                or not c._configured("601", tank)):
+            return None
+        offered = self._diag_offered(fn)
+        if name in self.NO_PROBE_SCREENS and offered:
+            blank = {key: None for key in offered[0]}
+            return [dict(blank, text=l1 % tank, l2=l2, depth=0)
+                    for l1, l2 in self.NO_PROBE_SCREENS[name]]
+        if name == "IN-TANK LEAK RESULT":
+            return [sc for sc in offered
+                    if not str(sc.get("live") or "").startswith("tank_leak")]
+        return None
+
     def _diag_screens(self, fn):
         """The diagnostic screens on offer, which depends on where you are.
 
@@ -4444,6 +4487,9 @@ class SimApp(tk.Tk):
         under the screen that says PRESS <ENTER>. So those are not steps of
         the function: they are a level down, and BACKUP is the way out.
         """
+        no_probe = self._no_probe_screens(fn)
+        if no_probe is not None:
+            return no_probe
         # some diagnostic screens belong to one vapor processor only:
         # the polisher has LOAD/EFFLUENT/VALVE/TEMP, the membrane has VP
         # STATE/HC SENSOR. A screen's "vp" says which processor it is for.
@@ -5193,7 +5239,13 @@ class SimApp(tk.Tk):
     # display
     # =====================================================================
     def _alarms(self):
-        return describe_alarms(self.console.compute_alarms())
+        """The messages the display rotates through: a custom alarm whose
+        LCD output is off is not one of them (`customalarms.shown_on_lcd`)."""
+        from . import customalarms
+        return [a for a in describe_alarms(self.console.compute_alarms(),
+                                           self.console)
+                if customalarms.shown_on_lcd(self.console, a["aa"], a["nn"],
+                                             a["tt"])]
 
     def _stored(self):
         code, f = self.cur_code(), self.cur_field()
@@ -5371,11 +5423,44 @@ class SimApp(tk.Tk):
         return [str(r).replace(CURSOR, " ") for r in rows[:2]]
 
     def _lines(self):
+        """The two lines on the glass; a function whose face was read off a
+        real console's glass is drawn in it, editing or not
+        (`screens.MEASURED_FACES`)."""
+        lines = self._lines_drawn()
+        if (MODES[self.mode] == "SETUP" and not self.msg
+                and not self.locked and not self.confirm):
+            return screens._measured_face(self.cur_function(), lines)
+        return lines
+
+    def _mode_name(self):
+        """The mode's own screen name, centred -- an odd space to the LEFT:
+        `       SETUP MODE       ` and `        DIAG MODE       ` on the
+        bench's glass (2026-10-08), where `str.center` puts it right."""
+        name = MODE_SCREEN_NAME[MODES[self.mode]]
+        left = (COLS - len(name) + 1) // 2
+        return (" " * left + name).ljust(COLS)[:COLS]
+
+    def _lines_drawn(self):
         if self.msg:
             return self.msg.split(chr(10))[:ROWS]
         if self.locked:
-            return ["SYSTEM SECURITY",
-                    "CODE: " + "*" * len(self.buf) + CURSOR]
+            # the bench's glass, asked for its code on the way into SETUP
+            # and DIAG MODE (`transcripts/menuwalk*.jsonl`, 2026-10-08): the
+            # mode's own name stays on top, and the code goes into six
+            # underscores a star at a time -- `ENTER PASSCODE ->**____<`
+            typed = min(len(self.buf), 6)
+            return [self._mode_name(),
+                    "ENTER PASSCODE ->" + "*" * typed + "_" * (6 - typed)
+                    + "<"]
+        saving = self._saving()
+        if saving is not None and self.step == HEADER and self._entered_fn(
+                ("ARCHIVE UTILITY", "ARCHIVE DIAGNOSTIC")):
+            # the save under way, on both functions' own screens
+            name = self.cur_function()["function"]
+            if name == "ARCHIVE UTILITY":
+                return [name, "SAVE SETUP DATA: BUSY"]
+            return [name, f"SAVE SETUP DATA: "
+                          f"{self.SAVE_RATE * int(saving)}"[:COLS]]
         if self.maint_report:
             # Chapter 32's screen, reached by a key rather than by a
             # function, so it is drawn wherever the console was standing --
@@ -5417,8 +5502,7 @@ class SimApp(tk.Tk):
             # right until the glass was seen. The resting screen's own
             # `ALL FUNCTIONS NORMAL` was already centred here for the same
             # reason and off the same kind of evidence.
-            return [MODE_SCREEN_NAME[MODES[self.mode]].center(COLS),
-                    CONT_FUNCTION]
+            return [self._mode_name(), CONT_FUNCTION]
         fn = self.cur_function()
         if fn is None:
             return ["NO FUNCTIONS", "CHECK MODULES"]
@@ -5474,7 +5558,9 @@ class SimApp(tk.Tk):
                 cells = list(cells)
                 cells[self.slot % max(len(cells), 1)] = " "
             return [self._module_head(text, base // wires + 1)[:COLS],
-                    ("SLOT #: " + " ".join(cells))[:COLS]]
+                    screens.slot_line(self.console, f["code"][1:4],
+                                      base // wires + 1,
+                                      " ".join(cells))[:COLS]]
         if MODES[self.mode] == "DIAGNOSTIC" and e.get("buf") and self.editing:
             # "ENTER ID TO BLOCK / ID: XXXXXX", with the ID going in -- and
             # the Service Notice duration is the same shape with its own
@@ -6091,10 +6177,44 @@ class SimApp(tk.Tk):
         if devices and self.device not in devices:
             self.device = devices[0]
 
+    def _custom_alarm_arrival(self):
+        """Tell CUSTOM ALARMS which of its screens the walk is on now.
+
+        The branch keeps a state no report stores -- which categories are
+        open, which alarm is set YES and waiting for its label -- and the
+        bench reset both as the walk moved: a category's switch read NO
+        each time it came round, and an alarm left without a label was NO
+        again on the next screen (`customalarms.walked`). And a device's
+        screen opens on its first device, `L 1 OPEN      :  NO`, whatever
+        TANK/SENSOR last pointed at (2026-10-09)."""
+        step = (self.cur_step() if MODES[self.mode] == "SETUP"
+                and self.step >= 0 else None) or {}
+        key = step.get("console") or ""
+        if key == getattr(self, "_ca_at", None):
+            return
+        if step.get("ca_devices") and not getattr(self, "_ca_dev", False):
+            self.device = 1
+        came = getattr(self, "_ca_at", "") or ""
+        self._ca_at = key
+        self._ca_dev = bool(step.get("ca_devices"))
+        from . import customalarms
+        back = customalarms.walked(self.console,
+                                   key[4:] if key.startswith("set.") else "",
+                                   self.device, came[4:])
+        if back:
+            # STEP off an empty `LBL:` came back to the alarm's own switch,
+            # NO again: `ROM REV WRN:NO`, `FUEL      : NO SENSORS`
+            here = [i for i, st in enumerate(self.steps())
+                    if st.get("console") == f"set.{back}"]
+            if here:
+                self.step = here[0]
+                self._ca_at = f"set.{back}"
+
     def _render(self):
         # 5FA reads this panel's screen, and the console may have been
         # swapped since the last render (`_glass_for_wire`)
         self.console.glass_source = self._glass_for_wire
+        self._custom_alarm_arrival()
         # the backlight is on whenever the console is, unless SW2-3 has
         # blanked the display
         self.lcd.backlight(self.console.powered
@@ -6384,7 +6504,7 @@ class SimApp(tk.Tk):
         # gone keeps its message -- it is still on `al` -- and drops its
         # lamp, because it is no longer a condition.
         live_now = {a["aa"] + a["nn"] + a["tt"]
-                    for a in describe_alarms(self.console.conditions())}
+                    for a in describe_alarms(self.console.conditions(), self.console)}
         lit = [(a, self.lamp_for(a)) for a in al
                if a["aa"] + a["nn"] + a["tt"] in live_now]
         warn = any(which == "warning" for _a, which in lit)
@@ -6654,10 +6774,18 @@ class SimApp(tk.Tk):
         setup or diagnostic function": a property of BEING in a guarded
         mode, so every way into one asks. `k_mode` asked and BACKUP walked
         into Setup and Diagnostic without it. FIDELITY O20.
+
+        Asked off the mode's own screen, not on it: the bench's glass read
+        `SETUP MODE / PRESS <FUNCTION> TO CONT`, and FUNCTION brought
+        `SETUP MODE / ENTER PASSCODE ->______<` (2026-10-08 and 2026-10-09,
+        `bench-2026-10-09/glass.jsonl`). What it asks FOR is open: it asked
+        with 504 reading 000000, and after a cold start did not ask at all
+        (FIDELITY S46).
         """
         self.locked = (self.console.panel_security
                        and bool(self.console.security_code())
-                       and MODES[self.mode] in ("SETUP", "DIAGNOSTIC"))
+                       and MODES[self.mode] in ("SETUP", "DIAGNOSTIC")
+                       and self.step != MODE_SCREEN)
 
     def _leave_overlay(self):
         """Leave the ISD override or the Maintenance Tracker log-in on a key
@@ -6857,6 +6985,8 @@ class SimApp(tk.Tk):
         else:
             self.func = (self.func + 1) % max(len(self.functions()), 1)
         self.step = HEADER
+        # off the mode's screen is where a guarded mode asks for its code
+        self._guard_mode()
         self._render()
 
     def k_step(self):
@@ -7059,6 +7189,19 @@ class SimApp(tk.Tk):
             self.log("-- nothing programmed for this function")
             self._render()
             return
+        if (self.step == HEADER and MODES[self.mode] == "NORMAL"
+                and (self.cur_function() or {}).get("function")
+                in self.STATUS_OF and not self.console.configured_devices(
+                    self.STATUS_OF[self.cur_function()["function"]],
+                    self._device_count())):
+            # The bench's LIQUID STATUS with its card fitted and no sensor
+            # switched on: offered, `PRESS <STEP> TO CONTINUE`, and STEP did
+            # nothing -- where this stepped onto a made-up `L 1: LIQUID
+            # SENSOR 1`. Switched on, it walked sensor 2 alone, STEP and
+            # TANK/SENSOR both staying there (2026-10-08). FIDELITY O16.
+            self.log("-- no sensor switched on")
+            self._render()
+            return
         if self.step == HEADER:
             self.step = 0
             self.shift_ix = 0
@@ -7076,8 +7219,46 @@ class SimApp(tk.Tk):
             # Setup only. No chapter-6 figure nests, and the diagnostic
             # branches are walked as rings.
             self._ascend()
+            if (self.cur_step() or {}).get("past"):
+                # ...but not CUSTOM ALARMS: off its last screen the bench
+                # went on to SYSTEM BEEPER, every time (2026-10-09)
+                self.step = (self.step + 1) % len(self.steps())
+        elif (MODES[self.mode] == "SETUP"
+              and (self.cur_step() or {}).get("repeat")
+              and self.device < self.REPEAT_LINES):
+            # Station Header and Shift Start Time walk their four lines on
+            # STEP: "To enter additional header lines, press STEP and repeat
+            # the above procedure up to three more times for lines 2, 3, and
+            # 4" (576013-623 Rev AN), and the bench's glass went `# 1:` to
+            # `# 4:` and SHIFT #1 to #4 so (2026-10-08). TANK/SENSOR still
+            # walks them too.
+            self.device += 1
         else:
+            if (self.cur_step() or {}).get("repeat"):
+                self.device = 1
             self.step = (self.step + 1) % len(steps)
+            fn_name = (self.cur_function() or {}).get("function")
+            if (self.step == 0 and len(steps) > 1
+                    and MODES[self.mode] == "SETUP"
+                    and fn_name in screens.MEASURED_FACES
+                    and (self.cur_field() or {}).get("kind") == "slots"):
+                # The bench's IN-TANK SETUP and LIQUID SENSOR SETUP ring
+                # past their module's config screen: off the last screen,
+                # STEP went to ENTER PRODUCT LABEL and ENTER SENSOR
+                # LOCATION, not back to TANK CONFIG (2026-10-08)
+                self.step = 1
+            config = self.CONFIG_OF.get(fn_name)
+            if (self.step > 0 and MODES[self.mode] == "SETUP"
+                    and fn_name in screens.MEASURED_FACES and config):
+                # ...and walk only the positions switched on there: L 2
+                # alone with sensor 2 alone on, and with no tank on, STEP
+                # off TANK CONFIG went back to IN-TANK SETUP's own head
+                on = self.console.configured_devices(
+                    config, max(self._device_count(), 1))
+                if not on:
+                    self.step = HEADER
+                elif self.device not in on:
+                    self.device = on[0]
         self.armed = self.sure = False
         self.vmc_remove = "no"
         self._render()
@@ -7112,7 +7293,16 @@ class SimApp(tk.Tk):
             self._render()
             return
         if self.step > 0:
+            came = (self.cur_step() or {}).get("console") or ""
             self.step -= 1
+            switch = (self.cur_step() or {}).get("console") or ""
+            if (self.step > 0 and switch.startswith("set.ca_g")
+                    and came.startswith("set.ca_" + switch[8:])):
+                # BACKUP off a custom alarm category's first alarm passed
+                # over the category's own switch to the one before it:
+                # SETUP WARN to `SYSTEM ALARMS     : NO`, twice on the
+                # bench's glass (2026-10-09)
+                self.step -= 1
         elif self.step == 0:
             self.step = HEADER
         elif self.step == MODE_SCREEN:
@@ -7285,6 +7475,14 @@ class SimApp(tk.Tk):
 
     # The input module carries two, and it shares a cage key with the relays.
     DEVICE_LIMIT = {"EXTERNAL INPUT SETUP": 2}
+    #: the lines a repeating SYSTEM SETUP step walks on STEP
+    REPEAT_LINES = 4
+    #: the functions whose TANK/SENSOR walk is every input on the card,
+    #: switched on or not (`_devices`)
+    WALKS_EVERY_INPUT = {"LIQUID DIAGNOSTIC"}
+    #: status functions whose STEP goes nowhere with nothing switched on,
+    #: and the config screen that says (`k_step`; only liquid is measured)
+    STATUS_OF = {"LIQUID STATUS": "701"}
 
     # What the function's own screen says on a console with the card in it
     # and nothing programmed on the card. Photographed on a real TLS-350
@@ -7332,6 +7530,12 @@ class SimApp(tk.Tk):
         fn = self.cur_function()
         name = fn["function"] if fn else ""
         code = self.CONFIG_OF.get(name)
+        family = (self.cur_step() or {}).get("ca_devices")
+        if family:
+            # CUSTOM ALARMS' `L 1 OPEN      :  NO`: TANK/SENSOR went L 1 to
+            # L 8 and round, wired or not, and `Q 1` to `Q 3` on the PLLD
+            # board (2026-10-09)
+            return list(range(1, max(self.console.capacity(family), 1) + 1))
         want = (self.cur_step() or {}).get("smart_kind")
         if want:
             # "Press Tank to view the next airflow meter", 577013-800 Rev P
@@ -7364,6 +7568,11 @@ class SimApp(tk.Tk):
             n = (max(SLOT_POSITIONS.get(code, 0), self._device_count())
                  if code else self._device_count())
         n = max(n, 1)
+        if name in self.WALKS_EVERY_INPUT:
+            # the bench's LIQUID DIAGNOSTIC, sensor 2 alone switched on:
+            # TANK/SENSOR went L 1, L 2, L 3 ... and six presses later back
+            # round to L 1, off and unwired inputs and all (2026-10-08)
+            return list(range(1, n + 1))
         if code and MODES[self.mode] != "SETUP":
             # Reporting on a position nobody wired up is reporting on
             # something that is not there: LIQUID STATUS walked eight sensors
@@ -7411,7 +7620,7 @@ class SimApp(tk.Tk):
                                   + self.console.available_reconciliation())}
             module = requires.get(name)
             need = (module,) if module else None
-        if name == "GROUND TEMP DIAGNOSTIC":
+        if name == "GROUNDTEMP DIAGNOSTIC" and self.console.has("vlld"):
             # ...except this one, which is a SITE's thermistor and not a
             # card's positions. "When using volumetric line leak detection
             # (VLLD), only one ground temperature thermistor is needed per
@@ -8518,6 +8727,14 @@ class SimApp(tk.Tk):
                 head = self._second(label, shown, step.get("gap", " "))
                 if echo is not None:
                     head = self._second(label, echo.rstrip(), "")
+                fn_name = (self.cur_function() or {}).get("function")
+                if (fn_name == "IN-TANK SETUP" and step
+                        and screens.tank_faced(step)):
+                    # and confirmed in the face the field itself draws, the
+                    # bench's (`screens.TANK_FACES`): the two agree, which is
+                    # this confirmation's own rule
+                    head = screens._tank_face(self.console, step,
+                                              self.device, ["", head])[1]
             self.confirm = [head[:COLS], CONT_STEP]
             if str((step or {}).get("sure", "\0")) == str(data):
                 # "Press STEP: DISABLED / ARE YOU SURE? : NO" -- the beeper
@@ -9166,8 +9383,13 @@ class SimApp(tk.Tk):
             device = self.device if f.get("scope") == "device" else 0
             shown = self.console.setting(f["which"], device,
                                          f.get("default", ""))
-            prompt = f.get("prompt") or ""
-            self.confirm = [f"{prompt} {shown}".strip()[:COLS], CONT_STEP]
+            # the device in it as the field draws it: `L 2 OPEN      :  YES`
+            prompt = (f.get("prompt") or "").replace("%d", str(device))
+            # with the step's own gap, as the field draws it: `PAPER OUT
+            # :YES` confirmed so on the bench's glass (2026-10-08)
+            gap = step.get("gap", " ")
+            self.confirm = [f"{prompt}{gap}{shown}".strip()[:COLS],
+                            CONT_STEP]
             self._render()
             return
         if not self.editing:
@@ -9345,6 +9567,31 @@ class SimApp(tk.Tk):
     # ARCHIVE_SECONDS is three and not sixty.
     REBOOT_HOLD_SECONDS = 5.0
 
+    # A SAVE as the bench ran one (2026-10-08, `bench-2026-10-08-cold/
+    # transcripts/menuwalk2.jsonl`): `ARCHIVE UTILITY / SAVE SETUP DATA:
+    # BUSY` off the last STEP, and ARCHIVE DIAGNOSTIC's own screen counting
+    # it -- `SAVE SETUP DATA: 1920` fifteen seconds in, 128 more a second,
+    # 8320 at sixty-five and back to PRESS <STEP> TO CONTINUE by sixty-six.
+    # And the keypad answered all the way through: MODE, the passcode
+    # and eight diagnostic functions all worked while it ran. So a save does
+    # not take the console away, and sixty-six seconds costs nobody a wait.
+    SAVE_RATE = 128
+    SAVE_TOTAL = 8448
+    SAVE_SECONDS = SAVE_TOTAL / SAVE_RATE
+
+    def _entered_fn(self, names):
+        """Is the panel on one of these functions, in a mode showing it?"""
+        if self.step == MODE_SCREEN or MODES[self.mode] == "NORMAL":
+            return False
+        return (self.cur_function() or {}).get("function") in names
+
+    def _saving(self):
+        """Seconds into an archive save still running, or None."""
+        until = getattr(self, "save_until", 0.0)
+        if time.time() >= until:
+            return None
+        return time.time() - (until - getattr(self, "save_length", 0.0))
+
     def _run_archive(self, what):
         """Save, restore or clear. The console goes away while it works."""
         self.log(f"-- archive {what}: working")
@@ -9363,6 +9610,13 @@ class SimApp(tk.Tk):
             # for the work.
             seconds = max(seconds, self.REBOOT_HOLD_SECONDS)
             self.log("-- archive restore: holding for hardware to initialize")
+        if what == "save" and seconds > 0:
+            seconds = self.SAVE_SECONDS
+            self.save_length = seconds
+            self.save_until = time.time() + seconds
+            self._render()
+            self.after(int(seconds * 1000), lambda: self._finish_archive(what))
+            return
         if seconds <= 0:
             self._finish_archive(what)
             return
@@ -9380,6 +9634,9 @@ class SimApp(tk.Tk):
         console = self.console
         self.busy_until = 0.0
         self.busy_line = None
+        self.save_until = 0.0
+        walked_off = (what == "save" and (self.cur_function() or {}).get(
+            "function") != "ARCHIVE UTILITY")
         if what == "save":
             n = console.archive_save()
             if n >= 0:
@@ -9420,8 +9677,11 @@ class SimApp(tk.Tk):
         # See FIDELITY U5.
         #
         # "When the save is completed, the system returns the original
-        # message: ARCHIVE UTILITY / PRESS <STEP> TO CONTINUE."
-        self.step = HEADER
+        # message: ARCHIVE UTILITY / PRESS <STEP> TO CONTINUE." -- on the
+        # panel still standing there; one walked elsewhere during the save
+        # stays where it went
+        if not walked_off:
+            self.step = HEADER
         self.armed = self.sure = False
         self._refresh_site()
         self.refresh_traffic()

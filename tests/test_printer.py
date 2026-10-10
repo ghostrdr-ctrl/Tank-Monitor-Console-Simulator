@@ -1094,10 +1094,15 @@ class TheSetupReportOnAConsoleNobodyHasProgrammed(unittest.TestCase):
         console that has BIR in it has those steps to print, so the report
         is right and the numbers moved for a reason rather than by
         accident. The truck stop already had the key and did not move.
+
+        The compliance site went 76 -> 74 on 2026-10-08: it has no PLLD
+        sensor board, and PRINT PRECISION LINE is that board's -- the bench
+        with its board out answered I55D00 bare and its Setup walk had no
+        such screen.
         """
         for name, lines in (("Two-tank retail site", 84),
                             ("Truck stop, four tanks and BIR", 105),
-                            ("Compliance site, CSLD and sensors", 76)):
+                            ("Compliance site, CSLD and sensors", 74)):
             c = self.a_full_cage()
             presets.load(c, name)
             rows = [r for r in self.section(c, "SYSTEM SETUP")[2:]

@@ -5429,22 +5429,22 @@
    },
    {
     "align": "left",
-    "end": 35,
-    "head": "TYPE",
+    "end": 39,
+    "head": "CATEGORY",
     "start": 31
    }
   ],
   "gap": 1,
   "head_gap": 1,
-  "heading": "SENSOR  LOCATION               TYPE",
+  "heading": "SENSOR  LOCATION               CATEGORY",
   "kind": "number",
   "leads": {
-   "SENSOR LOCATION TYPE": 1
+   "SENSOR LOCATION CATEGORY": 1
   },
   "page": 321,
   "rowgap": 0,
   "sample": [
-   "     1  LIQUID SENSOR #1       OTHER"
+   "     1                         OTHER SENSORS"
   ],
   "station": false,
   "title": "LIQUID CATEGORY"

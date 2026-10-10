@@ -158,8 +158,20 @@ class TheSetupMenu(unittest.TestCase):
         360 was Select Modem joining COMMUNICATIONS SETUP: p.6-8 draws it
         as "D1:" over "SELECT MODEM: 3", serial function 525 is "Set
         Receiver Port Number to Dial", and the tape prints the row as
-        `PORT  NO: 1`."""
-        self.assertEqual(sum(1 for _ in steps()), 462)
+        `PORT  NO: 1`.
+
+        464 since COMMUNICATIONS SETUP's port settings went into a PORT
+        SETTINGS branch and TANK CHART SECURITY became one, as the bench's
+        glass draws both (CLOSED S51, S52): two heads that store nothing.
+
+        532 since CUSTOM ALARMS' keypad branch: a group switch for SYSTEM and
+        for LIQUID SENSOR, and for each of SYSTEM's eleven alarms its switch,
+        its label and its four outputs (CLOSED S54).
+
+        797 since the liquid and PLLD categories: for each of their eight
+        and fourteen alarms its switch, the ALL label and outputs, and one
+        device's switch, label and outputs (CLOSED S56)."""
+        self.assertEqual(sum(1 for _ in steps()), 797)
 
     def test_only_the_submenu_headers_store_nothing(self):
         """And a header stores nothing BECAUSE it is a header.
@@ -179,9 +191,9 @@ class TheSetupMenu(unittest.TestCase):
             "Fiscal Height Security", "Fuel Hose Table Setup",
             "ISO 3166 Country", "Individual Meter Offset",
             "Mag Sensor Setup", "Mass/Density", "Modify Tank/Meter Map",
-            "Nozzle A/L Range Menu",
+            "Nozzle A/L Range Menu", "Port Settings",
             "Pressure Sensor Select", "Remove VMC Serial Number",
-            "Service Notice", "Set Analysis Times",
+            "Service Notice", "Set Analysis Times", "Tank Chart Security",
             "Transmit Message Setup", "Vac Sensor Setup",
             "Vapor Processor Setup"])
 

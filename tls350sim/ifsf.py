@@ -531,7 +531,7 @@ def _probe(console, tank, data_id):
 def _probe_alarm(console, tank):
     """TP_Alarm: what the tank is alarming on right now, in IFSF terms."""
     from .console import describe_alarms
-    live = [a for a in describe_alarms(console.conditions())
+    live = [a for a in describe_alarms(console.conditions(), console)
             if a["aa"] == "02" and a["tt"] == f"{tank:02d}"]
     if not live:
         return "NONE"

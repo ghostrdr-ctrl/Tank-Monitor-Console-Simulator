@@ -326,6 +326,7 @@ class Panel(unittest.TestCase):
         nor the disable. FIDELITY N3.
         """
         from tls350sim.ui import MODES
+        self.c.modules["edim"] = 1      # "only if there is a Block DIM card"
         self.app.mode = MODES.index("SETUP")
         where = []
         for i in range(len(self.app.functions())):
@@ -1083,17 +1084,24 @@ class Panel(unittest.TestCase):
         fns = self.app.functions()
         self.app.func = [i for i, f in enumerate(fns)
                          if f["function"] == "COMMUNICATIONS SETUP"][0]
+        # the port settings sit inside PORT SETTINGS / PRESS <ENTER> on the
+        # bench's glass, in the setup printout's own words (2026-10-08)
         texts = [st["text"] for st in self.app.steps()]
-        self.app.step = [i for i, t in enumerate(texts) if "Stop Bit" in t][0]
-        self.assertEqual(self.app._lines()[1], "STOP BIT: 1 STOP")
+        self.app.step = texts.index("Port Settings")
+        self.app.k_enter()
+        for _ in range(8):
+            if "STOP BIT" in self.app._lines()[1]:
+                break
+            self.app.k_step()
+        self.assertEqual(self.app._lines()[1], " STOP BIT   : 1 STOP")
         self.app.k_change()
         self.app._blink = False            # catch the cursor on its dark half
-        self.assertEqual(self.app._lines()[1], "STOP BIT: 2 STOP")
+        self.assertEqual(self.app._lines()[1], " STOP BIT   : 2 STOP")
         self.app.k_enter()
         self.assertEqual(self.app._lines(),
                          ["STOP BIT: 2 STOP", "PRESS <STEP> TO CONTINUE"])
         self.app.k_step()
-        self.assertEqual(self.app._lines()[1], "DATA LENGTH: 7 DATA")
+        self.assertEqual(self.app._lines()[1], " DATA LENGTH: 7 DATA")
 
     def test_typing_replaces_one_character_and_leaves_the_rest(self):
         """Recorded off a real console: "TIME: [8:06 AM PM", type 0 then 3,
@@ -1139,8 +1147,8 @@ class Panel(unittest.TestCase):
                          if f["function"] == "IN-TANK SETUP"][0]
         self.app.step = 2                       # Product Code
         rows = self.app._lines()
-        self.assertEqual(rows[0], "T1: REGULAR UNLEADED")
-        self.assertTrue(rows[1].startswith("PRODUCT CODE:"))
+        self.assertEqual(rows[0], "T 1:REGULAR UNLEADED")
+        self.assertTrue(rows[1].startswith("PRODUCT CODE    :"))
 
     def go(self, function, want):
         """Stand on the screen whose top or bottom line says `want`."""
@@ -1186,7 +1194,7 @@ class Panel(unittest.TestCase):
         """Four header lines on one step, numbered as the manual has them."""
         self.go("SYSTEM SETUP", "ENTER STATION HEADER")
         self.app.k_tank()
-        self.assertEqual(self.app._lines(), ["ENTER STATION HEADER", "#2:"])
+        self.assertEqual(self.app._lines(), ["ENTER STATION HEADER", "# 2:"])
 
 
     def plld_pressure_screen(self):
@@ -1369,7 +1377,7 @@ class Panel(unittest.TestCase):
         self.assertEqual(MODES[self.app.mode], "RECONCILIATION")
         self.assertEqual(self.app.step, MODE_SCREEN)
         self.assertEqual(self.app._lines(),
-                         ["RECONCILIATION MODE".center(24),
+                         ["   RECONCILIATION MODE  ",   # an odd space LEFT, as the bench
                           "PRESS <FUNCTION> TO CONT"])
 
     def test_the_report_screens_read_as_the_manual_walks_them(self):
@@ -1800,6 +1808,7 @@ class Panel(unittest.TestCase):
 
     def test_the_last_system_setup_screens_are_programmable(self):
         """The tail of chapter 5, screens the panel used to walk past."""
+        self.c.modules["edim"] = 1      # BDIM wants its Block DIM card
         self.assertEqual(self.setup_step("SYSTEM SETUP", "Euro Protocol"),
                          ["EURO PROTOCOL PREFIX", "S"])
         self.app.k_change()
@@ -1830,14 +1839,14 @@ class Panel(unittest.TestCase):
         """"If a Water Alarm delay of less than 3 minutes is desired, select
         Off for the Water Alarm Filter ... programmable from 30 to 180."""
         self.assertEqual(self.setup_step("IN-TANK SETUP", "Water Alarm Filter"),
-                         ["T1: REGULAR UNLEADED", "WATER ALARM FILTER: LOW"])
+                         ["T 1:REGULAR UNLEADED", "WATER ALARM FILTER: LOW"])
         self.assertIsNone(self.setup_step("IN-TANK SETUP", "Water Alarm Delay"))
         self.setup_step("IN-TANK SETUP", "Water Alarm Filter")
         for _ in range(3):
             self.app.k_change()                    # LOW -> MEDIUM -> HIGH -> OFF
         self.assertEqual(self.app._lines()[1], "WATER ALARM FILTER: OFF")
         self.assertEqual(self.setup_step("IN-TANK SETUP", "Water Alarm Delay"),
-                         ["T1: REGULAR UNLEADED", "WATER ALARM DELAY: 180S"])
+                         ["T 1:REGULAR UNLEADED", "WATER ALARM DELAY: 180S"])
         self.app.logbox.delete("1.0", "end")
         self.app.k_change()
         for ch in "020":
@@ -1861,6 +1870,11 @@ class Panel(unittest.TestCase):
             ["Q 1: BLEND PARTNERS", "Q#: 00, 00"])
 
     def test_a_setting_is_kept_per_device_where_the_screen_is(self):
+        # two tanks with their probes reporting: the filter is a screen
+        # only for one (CLOSED S59)
+        for tank in (1, 2):
+            self.c.tank_level.setdefault(tank, {"volume": 2500.0,
+                                                "water": 0.0})
         self.setup_step("IN-TANK SETUP", "Water Alarm Filter")
         self.app.k_change()
         self.assertEqual(self.c.setting("water_filter", 1), "MEDIUM")
@@ -2447,11 +2461,15 @@ class Panel(unittest.TestCase):
                 app._blink = False
                 app._render()
                 words.append(app._lines()[1])
+            # the liquid card's glass spaces its colon, `CATEGORY : OTHER
+            # SENSORS` on the bench (2026-10-08); the rest are the page's
+            colon = "CATEGORY : " if function == "LIQUID SENSOR SETUP" \
+                else "CATEGORY: "
             self.assertEqual(
                 words,
-                ["CATEGORY: OTHER SENSORS", "CATEGORY: ANNULAR SPACE",
-                 "CATEGORY: DISPENSER PAN", "CATEGORY: MONITOR WELL",
-                 "CATEGORY: STP SUMP", "CATEGORY: PIPING SUMP"], function)
+                [colon + w for w in ("OTHER SENSORS", "ANNULAR SPACE",
+                                     "DISPENSER PAN", "MONITOR WELL",
+                                     "STP SUMP", "PIPING SUMP")], function)
 
     def test_a_field_whose_range_starts_above_zero_does_not_draw_zero(self):
         """`DIAL RETRY NUMBER` is "a number between 3 and 99" and drew `0`;
@@ -2465,12 +2483,12 @@ class Panel(unittest.TestCase):
             "DIAL RETRY NUMBER: 03")
         self.assertEqual(
             self._setup_step("IN-TANK SETUP", "Delivery Delay")._lines()[1],
-            "DELIVERY DELAY: 01")
+            "DELIVERY DELAY  : 01")
         # and a signed field still rests at zero, which is why this lives
         # on the two fields and not in `shown()`
         self.assertEqual(
             self._setup_step("IN-TANK SETUP", "Tank Tilt")._lines()[1],
-            "TANK TILT: +000.00")
+            "TANK TILT       +0000.00")
 
     def test_the_printout_screens_are_in_the_manuals_order(self):
         """p.5-16 ends on RE-DIRECT LOCAL PRINTOUT and p.5-17 opens on QPLD
@@ -2564,12 +2582,12 @@ class Panel(unittest.TestCase):
         self.app.step = 0
         self.app._blink = False
         self.assertEqual(self.app._lines(),
-                         ["TANK CONFIG - MODULE 1", "SLOT #: X X X X"])
+                         ["TANK CONFIG - MODULE 1", "SLOT 1 - X X X X"])
         self.app.k_change()                       # position 1 on
         self.app.k_alnum(",")                     # the right-arrow key,
         self.app.k_alnum(",")                     # which arrives as ","
         self.app.k_change()                       # position 3 on
-        self.assertEqual(self.app._lines()[1], "SLOT #: 1 X 3 X")
+        self.assertEqual(self.app._lines()[1], "SLOT 1 - 1 X 3 X")
         self.app.k_enter()
         self.assertEqual(self.app._lines()[1], "PRESS <STEP> TO CONTINUE")
         self.assertEqual(self.c.values["S60101"], "011")
@@ -2622,12 +2640,13 @@ class Panel(unittest.TestCase):
         # ENTER lands on the FIRST SCREEN of the branch, which is where
         # Figure 6-2's `E` arrow points -- not on a second copy of the
         # screen that offered it. DG3.
-        self.assertIn("SLOT 1", self.app._diag_screens(
+        self.assertIn(" SLOT  1", self.app._diag_screens(
             self.app.cur_function())[0]["text"])
-        self.assertIn("SLOT 1", self.app._lines()[0])
+        self.assertIn(" SLOT  1", self.app._lines()[0])
         self.app.step = 0
         self.app.k_backup()
-        self.assertEqual(self.app._lines(), ["SYSTEM CONFIGURATION",
+        # centred, as the bench's glass draws it (2026-10-08)
+        self.assertEqual(self.app._lines(), ["  SYSTEM CONFIGURATION",
                                              "PRESS <ENTER>"])
         self.assertIsNone(self.app.sub)
         self.assertEqual(len(self.app.steps()), top)
@@ -2640,8 +2659,8 @@ class Panel(unittest.TestCase):
                          if f["function"] == "SYSTEM DIAGNOSTIC"][0]
         self.app.step = 3
         self.app.k_enter()
-        slots = [s["text"] for s in self.app.steps() if s["text"].startswith(
-            "SLOT")]
+        slots = [s["text"] for s in self.app.steps()
+                 if s["text"].strip().startswith("SLOT")]
         self.assertTrue(any("PROBE" in t for t in slots))
         # a half-empty cage shows the empty slots as the console does
         from tls350sim.console import Console
@@ -2652,13 +2671,20 @@ class Panel(unittest.TestCase):
         from tls350sim.ui import MODES
         self.c.values["S50400"] = "123456"
         self.app.k_mode()
+        # the mode's own screen first, and FUNCTION asks: the bench's glass
+        # (2026-10-08, 2026-10-09)
+        self.assertFalse(self.app.locked)
+        self.app.k_function()
         self.assertTrue(self.app.locked)
-        self.assertEqual(self.app._lines()[0], "SYSTEM SECURITY")
+        # the bench's: the mode on top, the code going into six underscores
+        self.assertEqual(self.app._lines(), ["       SETUP MODE       ",
+                                             "ENTER PASSCODE ->______<"])
         for ch in "000000":
             self.app.k_alnum(ch)
         self.app.k_enter()
         self.assertEqual(MODES[self.app.mode], "NORMAL")     # turned away
         self.app.k_mode()
+        self.app.k_function()
         for ch in "123456":
             self.app.k_alnum(ch)
         self.app.k_enter()
@@ -2836,6 +2862,37 @@ class Panel(unittest.TestCase):
         if os.path.exists(self.c.archive_path()):
             os.remove(self.c.archive_path())
 
+    def test_a_save_runs_at_the_bench_s_pace_and_leaves_the_keypad(self):
+        """The bench's archive save (2026-10-08, `menuwalk2.jsonl`): BUSY on
+        ARCHIVE UTILITY off the last STEP, the keypad answering throughout,
+        and ARCHIVE DIAGNOSTIC counting it -- `SAVE SETUP DATA: 1920`
+        fifteen seconds in, 128 a second. CLOSED S58."""
+        import os
+        import time
+        from tls350sim.ui import MODES, HEADER
+        app = self.app
+        self._archive()
+        app.ARCHIVE_SECONDS = 3.0           # a save of the bench's own length
+        app.step = 0
+        self._answer_yes()
+        self.assertEqual(app._lines(), ["ARCHIVE UTILITY",
+                                        "SAVE SETUP DATA: BUSY"])
+        self.assertFalse(app._busy())
+        self.assertAlmostEqual(app.save_until - time.time(), 66, delta=1)
+        # fifteen seconds in, walked over to Diagnostic Mode's last function
+        app.save_until = time.time() + app.SAVE_SECONDS - 15.2
+        app.k_mode()
+        self.assertEqual(MODES[app.mode], "DIAGNOSTIC")
+        app.k_function()
+        names = [f["function"] for f in app.functions()]
+        app.func, app.step = names.index("ARCHIVE DIAGNOSTIC"), HEADER
+        self.assertEqual(app._lines(), ["ARCHIVE DIAGNOSTIC",
+                                        "SAVE SETUP DATA: 1920"])
+        app._finish_archive("save")
+        self.assertEqual(app._lines()[1], "PRESS <STEP> TO CONTINUE")
+        self.assertEqual(MODES[app.mode], "DIAGNOSTIC")
+        os.remove(self.c.archive_path())
+
     def test_a_restore_after_a_reboot_waits_for_the_hardware(self):
         """"If you are restoring after a reboot (switching the console Off
         and then back On), the system will wait 5 minutes before processing
@@ -2885,7 +2942,7 @@ class Panel(unittest.TestCase):
             "Tank Profile (1 Pt/4 Pts/20 Pts/linear/50 Pts)")
         # the fixture selected LINEAR on the panel, so that is the
         # profile the tank is on
-        self.assertEqual(self.app._lines()[1], "TANK PROFILE LINEAR")
+        self.assertEqual(self.app._lines()[1], "TANK PROFILE    : LINEAR")
         for _ in range(2):                       # LINEAR -> 50 PTS -> 1PT...
             self.app.k_change()
         while self.app.buf != "4 PTS":
@@ -2946,7 +3003,12 @@ class Panel(unittest.TestCase):
         self.app.func = [i for i, f in enumerate(fns)
                          if f["function"] == "SYSTEM SETUP"][0]
         texts = [s["text"] for s in self.app.steps()]
+        # a branch on the bench's glass: `TANK CHART SECURITY` over
+        # `PRESS <ENTER>` (2026-10-08), and the code screen inside it
         self.app.step = texts.index("Tank Chart Security")
+        self.assertEqual(self.app._lines(),
+                         ["TANK CHART SECURITY", "PRESS <ENTER>"])
+        self.app.k_enter()
         self.assertEqual(self.app._lines(),
                          ["TANK CHART SECURITY", "CODE : 000000"])
         self.app.k_change()
@@ -3008,6 +3070,290 @@ class Panel(unittest.TestCase):
             self.app.func, self.app.step = found[0], HEADER
             title, lines = self.app._report()
             self.assertIn(wanted, chr(10).join(lines), name)
+
+    def _liquid(self, function, mode):
+        from tls350sim.ui import MODES, HEADER
+        self.c.modules = {"probe": 1, "liquid": 1}
+        self.app.mode = MODES.index(mode)
+        self.app._entered = True
+        fns = self.app.functions()
+        self.app.func = [f["function"] for f in fns].index(function)
+        self.app.step = HEADER
+        self.app.device = 1
+
+    def test_liquid_status_with_nothing_switched_on_stays_put(self):
+        """The bench, 2026-10-08, its interstitial card fitted and every
+        sensor off: LIQUID STATUS offered, and STEP did nothing. FIDELITY
+        O16."""
+        from tls350sim.ui import HEADER
+        for n in range(1, 9):
+            self.c.values[f"S701{n:02d}"] = f"{n:02d}0"
+        self._liquid("LIQUID STATUS", "NORMAL")
+        self.app.k_step()
+        self.assertEqual(self.app.step, HEADER)
+        # ...and with sensor 2 on, STEP goes to it and TANK/SENSOR stays
+        self.c.values["S70102"] = "021"
+        self.app.k_step()
+        self.assertNotEqual(self.app.step, HEADER)
+        self.assertEqual(self.app.device, 2)
+        self.assertEqual(self.app._devices(), [2])
+
+    def test_custom_alarms_walk_as_the_bench_s_keypad_did(self):
+        """The bench's CUSTOM ALARMS walk (2026-10-08,
+        `transcripts/menuwalk3.jsonl`), key for key: switched on, SYSTEM
+        ALARMS opened, PAPER OUT labelled KPM, the four outputs left on --
+        and the list the wire reads holds the same entry."""
+        from tls350sim.ui import MODES, HEADER
+        app = self.app
+        app.mode = MODES.index("SETUP")
+        app.func = [f["function"] for f in app.functions()].index(
+            "SYSTEM SETUP")
+        app.step = HEADER
+        for _ in range(80):
+            app.k_step()
+            if app._lines()[0].strip() == "CUSTOM ALARMS":
+                break
+        seen = []
+
+        def press(key, buf=None):
+            if buf is not None:
+                app.buf = buf
+            else:
+                getattr(app, "k_" + key)()
+            app._blink = False
+            seen.append(list(app._lines()))
+
+        for key in ("enter", "change", "enter", "step", "change", "enter",
+                    "step", "change", "enter", "step", "change"):
+            press(key)
+        press(None, "KPM")
+        for key in ("enter", "step", "step", "step", "step", "step"):
+            press(key)
+        self.assertEqual(seen, [
+            ["CUSTOM ALARMS", "DISABLED"],
+            ["CUSTOM ALARMS", "ENABLED"],
+            ["ENABLED", "PRESS <STEP> TO CONTINUE"],
+            ["CUSTOM ALARMS", "SYSTEM ALARMS     : NO"],
+            ["CUSTOM ALARMS", "SYSTEM ALARMS     : YES"],
+            ["SYSTEM ALARMS     : YES", "PRESS <STEP> TO CONTINUE"],
+            ["SYSTEM ALARMS", "PAPER OUT  :NO"],
+            ["SYSTEM ALARMS", "PAPER OUT  :YES"],
+            ["PAPER OUT  :YES", "PRESS <STEP> TO CONTINUE"],
+            ["ALL: PAPER OUT", "LBL:"],
+            ["ALL: PAPER OUT", "LBL:"],
+            ["ALL: PAPER OUT", "LBL: KPM"],
+            ["LBL: KPM", "PRESS <STEP> TO CONTINUE"],
+            ["ALL: KPM", "LCD                : YES"],
+            ["ALL: KPM", "PRINT              : YES"],
+            ["ALL: KPM", "BEEP               : YES"],
+            ["ALL: KPM", "LED                : YES"],
+            ["SYSTEM ALARMS", "PRINTER ERR:NO"],
+        ])
+        self.assertEqual(self.c.values.get("S5BF00"),
+                         "0101001111KPM" + " " * 16)
+
+    def test_custom_alarms_liquid_category_as_the_bench_s_keypad_did(self):
+        """The bench's CUSTOM ALARMS on 2026-10-09, liquid card fitted and
+        sensor 2 switched on (`bench-2026-10-09/glass.jsonl`): LIQUID SENSOR
+        ALMS opened, FUEL as ALL SENSORS labelled `U R AWESOM`, OPEN as
+        SINGLE SRS with TANK/SENSOR round all eight inputs and L 2
+        labelled `BOOP` -- and the list the wire then read, byte for byte.
+        Coming round again the category's switch reads NO, its alarms kept;
+        and a system alarm left at an empty `LBL:` is NO again, on its own
+        switch. CLOSED S56."""
+        from tls350sim.ui import MODES, HEADER
+        app, c = self.app, self.c
+        c.modules = {"probe": 1, "liquid": 1}
+        c.values["S5BD00"] = "1"
+        c.values["S70102"] = "021"
+        c.values["S5BF00"] = "0101001111KPM" + " " * 16
+        app.mode = MODES.index("SETUP")
+        app.func = [f["function"] for f in app.functions()].index(
+            "SYSTEM SETUP")
+        app.step = HEADER
+        seen = []
+
+        def look():
+            app._blink = False
+            return list(app._lines())
+
+        def press(*keys):
+            for key in keys:
+                getattr(app, "k_" + key)()
+                seen.append(look())
+
+        def round_to(text):
+            for _ in range(400):
+                app.k_step()
+                if text in " ".join(look()):
+                    return
+            self.fail("never came to " + text)
+
+        def into_branch():
+            round_to("PRESS <ENTER>")
+            while look()[0] != "CUSTOM ALARMS":
+                round_to("PRESS <ENTER>")
+            app.k_enter()
+
+        def label(text):
+            app.k_change()
+            app.buf = text
+            press("enter")
+
+        into_branch()
+        round_to("LIQUID SENSOR ALMS")
+        press("change", "enter", "step", "step", "change", "enter", "step")
+        label("U R AWESOM")
+        press("step", "step", "step", "step", "step", "change", "change",
+              "enter", "step")
+        for _ in range(9):
+            press("tank")
+        press("change", "enter", "step")
+        label("BOOP")
+        press("step", "step", "step", "step", "step")
+        self.assertEqual(seen, [
+            ["CUSTOM ALARMS", "LIQUID SENSOR ALMS: YES"],
+            ["LIQUID SENSOR ALMS: YES", "PRESS <STEP> TO CONTINUE"],
+            ["LIQUID SENSOR ALMS", "SETUP WARN :NO SENSORS"],
+            ["LIQUID SENSOR ALMS", "FUEL      : NO SENSORS"],
+            ["LIQUID SENSOR ALMS", "FUEL      : ALL SENSORS"],
+            ["FUEL      : ALL SENSORS", "PRESS <STEP> TO CONTINUE"],
+            ["ALL: FUEL ALARM", "LBL:"],
+            ["LBL: U R AWESOM", "PRESS <STEP> TO CONTINUE"],
+            ["ALL: U R AWESOM", "LCD                : YES"],
+            ["ALL: U R AWESOM", "PRINT              : YES"],
+            ["ALL: U R AWESOM", "BEEP               : YES"],
+            ["ALL: U R AWESOM", "LED                : YES"],
+            ["LIQUID SENSOR ALMS", "OPEN      : NO SENSORS"],
+            ["LIQUID SENSOR ALMS", "OPEN      : ALL SENSORS"],
+            ["LIQUID SENSOR ALMS", "OPEN      : SINGLE SRS"],
+            ["OPEN      : SINGLE SRS", "PRESS <STEP> TO CONTINUE"],
+            ["CUSTOM ALARMS", "L 1 OPEN      :  NO"],
+        ] + [["CUSTOM ALARMS", f"L {n} OPEN      :  NO"]
+             for n in (2, 3, 4, 5, 6, 7, 8, 1, 2)] + [
+            ["CUSTOM ALARMS", "L 2 OPEN      :  YES"],
+            ["L 2 OPEN      :  YES", "PRESS <STEP> TO CONTINUE"],
+            ["L 2: SENSOR OUT ALARM", "LBL:"],
+            ["LBL: BOOP", "PRESS <STEP> TO CONTINUE"],
+            ["L 2: BOOP", "LCD                : YES"],
+            ["L 2: BOOP", "PRINT              : YES"],
+            ["L 2: BOOP", "BEEP               : YES"],
+            ["L 2: BOOP", "LED                : YES"],
+            ["LIQUID SENSOR ALMS", "SHORT     : NO SENSORS"],
+        ])
+        self.assertEqual(
+            c.values.get("S5BF00"),
+            "0101001111KPM" + " " * 16 + "0303001111U R AWESOM" + " " * 9
+            + "0304021111BOOP" + " " * 15)
+        into_branch()
+        round_to("LIQUID SENSOR ALMS")
+        self.assertEqual(look(), ["CUSTOM ALARMS", "LIQUID SENSOR ALMS: NO"])
+        into_branch()
+        round_to("SYSTEM ALARMS     :")
+        app.k_change()
+        app.k_enter()
+        round_to("ROM REV WRN")
+        seen[:] = []
+        press("change", "enter", "step", "step")
+        self.assertEqual(seen, [
+            ["SYSTEM ALARMS", "ROM REV WRN:YES"],
+            ["ROM REV WRN:YES", "PRESS <STEP> TO CONTINUE"],
+            ["ALL: ROM REVISION WARNIN", "LBL:"],
+            ["SYSTEM ALARMS", "ROM REV WRN:NO"],
+        ])
+
+    def test_backup_off_a_category_s_first_alarm_passes_its_switch(self):
+        """BACKUP off SETUP WARN went to `SYSTEM ALARMS     : NO`, not to
+        LIQUID SENSOR ALMS' own switch, twice on the bench's glass
+        (2026-10-09). CLOSED S56."""
+        from tls350sim.ui import MODES, HEADER
+        app, c = self.app, self.c
+        c.modules = {"probe": 1, "liquid": 1}
+        c.values["S5BD00"] = "1"
+        c.values["S70102"] = "021"
+        app.mode = MODES.index("SETUP")
+        app.func = [f["function"] for f in app.functions()].index(
+            "SYSTEM SETUP")
+        app.step = HEADER
+        for _ in range(400):
+            app.k_step()
+            lines = app._lines()
+            if lines[0] == "CUSTOM ALARMS" and "ENTER" in lines[1]:
+                break
+        app.k_enter()
+        for _ in range(5):
+            app.k_step()
+            if app._lines()[1] == "LIQUID SENSOR ALMS: NO":
+                break
+        app.k_change()
+        app.k_enter()
+        app.k_step()
+        self.assertEqual(app._lines()[1], "SETUP WARN :NO SENSORS")
+        app.k_backup()
+        self.assertEqual(app._lines(),
+                         ["CUSTOM ALARMS", "SYSTEM ALARMS     : NO"])
+
+    def test_custom_alarms_offer_a_category_with_a_device_switched_on(self):
+        """The bench cold started with a PLLD board and the liquid card in
+        it (2026-10-09, `bench-2026-10-09-plld/glass.jsonl`): CUSTOM ALARMS
+        offered SYSTEM ALARMS alone, then LIQUID SENSOR ALMS and PRESSURE
+        LINE LEAK once sensor 1 and line 1 were switched on; and TANK/SENSOR
+        on a line's own screen went Q 1 to Q 3 and round. CLOSED S56."""
+        from tls350sim.ui import MODES, HEADER
+        app, c = self.app, self.c
+        c.modules = {"plld": 1, "plldctl": 1, "liquid": 1}
+        c.values["S5BD00"] = "1"
+        app.mode = MODES.index("SETUP")
+        app.func = [f["function"] for f in app.functions()].index(
+            "SYSTEM SETUP")
+
+        def switches(stop=None):
+            app.step, app.subs = HEADER, []
+            for _ in range(400):
+                app.k_step()
+                lines = app._lines()
+                if lines[0] == "CUSTOM ALARMS" and "ENTER" in lines[1]:
+                    break
+            app.k_enter()
+            out = []
+            for _ in range(10):
+                app.k_step()
+                lines = app._lines()
+                if lines[0] != "CUSTOM ALARMS" or lines[1] == stop:
+                    break
+                out.append(lines[1])
+            return out
+
+        self.assertEqual(switches(), ["SYSTEM ALARMS     : NO"])
+        c.values["S70101"] = "011"
+        c.values["S78101"] = "011"
+        self.assertEqual(switches(), ["SYSTEM ALARMS     : NO",
+                                      "LIQUID SENSOR ALMS: NO",
+                                      "PRESSURE LINE LEAK: NO"])
+        # PRESSURE LINE LEAK opened, GROSS FAIL as SINGLE LINE, round Q 1-3
+        switches("PRESSURE LINE LEAK: NO")
+        app.k_change()
+        app.k_enter()
+        app.k_step()
+        app.k_step()
+        self.assertEqual(app._lines(),
+                         ["PRESSURE LINE LEAK", "GROSS FAIL :NO LINES"])
+        for key in ("change", "change", "enter", "step"):
+            getattr(app, "k_" + key)()
+        lines = [app._lines()[1]]
+        for _ in range(3):
+            app.k_tank()
+            lines.append(app._lines()[1])
+        self.assertEqual(lines, ["Q 1 GROSS FAIL : NO", "Q 2 GROSS FAIL : NO",
+                                 "Q 3 GROSS FAIL : NO",
+                                 "Q 1 GROSS FAIL : NO"])
+
+    def test_liquid_diagnostic_walks_every_input(self):
+        """TANK/SENSOR on the bench's LIQUID DIAGNOSTIC went L 1, L 2,
+        L 3 ... and round, with sensor 2 alone switched on (2026-10-08)."""
+        self.c.values["S70102"] = "021"
+        self._liquid("LIQUID DIAGNOSTIC", "DIAGNOSTIC")
+        self.assertEqual(self.app._devices(), list(range(1, 9)))
 
     def alarms_shown_over(self, polls):
         """Every distinct message the status line draws over `polls` polls.
@@ -4458,22 +4804,22 @@ class Panel(unittest.TestCase):
         said `96.5` on the confirmation and `096.50` one keypress later."""
         app, texts = self._in_tank("Tank Diameter")
         self._type(app, "96.5")
-        self.assertEqual(app._lines()[0], "TANK DIAMETER: 096.50")
+        self.assertEqual(app._lines()[0], "TANK DIAMETER   :0096.50")
         app.k_step()
         app.step = texts.index("Tank Diameter")
         app._render()
-        self.assertEqual(app._lines()[1], "TANK DIAMETER: 096.50")
+        self.assertEqual(app._lines()[1], "TANK DIAMETER   :0096.50")
 
     def test_the_confirmation_cannot_claim_precision_that_was_not_kept(self):
         """`499.995` was CONFIRMED as `499.995` and STORED as `500.00`, so
         the confirmation asserted a precision the console does not keep."""
         app, texts = self._in_tank("Tank Diameter")
         self._type(app, "499.995")
-        self.assertEqual(app._lines()[0], "TANK DIAMETER: 500.00")
+        self.assertEqual(app._lines()[0], "TANK DIAMETER   :0500.00")
         app.k_step()
         app.step = texts.index("Tank Diameter")
         app._render()
-        self.assertEqual(app._lines()[1], "TANK DIAMETER: 500.00")
+        self.assertEqual(app._lines()[1], "TANK DIAMETER   :0500.00")
 
     def test_the_confirmation_and_the_field_agree_on_every_masked_field(self):
         """The pattern was identical in twenty-three fields across nine
@@ -4729,11 +5075,11 @@ class Panel(unittest.TestCase):
         app = self._setup_step("SYSTEM SETUP", "BEEPER")
         app._blink = False
         app._render()
-        self.assertEqual(self._glass(), ["BEEPER", "ENABLED"])
+        self.assertEqual(self._glass(), ["SYSTEM BEEPER", "ENABLED"])
         app.k_change()
         app._blink = False
         app._render()
-        self.assertEqual(self._glass(), ["BEEPER", "DISABLED"])
+        self.assertEqual(self._glass(), ["SYSTEM BEEPER", "DISABLED"])
         app.k_enter()
         self.assertEqual(self._glass(), ["DISABLED", CONT_STEP])
         app.k_step()
@@ -4757,7 +5103,7 @@ class Panel(unittest.TestCase):
         app.k_change()
         app._blink = False
         app._render()
-        self.assertEqual(self._glass(), ["BEEPER", "ENABLED"])
+        self.assertEqual(self._glass(), ["SYSTEM BEEPER", "ENABLED"])
         app.k_enter()
         self.assertEqual(self._glass(), ["ENABLED", CONT_STEP])
         app.k_step()
@@ -4855,10 +5201,10 @@ class Panel(unittest.TestCase):
         app = self._setup_step("COMMUNICATIONS SETUP", "Baud Rate")
         self.assertEqual(app.cur_field()["kind"], "enum")
         app.k_change()
-        self.assertEqual(app._lines()[1], "BAUD RATE: 2400")
+        self.assertEqual(app._lines()[1], " BAUD RATE  : 2400")
         for ch in "96":
             app.k_alnum(ch)
-        self.assertEqual(app._lines()[1], "BAUD RATE: 2400")
+        self.assertEqual(app._lines()[1], " BAUD RATE  : 2400")
         app.k_enter()
         self.assertEqual(app._lines(), ["BAUD RATE: 2400",
                                         "PRESS <STEP> TO CONTINUE"])
@@ -4871,10 +5217,10 @@ class Panel(unittest.TestCase):
         panel's own head was not, so `(RS-232)` left the glass on the first
         press of CHANGE and came back when you stepped away. K7."""
         app = self._setup_step("COMMUNICATIONS SETUP", "Parity")
-        self.assertEqual(app._lines()[0], "COMM BOARD: 1 (RS-232)")
+        self.assertEqual(app._lines()[0], "COMM BOARD  : 1 (RS-232)")
         app.k_change()
-        self.assertEqual(app._lines(), ["COMM BOARD: 1 (RS-232)",
-                                        "PARITY: ODD"])
+        self.assertEqual(app._lines(), ["COMM BOARD  : 1 (RS-232)",
+                                        " PARITY     : EVEN"])
 
     def test_a_typed_setup_value_is_acknowledged_on_the_glass(self):
         """The acknowledgement was built and never painted.
@@ -5094,17 +5440,18 @@ class Panel(unittest.TestCase):
         app.step, app.sub = HEADER, None
         for _ in range(20):
             app.k_step()
-            if app._lines() == ["SYSTEM CONFIGURATION", "PRESS <ENTER>"]:
+            if app._lines() == ["  SYSTEM CONFIGURATION",
+                                "PRESS <ENTER>"]:
                 break
         else:                                          # pragma: no cover
             self.fail("never reached SYSTEM CONFIGURATION")
         app.k_enter()
         self.assertIsNotNone(app.sub)
-        self.assertEqual(app._lines()[0], "SLOT 1 4 PROBE")
+        self.assertEqual(app._lines()[0], " SLOT  1 4 PROBE")
         # and one BACKUP out of it, with the glass changing on the press
         app.k_backup()
         self.assertIsNone(app.sub)
-        self.assertEqual(app._lines(), ["SYSTEM CONFIGURATION",
+        self.assertEqual(app._lines(), ["  SYSTEM CONFIGURATION",
                                         "PRESS <ENTER>"])
 
     def test_a_console_setting_keeps_its_prompt_while_you_type(self):
@@ -5114,6 +5461,7 @@ class Panel(unittest.TestCase):
         SECURITY on the same function keep theirs. Those are S-code fields
         and go through a different renderer; the Diagnostic Mode branch has
         read the prompt off the field all along. K10."""
+        self.c.modules["edim"] = 1      # BDIM wants its Block DIM card
         for want, prompt in (("BDIM TRANS ALARM DELAY", "HOURS:"),
                              ("ISO 3166 COUNTRY", "CODE:"),
                              ("PRECISION TEST DURATION", "HOURS:"),
@@ -5133,6 +5481,7 @@ class Panel(unittest.TestCase):
         BDIM seeded with `024` and one press of `1` overtyped it to `124`.
         `number` is the same fact under another name and is on the field.
         K10."""
+        self.c.modules["edim"] = 1      # BDIM wants its Block DIM card
         app = self._setup_step("SYSTEM SETUP", "BDIM TRANS ALARM DELAY")
         app._blink = False
         app.k_change()
@@ -5167,14 +5516,17 @@ class Panel(unittest.TestCase):
         prompt -- telling a technician the feature was disabled when no such
         state exists. `MODIFY TANK/METER MAP` blanked its prompt the same
         way from a `list` field. K8."""
-        for function, want in (("SYSTEM SETUP", "CUSTOM ALARM LABELS"),
-                               ("RECONCILIATION SETUP",
-                                "MODIFY TANK/METER MAP")):
+        # the custom alarms are found by the menu's own head and read off
+        # the glass as the bench draws them, `CUSTOM ALARMS` (2026-10-08)
+        for function, want, glass in (
+                ("SYSTEM SETUP", "CUSTOM ALARM LABELS", "CUSTOM ALARMS"),
+                ("RECONCILIATION SETUP", "MODIFY TANK/METER MAP",
+                 "MODIFY TANK/METER MAP")):
             app = self._setup_step(function, want, prompt=True)
-            self.assertEqual(app._lines(), [want, "PRESS <ENTER>"])
+            self.assertEqual(app._lines(), [glass, "PRESS <ENTER>"])
             app.k_change()
             app.k_change()
-            self.assertEqual(app._lines(), [want, "PRESS <ENTER>"], want)
+            self.assertEqual(app._lines(), [glass, "PRESS <ENTER>"], want)
 
 
     # ---- a ticket reaches the book -------------------------------------------
@@ -5359,20 +5711,24 @@ class Panel(unittest.TestCase):
         self.assertNotIn("-- PRINT:", logged)
 
     def test_backup_into_a_guarded_mode_asks_for_the_code(self):
-        """FIDELITY O20. MODE asked for the code; BACKUP walked in without."""
-        from tls350sim.ui import MODES
+        """FIDELITY O20. MODE asked for the code; BACKUP walked in without.
+        Both land on the mode's own screen now, and the code is asked off
+        it, as on the bench's glass (2026-10-09)."""
+        from tls350sim.ui import MODES, MODE_SCREEN
         self.c.values["S50400"] = "123456"
         app = self.app
         seen = set()
         for _ in range(len(MODES) + 1):
             app.k_backup()
             name = MODES[app.mode]
+            self.assertFalse(app.locked, name)
             if name in ("SETUP", "DIAGNOSTIC"):
                 seen.add(name)
+                self.assertEqual(app.step, MODE_SCREEN)
+                app.k_function()
                 self.assertTrue(app.locked, name)
-                self.assertEqual(app._lines()[0], "SYSTEM SECURITY")
-            else:
-                self.assertFalse(app.locked, name)
+                self.assertEqual(app._lines()[1], "ENTER PASSCODE ->______<")
+                app.locked, app.step = False, MODE_SCREEN
         self.assertTrue(seen)
 
     def test_nothing_behind_the_security_prompt_answers_but_the_code(self):
@@ -5385,6 +5741,7 @@ class Panel(unittest.TestCase):
             if MODES[app.mode] == "SETUP":
                 break
             app.k_mode()
+        app.k_function()
         self.assertTrue(app.locked)
         where = (app.func, app.step, dict(self.c.values))
         app.k_function()
@@ -6318,7 +6675,7 @@ class Panel(unittest.TestCase):
         would not report and the site cannot have."""
         self.c.set_module("vlld", 1)
         try:
-            app = self._stand_in_diag("GROUND TEMP DIAGNOSTIC")
+            app = self._stand_in_diag("GROUNDTEMP DIAGNOSTIC")
             self.assertEqual(app._device_count(), 1)
             self.assertEqual(app._devices(), [1])
             self.assertTrue(app._lines()[0].startswith("g 1:"),
@@ -6336,8 +6693,9 @@ class Panel(unittest.TestCase):
         try:
             app = self._stand_in_diag("SYSTEM DIAGNOSTIC")
             rows = [l1 for l1, _l2 in self.c.slot_report()]
-            self.assertIn("SLOT 1 4 PROBE/ G. T.", rows)
-            self.assertEqual(len("SLOT 1 4 PROBE/ G. T."), 21)
+            # the card's own name, as the bench's glass and report 102 both
+            # spell it (2026-10-08), not the figure's `4 PROBE/ G. T.`
+            self.assertIn(" SLOT  1 4 PROBE / G.T.", rows)
             del app
         finally:
             self.c.probe_gt = False
@@ -6678,7 +7036,7 @@ class NoScreenIsCutMidWord(unittest.TestCase):
         # `SUDDEN LOSS LIMIT: 00002`, which reads as two -- and a masked
         # number can give up a leading zero to fit where a word cannot.
         # FIDELITY F16.
-        "TNK TST SIPHON BREAK: OFF",
+        
         "TST EARLY STOP: ALL TANKS",
     }
 
